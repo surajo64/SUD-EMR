@@ -12,7 +12,7 @@ const generateToken = (id) => {
 // @route   POST /api/users
 // @access  Public (or Admin only in real app)
 const registerUser = async (req, res) => {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, assignedPharmacy } = req.body;
 
     if (!name || !email || !password || !role) {
         return res.status(400).json({ message: 'Please add all fields' });
@@ -24,12 +24,19 @@ const registerUser = async (req, res) => {
         return res.status(400).json({ message: 'User already exists' });
     }
 
-    const user = await User.create({
+    const userData = {
         name,
         email,
         password,
         role,
-    });
+    };
+
+    // Only add assignedPharmacy if provided (for pharmacists)
+    if (assignedPharmacy) {
+        userData.assignedPharmacy = assignedPharmacy;
+    }
+
+    const user = await User.create(userData);
 
     if (user) {
         res.status(201).json({
@@ -37,6 +44,7 @@ const registerUser = async (req, res) => {
             name: user.name,
             email: user.email,
             role: user.role,
+            assignedPharmacy: user.assignedPharmacy,
             token: generateToken(user.id),
         });
     } else {
@@ -50,7 +58,7 @@ const registerUser = async (req, res) => {
 const loginUser = async (req, res) => {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).populate('assignedPharmacy', 'name isMainPharmacy');
 
     if (user && (await user.matchPassword(password))) {
         res.json({
@@ -58,6 +66,7 @@ const loginUser = async (req, res) => {
             name: user.name,
             email: user.email,
             role: user.role,
+            assignedPharmacy: user.assignedPharmacy,
             token: generateToken(user.id),
         });
     } else {
@@ -77,7 +86,10 @@ const getMe = async (req, res) => {
 // @access  Private (Admin only)
 const getAllUsers = async (req, res) => {
     try {
-        const users = await User.find({}).select('-password').sort({ createdAt: -1 });
+        const users = await User.find({})
+            .select('-password')
+            .populate('assignedPharmacy', 'name isMainPharmacy')
+            .sort({ createdAt: -1 });
         res.json(users);
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -101,7 +113,7 @@ const getDoctors = async (req, res) => {
 // @access  Private (Admin only)
 const updateUser = async (req, res) => {
     try {
-        const { name, email, role, isActive } = req.body;
+        const { name, email, role, isActive, assignedPharmacy } = req.body;
 
         const user = await User.findById(req.params.id);
 
@@ -122,14 +134,21 @@ const updateUser = async (req, res) => {
         user.role = role || user.role;
         if (isActive !== undefined) user.isActive = isActive;
 
+        // Handle pharmacy assignment
+        if (assignedPharmacy !== undefined) {
+            user.assignedPharmacy = assignedPharmacy || null;
+        }
+
         const updatedUser = await user.save();
+        await updatedUser.populate('assignedPharmacy', 'name isMainPharmacy');
 
         res.json({
             _id: updatedUser._id,
             name: updatedUser.name,
             email: updatedUser.email,
             role: updatedUser.role,
-            isActive: updatedUser.isActive
+            isActive: updatedUser.isActive,
+            assignedPharmacy: updatedUser.assignedPharmacy
         });
     } catch (error) {
         res.status(500).json({ message: error.message });

@@ -9,6 +9,16 @@ const inventorySchema = mongoose.Schema({
     batchNumber: { type: String },
     barcode: { type: String },
     reorderLevel: { type: Number, default: 10 }, // Alert when stock falls below this
+    route: { type: String },
+    form: { type: String },
+    dosage: { type: String },
+    frequency: { type: String },
+    drugUnit: { type: String, enum: ['unit', 'sachet', 'packet'], default: 'unit' },
+    pharmacy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Pharmacy',
+        required: true
+    }
 }, {
     timestamps: true,
 });

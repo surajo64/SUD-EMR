@@ -113,7 +113,7 @@ const NurseTriage = () => {
             const patientEncounters = data.filter(v =>
                 (v.patient._id === patient._id || v.patient === patient._id) &&
                 (v.encounterStatus === 'payment_pending' || v.encounterStatus === 'in_nursing' || v.encounterStatus === 'registered' || v.encounterStatus === 'with_doctor' ||
-                    v.encounterStatus === 'completed' || v.encounterStatus === 'cancelled' || v.encounterStatus === 'discharged')
+                    v.encounterStatus === 'completed' || v.encounterStatus === 'cancelled' || v.encounterStatus === 'discharged' || v.encounterStatus === 'in_ward')
             );
             // Sort encounters by creation date - latest first
             patientEncounters.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));

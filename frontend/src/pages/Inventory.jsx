@@ -4,6 +4,7 @@ import AuthContext from "../context/AuthContext";
 import Layout from "../components/Layout";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
+import { FaPlus, FaEdit, FaTrash, FaTimes } from 'react-icons/fa';
 
 const Inventory = () => {
     const { user } = useContext(AuthContext);
@@ -13,8 +14,37 @@ const Inventory = () => {
     const [alerts, setAlerts] = useState({ lowStock: [], expiringSoon: [], expired: [], summary: {} });
     const [search, setSearch] = useState("");
     const [expiryFilter, setExpiryFilter] = useState("All");
-    const [newItem, setNewItem] = useState({ name: "", quantity: "", price: "", supplier: "", expiryDate: "", batchNumber: "", barcode: "", reorderLevel: "10" });
-    const [editItem, setEditItem] = useState(null);
+    const [pharmacies, setPharmacies] = useState([]);
+    const [selectedPharmacy, setSelectedPharmacy] = useState("");
+    const [mainPharmacy, setMainPharmacy] = useState(null);
+
+    // Metadata State
+    const [metadata, setMetadata] = useState({
+        routes: [],
+        forms: [],
+        dosages: [],
+        frequencies: []
+    });
+
+    // Modal State
+    const [showModal, setShowModal] = useState(false);
+    const [isEditMode, setIsEditMode] = useState(false);
+    const [currentItem, setCurrentItem] = useState({
+        name: "",
+        quantity: "",
+        price: "",
+        supplier: "",
+        expiryDate: "",
+        batchNumber: "",
+        barcode: "",
+        reorderLevel: "10",
+        route: "",
+        form: "",
+        dosage: "",
+        frequency: "",
+        drugUnit: "unit",
+        pharmacy: ""
+    });
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
@@ -22,14 +52,46 @@ const Inventory = () => {
 
     // Fetch inventory on load
     useEffect(() => {
-        fetchInventory();
-        fetchAlerts();
+        fetchPharmacies();
+        fetchMetadata();
     }, [user]);
+
+    useEffect(() => {
+        if (selectedPharmacy) {
+            fetchInventory();
+            fetchAlerts();
+        }
+    }, [selectedPharmacy]);
+
+    const fetchPharmacies = async () => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get("http://localhost:5000/api/pharmacies", config);
+            setPharmacies(data);
+
+            // For pharmacists, default to their assigned pharmacy
+            if (user.role === 'pharmacist' && user.assignedPharmacy) {
+                setSelectedPharmacy(user.assignedPharmacy._id || user.assignedPharmacy);
+            } else {
+                // For admin and others, default to main pharmacy
+                const main = data.find(p => p.isMainPharmacy);
+                if (main) {
+                    setMainPharmacy(main);
+                    setSelectedPharmacy(main._id);
+                }
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    };
 
     const fetchInventory = async () => {
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const { data } = await axios.get("http://localhost:5000/api/inventory", config);
+            const url = selectedPharmacy
+                ? `http://localhost:5000/api/inventory?pharmacy=${selectedPharmacy}`
+                : "http://localhost:5000/api/inventory";
+            const { data } = await axios.get(url, config);
             setItems(data);
         } catch (error) {
             console.error(error);
@@ -39,14 +101,38 @@ const Inventory = () => {
     const fetchAlerts = async () => {
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const { data } = await axios.get("http://localhost:5000/api/inventory/alerts", config);
+            // For pharmacists, only get alerts for their pharmacy
+            const pharmacyParam = user.role === 'pharmacist' && user.assignedPharmacy
+                ? `?pharmacy=${user.assignedPharmacy._id || user.assignedPharmacy}`
+                : selectedPharmacy ? `?pharmacy=${selectedPharmacy}` : '';
+
+            const { data } = await axios.get(`http://localhost:5000/api/inventory/alerts${pharmacyParam}`, config);
             setAlerts(data);
         } catch (error) {
             console.error(error);
         }
     };
 
+    const fetchMetadata = async () => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const [routes, forms, dosages, frequencies] = await Promise.all([
+                axios.get("http://localhost:5000/api/drug-metadata?type=route", config),
+                axios.get("http://localhost:5000/api/drug-metadata?type=form", config),
+                axios.get("http://localhost:5000/api/drug-metadata?type=dosage", config),
+                axios.get("http://localhost:5000/api/drug-metadata?type=frequency", config)
+            ]);
 
+            setMetadata({
+                routes: routes.data,
+                forms: forms.data,
+                dosages: dosages.data,
+                frequencies: frequencies.data
+            });
+        } catch (error) {
+            console.error("Error fetching metadata:", error);
+        }
+    };
 
     const checkExpiry = (date) => {
         const today = new Date();
@@ -66,42 +152,52 @@ const Inventory = () => {
         saveAs(new Blob([buffer], { type: "application/octet-stream" }), "inventory.xlsx");
     };
 
-    const dispenseDrug = async (id) => {
-        const amount = Number(prompt("Enter quantity to dispense:"));
-        if (!amount || amount <= 0) return;
-
-        try {
-            await axios.post("http://localhost:5000/api/drugs/dispense", { drugId: id, amount });
-            alert("Dispensed successfully!");
-            fetchInventory();
-        } catch {
-            alert("Not enough stock");
-        }
+    const handleOpenAddModal = () => {
+        setIsEditMode(false);
+        setCurrentItem({
+            name: "",
+            quantity: "",
+            price: "",
+            supplier: "",
+            expiryDate: "",
+            batchNumber: "",
+            barcode: "",
+            reorderLevel: "10",
+            route: "",
+            form: "",
+            dosage: "",
+            frequency: "",
+            drugUnit: "unit",
+            pharmacy: selectedPharmacy || ""
+        });
+        setShowModal(true);
     };
 
-    const handleAddItem = async (e) => {
+    const handleOpenEditModal = (item) => {
+        setIsEditMode(true);
+        setCurrentItem({
+            ...item,
+            expiryDate: item.expiryDate ? item.expiryDate.substring(0, 10) : "",
+            pharmacy: item.pharmacy?._id || item.pharmacy || selectedPharmacy
+        });
+        setShowModal(true);
+    };
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            await axios.post("http://localhost:5000/api/inventory", newItem, config);
-            setNewItem({ name: "", quantity: "", price: "", supplier: "", expiryDate: "", batchNumber: "", barcode: "", reorderLevel: "10" });
+            if (isEditMode) {
+                await axios.put(`http://localhost:5000/api/inventory/${currentItem._id}`, currentItem, config);
+            } else {
+                await axios.post("http://localhost:5000/api/inventory", currentItem, config);
+            }
+            setShowModal(false);
             fetchInventory();
             fetchAlerts();
-        } catch {
-            alert("Error adding item");
-        }
-    };
-
-    const handleUpdateItem = async (e) => {
-        e.preventDefault();
-        try {
-            const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            await axios.put(`http://localhost:5000/api/inventory/${editItem._id}`, editItem, config);
-            setEditItem(null);
-            fetchInventory();
-            fetchAlerts();
-        } catch {
-            alert("Error updating item");
+        } catch (error) {
+            alert("Error saving item");
+            console.error(error);
         }
     };
 
@@ -128,9 +224,54 @@ const Inventory = () => {
     const currentItems = filteredItems.slice(indexOfFirstItem, indexOfLastItem);
     const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
 
+    // Handler for pharmacy selection with restriction
+    const handlePharmacyChange = (e) => {
+        const newPharmacyId = e.target.value;
+
+        // Restrict pharmacists to their assigned pharmacy only
+        if (user.role === 'pharmacist' && user.assignedPharmacy) {
+            const assignedId = user.assignedPharmacy._id || user.assignedPharmacy;
+            if (newPharmacyId !== assignedId) {
+                alert('⚠️ Access Denied: You do not have authorization to view this pharmacy inventory. You can only view your assigned pharmacy.');
+                return;
+            }
+        }
+
+        setSelectedPharmacy(newPharmacyId);
+    };
+
     return (
         <Layout>
-            <h2 className="text-2xl font-bold mb-6">Pharmacy Inventory</h2>
+            <div className="flex justify-between items-center mb-6">
+                <div>
+                    <h2 className="text-2xl font-bold">Pharmacy Inventory</h2>
+                    <div className="mt-2">
+                        <label className="text-sm text-gray-600 mr-2">Pharmacy:</label>
+                        <select
+                            value={selectedPharmacy}
+                            onChange={handlePharmacyChange}
+                            className="border p-2 rounded text-sm"
+                            disabled={user.role === 'pharmacist'}
+                        >
+                            <option value="">-- All Pharmacies --</option>
+                            {pharmacies.map(p => (
+                                <option key={p._id} value={p._id}>
+                                    {p.name} {p.isMainPharmacy && '⭐'}
+                                </option>
+                            ))}
+                        </select>
+                        {user.role === 'pharmacist' && (
+                            <span className="ml-2 text-xs text-gray-500">(Locked to your pharmacy)</span>
+                        )}
+                    </div>
+                </div>
+                <button
+                    onClick={handleOpenAddModal}
+                    className="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-green-700"
+                >
+                    <FaPlus /> Add Drug
+                </button>
+            </div>
 
             {/* Alerts Dashboard */}
             {(alerts.summary.lowStockCount > 0 || alerts.summary.expiringSoonCount > 0 || alerts.summary.expiredCount > 0) && (
@@ -198,22 +339,6 @@ const Inventory = () => {
                 </button>
             </div>
 
-            {/* Add New Item */}
-            <div className="bg-white p-6 rounded shadow mb-8">
-                <h3 className="font-semibold mb-4">Add New Item</h3>
-                <form onSubmit={handleAddItem} className="grid grid-cols-1 md:grid-cols-8 gap-4">
-                    <input placeholder="Name" value={newItem.name} onChange={(e) => setNewItem({ ...newItem, name: e.target.value })} className="border p-2 rounded" required />
-                    <input type="number" placeholder="Quantity" value={newItem.quantity} onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })} className="border p-2 rounded" required />
-                    <input type="number" placeholder="Price" value={newItem.price} onChange={(e) => setNewItem({ ...newItem, price: e.target.value })} className="border p-2 rounded" required />
-                    <input placeholder="Supplier" value={newItem.supplier} onChange={(e) => setNewItem({ ...newItem, supplier: e.target.value })} className="border p-2 rounded" />
-                    <input type="date" value={newItem.expiryDate} onChange={(e) => setNewItem({ ...newItem, expiryDate: e.target.value })} className="border p-2 rounded" required />
-                    <input placeholder="Batch Number" value={newItem.batchNumber} onChange={(e) => setNewItem({ ...newItem, batchNumber: e.target.value })} className="border p-2 rounded" />
-                    <input placeholder="Barcode" value={newItem.barcode} onChange={(e) => setNewItem({ ...newItem, barcode: e.target.value })} className="border p-2 rounded" />
-                    <input type="number" placeholder="Reorder Level" value={newItem.reorderLevel} onChange={(e) => setNewItem({ ...newItem, reorderLevel: e.target.value })} className="border p-2 rounded" />
-                    <button className="bg-green-600 text-white px-4 py-2 rounded md:col-span-8 font-bold">Add Item</button>
-                </form>
-            </div>
-
             {/* Inventory Table */}
             <div className="bg-white rounded shadow overflow-hidden">
                 <table className="w-full border-collapse">
@@ -221,39 +346,41 @@ const Inventory = () => {
                         <tr>
                             <th className="p-4 border-b">Name</th>
                             <th className="p-4 border-b">Qty</th>
-                            <th className="p-4 border-b">Reorder</th>
+                            <th className="p-4 border-b">Unit</th>
                             <th className="p-4 border-b">Price</th>
-                            <th className="p-4 border-b">Supplier</th>
                             <th className="p-4 border-b">Expiry</th>
                             <th className="p-4 border-b">Status</th>
-                            <th className="p-4 border-b">Batch</th>
-                            <th className="p-4 border-b">Barcode</th>
                             <th className="p-4 border-b">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {currentItems.map((item) => (
                             <tr key={item._id} className={`hover:bg-gray-50 ${item.quantity < item.reorderLevel ? 'bg-red-50' : ''}`}>
-                                <td className="p-4 border-b">{item.name}</td>
+                                <td className="p-4 border-b">
+                                    <div className="font-semibold">{item.name}</div>
+                                    <div className="text-xs text-gray-500">
+                                        {item.form} - {item.dosage} ({item.route})
+                                    </div>
+                                </td>
                                 <td className={`p-4 border-b ${item.quantity < item.reorderLevel ? "text-red-600 font-bold" : ""}`}>
                                     {item.quantity}
                                     {item.quantity < item.reorderLevel && <span className="ml-2 text-xs bg-red-600 text-white px-2 py-1 rounded">LOW</span>}
                                 </td>
-                                <td className="p-4 border-b text-gray-600">{item.reorderLevel || 10}</td>
+                                <td className="p-4 border-b capitalize">{item.drugUnit}</td>
                                 <td className="p-4 border-b">₦{item.price}</td>
-                                <td className="p-4 border-b">{item.supplier}</td>
                                 <td className="p-4 border-b">{new Date(item.expiryDate).toLocaleDateString()}</td>
                                 <td className="p-4 border-b font-semibold">
                                     {checkExpiry(item.expiryDate) === "Expired" && <span className="text-red-600">Expired</span>}
                                     {checkExpiry(item.expiryDate) === "Expiring Soon" && <span className="text-orange-500">Expiring Soon</span>}
                                     {checkExpiry(item.expiryDate) === "Good" && <span className="text-green-600">Good</span>}
                                 </td>
-                                <td className="p-4 border-b">{item.batchNumber || "-"}</td>
-                                <td className="p-4 border-b">{item.barcode || "-"}</td>
                                 <td className="p-4 border-b space-x-2">
-                                    <button onClick={() => setEditItem(item)} className="px-3 py-1 bg-blue-600 text-white rounded">Edit</button>
-                                    <button onClick={() => deleteItem(item._id)} className="px-3 py-1 bg-red-600 text-white rounded">Delete</button>
-
+                                    <button onClick={() => handleOpenEditModal(item)} className="text-blue-600 hover:text-blue-800">
+                                        <FaEdit />
+                                    </button>
+                                    <button onClick={() => deleteItem(item._id)} className="text-red-600 hover:text-red-800">
+                                        <FaTrash />
+                                    </button>
                                 </td>
                             </tr>
                         ))}
@@ -278,24 +405,198 @@ const Inventory = () => {
                 {currentItems.length === 0 && <p className="p-4 text-center text-gray-500">No matching items.</p>}
             </div>
 
-            {/* Edit Modal */}
-            {editItem && (
-                <div className="fixed inset-0 bg-black/40 flex justify-center items-center p-4">
-                    <div className="bg-white p-6 rounded shadow max-w-md w-full">
-                        <h3 className="font-bold mb-4">Edit Item</h3>
-                        <form onSubmit={handleUpdateItem} className="space-y-4">
-                            <input className="border p-2 rounded w-full" value={editItem.name} onChange={(e) => setEditItem({ ...editItem, name: e.target.value })} />
-                            <input type="number" className="border p-2 rounded w-full" value={editItem.quantity} onChange={(e) => setEditItem({ ...editItem, quantity: e.target.value })} />
-                            <input type="number" className="border p-2 rounded w-full" placeholder="Reorder Level" value={editItem.reorderLevel || 10} onChange={(e) => setEditItem({ ...editItem, reorderLevel: e.target.value })} />
-                            <input type="number" className="border p-2 rounded w-full" value={editItem.price} onChange={(e) => setEditItem({ ...editItem, price: e.target.value })} />
-                            <input className="border p-2 rounded w-full" value={editItem.supplier} onChange={(e) => setEditItem({ ...editItem, supplier: e.target.value })} />
-                            <input type="date" className="border p-2 rounded w-full" value={editItem.expiryDate?.substring(0, 10)} onChange={(e) => setEditItem({ ...editItem, expiryDate: e.target.value })} />
-                            <input className="border p-2 rounded w-full" placeholder="Batch Number" value={editItem.batchNumber} onChange={(e) => setEditItem({ ...editItem, batchNumber: e.target.value })} />
-                            <input className="border p-2 rounded w-full" placeholder="Barcode" value={editItem.barcode} onChange={(e) => setEditItem({ ...editItem, barcode: e.target.value })} />
+            {/* Add/Edit Modal */}
+            {showModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-2xl my-8">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-bold">{isEditMode ? 'Edit Drug' : 'Add New Drug'}</h3>
+                            <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-700">
+                                <FaTimes size={24} />
+                            </button>
+                        </div>
 
-                            <div className="flex justify-end gap-2">
-                                <button type="button" onClick={() => setEditItem(null)} className="px-4 py-2 bg-gray-600 text-white rounded">Cancel</button>
-                                <button className="px-4 py-2 bg-blue-600 text-white rounded">Update</button>
+                        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Drug Name</label>
+                                <input
+                                    className="w-full border p-2 rounded"
+                                    value={currentItem.name}
+                                    onChange={(e) => setCurrentItem({ ...currentItem, name: e.target.value })}
+                                    required
+                                />
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Pharmacy Location</label>
+                                <select
+                                    className="w-full border p-2 rounded"
+                                    value={currentItem.pharmacy}
+                                    onChange={(e) => setCurrentItem({ ...currentItem, pharmacy: e.target.value })}
+                                    required
+                                >
+                                    <option value="">-- Select Pharmacy --</option>
+                                    {pharmacies.map(p => (
+                                        <option key={p._id} value={p._id}>
+                                            {p.name} {p.isMainPharmacy && '(Main)'}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                                <input
+                                    type="number"
+                                    className="w-full border p-2 rounded"
+                                    value={currentItem.quantity}
+                                    onChange={(e) => setCurrentItem({ ...currentItem, quantity: e.target.value })}
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Price (₦)</label>
+                                <input
+                                    type="number"
+                                    className="w-full border p-2 rounded"
+                                    value={currentItem.price}
+                                    onChange={(e) => setCurrentItem({ ...currentItem, price: e.target.value })}
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Drug Unit</label>
+                                <select
+                                    className="w-full border p-2 rounded"
+                                    value={currentItem.drugUnit}
+                                    onChange={(e) => setCurrentItem({ ...currentItem, drugUnit: e.target.value })}
+                                >
+                                    <option value="unit">Unit</option>
+                                    <option value="sachet">Sachet</option>
+                                    <option value="packet">Packet</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Date</label>
+                                <input
+                                    type="date"
+                                    className="w-full border p-2 rounded"
+                                    value={currentItem.expiryDate}
+                                    onChange={(e) => setCurrentItem({ ...currentItem, expiryDate: e.target.value })}
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Route</label>
+                                <select
+                                    className="w-full border p-2 rounded"
+                                    value={currentItem.route}
+                                    onChange={(e) => setCurrentItem({ ...currentItem, route: e.target.value })}
+                                >
+                                    <option value="">-- Select Route --</option>
+                                    {metadata.routes.map(item => (
+                                        <option key={item._id} value={item.value}>{item.value}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Form</label>
+                                <select
+                                    className="w-full border p-2 rounded"
+                                    value={currentItem.form}
+                                    onChange={(e) => setCurrentItem({ ...currentItem, form: e.target.value })}
+                                >
+                                    <option value="">-- Select Form --</option>
+                                    {metadata.forms.map(item => (
+                                        <option key={item._id} value={item.value}>{item.value}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Dosage</label>
+                                <select
+                                    className="w-full border p-2 rounded"
+                                    value={currentItem.dosage}
+                                    onChange={(e) => setCurrentItem({ ...currentItem, dosage: e.target.value })}
+                                >
+                                    <option value="">-- Select Dosage --</option>
+                                    {metadata.dosages.map(item => (
+                                        <option key={item._id} value={item.value}>{item.value}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Frequency</label>
+                                <select
+                                    className="w-full border p-2 rounded"
+                                    value={currentItem.frequency}
+                                    onChange={(e) => setCurrentItem({ ...currentItem, frequency: e.target.value })}
+                                >
+                                    <option value="">-- Select Frequency --</option>
+                                    {metadata.frequencies.map(item => (
+                                        <option key={item._id} value={item.value}>{item.value}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Supplier</label>
+                                <input
+                                    className="w-full border p-2 rounded"
+                                    value={currentItem.supplier}
+                                    onChange={(e) => setCurrentItem({ ...currentItem, supplier: e.target.value })}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Batch Number</label>
+                                <input
+                                    className="w-full border p-2 rounded"
+                                    value={currentItem.batchNumber}
+                                    onChange={(e) => setCurrentItem({ ...currentItem, batchNumber: e.target.value })}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Barcode</label>
+                                <input
+                                    className="w-full border p-2 rounded"
+                                    value={currentItem.barcode}
+                                    onChange={(e) => setCurrentItem({ ...currentItem, barcode: e.target.value })}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Reorder Level</label>
+                                <input
+                                    type="number"
+                                    className="w-full border p-2 rounded"
+                                    value={currentItem.reorderLevel}
+                                    onChange={(e) => setCurrentItem({ ...currentItem, reorderLevel: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="md:col-span-2 flex justify-end gap-3 mt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowModal(false)}
+                                    className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400 text-gray-800"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold"
+                                >
+                                    {isEditMode ? 'Update Drug' : 'Add Drug'}
+                                </button>
                             </div>
                         </form>
                     </div>

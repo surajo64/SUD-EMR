@@ -34,6 +34,10 @@ import PatientManagement from './pages/PatientManagement';
 import ClinicManagement from './pages/ClinicManagement';
 import FrontDeskChargeManagement from './pages/FrontDeskChargeManagement';
 import WardManagement from './pages/WardManagement';
+import DrugMetadataManagement from './pages/DrugMetadataManagement';
+import PharmacyManagement from './pages/PharmacyManagement';
+import DrugTransfer from './pages/DrugTransfer';
+import DrugDisposal from './pages/DrugDisposal';
 
 function App() {
   return (
@@ -70,6 +74,10 @@ function App() {
           <Route path="/admin/clinics" element={<ClinicManagement />} />
           <Route path="/admin/front-desk-charges" element={<FrontDeskChargeManagement />} />
           <Route path="/admin/wards" element={<WardManagement />} />
+          <Route path="/admin/drug-metadata" element={<DrugMetadataManagement />} />
+          <Route path="/admin/pharmacies" element={<PharmacyManagement />} />
+          <Route path="/pharmacy/transfers" element={<DrugTransfer />} />
+          <Route path="/pharmacy/disposal" element={<DrugDisposal />} />
 
           <Route path="/" element={<Navigate to="/dashboard" />} />
           {/* Add other routes here */}

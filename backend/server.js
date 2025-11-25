@@ -30,6 +30,10 @@ app.use('/api/vitals', require('./routes/vitalSignRoutes'));
 app.use('/api/reports', require('./routes/reportRoutes'));
 app.use('/api/clinics', require('./routes/clinicRoutes'));
 app.use('/api/wards', require('./routes/wardRoutes'));
+app.use('/api/drug-metadata', require('./routes/drugMetadataRoutes'));
+app.use('/api/pharmacies', require('./routes/pharmacyRoutes'));
+app.use('/api/drug-transfers', require('./routes/drugTransferRoutes'));
+app.use('/api/drug-disposals', require('./routes/drugDisposalRoutes'));
 
 
 

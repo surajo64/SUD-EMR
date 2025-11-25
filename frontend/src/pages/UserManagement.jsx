@@ -18,14 +18,17 @@ const UserManagement = () => {
         name: '',
         email: '',
         password: '',
-        role: ''
+        role: '',
+        assignedPharmacy: ''
     });
     const [newPassword, setNewPassword] = useState('');
+    const [pharmacies, setPharmacies] = useState([]);
     const { user } = useContext(AuthContext);
 
     useEffect(() => {
         if (user && user.role === 'admin') {
             fetchUsers();
+            fetchPharmacies();
         }
     }, [user]);
 
@@ -42,6 +45,16 @@ const UserManagement = () => {
         } catch (error) {
             console.error(error);
             toast.error('Error fetching users');
+        }
+    };
+
+    const fetchPharmacies = async () => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get('http://localhost:5000/api/pharmacies', config);
+            setPharmacies(data);
+        } catch (error) {
+            console.error(error);
         }
     };
 
@@ -69,7 +82,7 @@ const UserManagement = () => {
             await axios.post('http://localhost:5000/api/users', newUser, config);
             toast.success('User created successfully!');
             setShowAddModal(false);
-            setNewUser({ name: '', email: '', password: '', role: 'nurse' });
+            setNewUser({ name: '', email: '', password: '', role: '', assignedPharmacy: '' });
             fetchUsers();
         } catch (error) {
             console.error(error);
@@ -355,6 +368,24 @@ const UserManagement = () => {
                                     <option value="admin">Admin</option>
                                 </select>
                             </div>
+                            {newUser.role === 'pharmacist' && (
+                                <div>
+                                    <label className="block text-sm font-semibold mb-1">Assigned Pharmacy</label>
+                                    <select
+                                        className="w-full border p-2 rounded"
+                                        value={newUser.assignedPharmacy}
+                                        onChange={(e) => setNewUser({ ...newUser, assignedPharmacy: e.target.value })}
+                                        required
+                                    >
+                                        <option value="">-- Select Pharmacy --</option>
+                                        {pharmacies.map(p => (
+                                            <option key={p._id} value={p._id}>
+                                                {p.name} {p.isMainPharmacy && '(Main)'}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                             <div className="flex gap-2">
                                 <button
                                     type="submit"
@@ -423,6 +454,23 @@ const UserManagement = () => {
                                     <option value="admin">Admin</option>
                                 </select>
                             </div>
+                            {selectedUser.role === 'pharmacist' && (
+                                <div>
+                                    <label className="block text-sm font-semibold mb-1">Assigned Pharmacy</label>
+                                    <select
+                                        className="w-full border p-2 rounded"
+                                        value={selectedUser.assignedPharmacy?._id || selectedUser.assignedPharmacy || ''}
+                                        onChange={(e) => setSelectedUser({ ...selectedUser, assignedPharmacy: e.target.value })}
+                                    >
+                                        <option value="">-- No Pharmacy --</option>
+                                        {pharmacies.map(p => (
+                                            <option key={p._id} value={p._id}>
+                                                {p.name} {p.isMainPharmacy && '(Main)'}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                             <div>
                                 <label className="flex items-center gap-2">
                                     <input

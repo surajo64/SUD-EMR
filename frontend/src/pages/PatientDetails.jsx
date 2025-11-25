@@ -6,7 +6,7 @@ import AuthContext from '../context/AuthContext';
 import Layout from '../components/Layout';
 import LoadingOverlay from '../components/loadingOverlay';
 import AppointmentModal from '../components/AppointmentModal';
-import { FaTimes, FaFileMedical, FaPills, FaHeartbeat, FaNotesMedical, FaProcedures, FaXRay, FaVial, FaUserMd, FaCalendarPlus, FaPlus } from 'react-icons/fa';
+import { FaTimes, FaFileMedical, FaPills, FaHeartbeat, FaNotesMedical, FaProcedures, FaXRay, FaVial, FaUserMd, FaCalendarPlus, FaPlus, FaTrash } from 'react-icons/fa';
 
 const PatientDetails = () => {
     const { id } = useParams();
@@ -35,6 +35,12 @@ const PatientDetails = () => {
     const [drugDosage, setDrugDosage] = useState('');
     const [drugFrequency, setDrugFrequency] = useState('');
     const [drugDuration, setDrugDuration] = useState('');
+
+    // Multi-Drug Prescription State
+    const [drugSearchTerm, setDrugSearchTerm] = useState('');
+    const [filteredDrugs, setFilteredDrugs] = useState([]);
+    const [tempDrugs, setTempDrugs] = useState([]); // List of drugs to prescribe
+    const [showDrugDropdown, setShowDrugDropdown] = useState(false);
 
     // History & Lists
     const [pastEncounters, setPastEncounters] = useState([]);
@@ -103,7 +109,7 @@ const PatientDetails = () => {
 
             // Find active encounter
             const activeEncounter = patientVisits.find(v =>
-                v.encounterStatus === 'with_doctor' || v.encounterStatus === 'in_nursing' || v.encounterStatus === 'in_pharmacy'
+                v.encounterStatus === 'with_doctor' || v.encounterStatus === 'in_nursing' || v.encounterStatus === 'in_pharmacy' || v.encounterStatus === 'in_ward'
             );
             setEncounter(activeEncounter);
 
@@ -174,8 +180,8 @@ const PatientDetails = () => {
 
         if (encounter.type === 'Inpatient') {
             // Inpatient encounters are active until discharged
-            // Active statuses: admitted, in_progress, with_doctor, in_nursing, in_lab, in_radiology, in_pharmacy
-            const activeStatuses = ['admitted', 'in_progress', 'with_doctor', 'in_nursing', 'in_lab', 'in_radiology', 'in_pharmacy'];
+            // Active statuses: admitted, in_progress, with_doctor, in_nursing, in_lab, in_radiology, in_pharmacy, in_ward
+            const activeStatuses = ['admitted', 'in_progress', 'with_doctor', 'in_nursing', 'in_lab', 'in_radiology', 'in_pharmacy', 'in_ward'];
             const isActive = activeStatuses.includes(encounter.encounterStatus);
             console.log('🔍 isEncounterActive: Inpatient encounter', {
                 encounterStatus: encounter.encounterStatus,
@@ -348,66 +354,129 @@ const PatientDetails = () => {
         }
     };
 
-    const handlePrescribeDrug = async () => {
-        if (!selectedDrug || !encounter) return;
+    // Filter drugs based on search term
+    useEffect(() => {
+        if (drugSearchTerm) {
+            const filtered = inventoryDrugs.filter(d =>
+                d.name.toLowerCase().includes(drugSearchTerm.toLowerCase())
+            );
+            setFilteredDrugs(filtered);
+            setShowDrugDropdown(true);
+        } else {
+            setFilteredDrugs([]);
+            setShowDrugDropdown(false);
+        }
+    }, [drugSearchTerm, inventoryDrugs]);
+
+    const handleSelectDrugFromSearch = (drug) => {
+        setSelectedDrug(drug._id);
+        setDrugSearchTerm(drug.name);
+        setShowDrugDropdown(false);
+    };
+
+    const handleAddDrugToQueue = () => {
+        if (!selectedDrug) return;
+
+        const drugData = inventoryDrugs.find(d => d._id === selectedDrug);
+        if (!drugData) return;
+
+        const newDrugItem = {
+            id: Date.now(), // Temp ID
+            drugId: selectedDrug,
+            name: drugData.name,
+            price: drugData.price,
+            quantity: drugQuantity,
+            dosage: drugDosage || 'As directed',
+            frequency: drugFrequency || 'As directed',
+            duration: drugDuration || 'As directed'
+        };
+
+        setTempDrugs([...tempDrugs, newDrugItem]);
+
+        // Reset form
+        setSelectedDrug('');
+        setDrugSearchTerm('');
+        setDrugQuantity(1);
+        setDrugDosage('');
+        setDrugFrequency('');
+        setDrugDuration('');
+        toast.success('Drug added to list');
+    };
+
+    const handleRemoveDrugFromQueue = (id) => {
+        setTempDrugs(tempDrugs.filter(d => d.id !== id));
+    };
+
+    const processSinglePrescription = async (drugItem, config) => {
+        const selectedDrugData = inventoryDrugs.find(d => d._id === drugItem.drugId);
+
+        // Find or create drug charge
+        let drugCharge = await axios.get('http://localhost:5000/api/charges?active=true', config);
+        let chargeForDrug = drugCharge.data.find(c => c.type === 'drugs' && c.name === selectedDrugData.name);
+
+        // If no charge exists for this drug, create one
+        if (!chargeForDrug) {
+            const newCharge = await axios.post(
+                'http://localhost:5000/api/charges',
+                {
+                    name: selectedDrugData.name,
+                    type: 'drugs',
+                    basePrice: selectedDrugData.price,
+                    department: 'Pharmacy',
+                    active: true
+                },
+                config
+            );
+            chargeForDrug = newCharge.data;
+        }
+
+        // 1. Add charge to encounter FIRST
+        const chargeRes = await axios.post(
+            'http://localhost:5000/api/encounter-charges',
+            {
+                encounterId: encounter._id,
+                patientId: patient._id,
+                chargeId: chargeForDrug._id,
+                quantity: drugItem.quantity,
+                notes: `${selectedDrugData.name} - Qty: ${drugItem.quantity}`
+            },
+            config
+        );
+
+        // 2. Create prescription with charge ID
+        await axios.post(
+            'http://localhost:5000/api/prescriptions',
+            {
+                patientId: patient._id,
+                visitId: encounter._id,
+                chargeId: chargeRes.data._id, // Link to charge
+                medicines: [{
+                    name: selectedDrugData.name,
+                    dosage: drugItem.dosage,
+                    frequency: drugItem.frequency,
+                    duration: drugItem.duration,
+                    quantity: drugItem.quantity
+                }],
+                notes: 'Doctor prescribed'
+            },
+            config
+        );
+    };
+
+    const handlePrescribeAll = async () => {
+        if (tempDrugs.length === 0) {
+            toast.error('No drugs in the list to prescribe');
+            return;
+        }
 
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
 
-            const selectedDrugData = inventoryDrugs.find(d => d._id === selectedDrug);
-
-            // Find or create drug charge
-            let drugCharge = await axios.get('http://localhost:5000/api/charges?active=true', config);
-            let chargeForDrug = drugCharge.data.find(c => c.type === 'drugs' && c.name === selectedDrugData.name);
-
-            // If no charge exists for this drug, create one
-            if (!chargeForDrug) {
-                const newCharge = await axios.post(
-                    'http://localhost:5000/api/charges',
-                    {
-                        name: selectedDrugData.name,
-                        type: 'drugs',
-                        basePrice: selectedDrugData.price,
-                        department: 'Pharmacy',
-                        active: true
-                    },
-                    config
-                );
-                chargeForDrug = newCharge.data;
+            // Process all drugs in queue
+            for (const drugItem of tempDrugs) {
+                await processSinglePrescription(drugItem, config);
             }
-
-            // 1. Add charge to encounter FIRST
-            const chargeRes = await axios.post(
-                'http://localhost:5000/api/encounter-charges',
-                {
-                    encounterId: encounter._id,
-                    patientId: patient._id,
-                    chargeId: chargeForDrug._id,
-                    quantity: drugQuantity,
-                    notes: `${selectedDrugData.name} - Qty: ${drugQuantity}`
-                },
-                config
-            );
-
-            // 2. Create prescription with charge ID
-            await axios.post(
-                'http://localhost:5000/api/prescriptions',
-                {
-                    patientId: patient._id,
-                    visitId: encounter._id,
-                    chargeId: chargeRes.data._id, // Link to charge
-                    medicines: [{
-                        name: selectedDrugData.name,
-                        dosage: drugDosage || 'As directed',
-                        frequency: drugFrequency || 'As directed',
-                        duration: drugDuration || 'As directed',
-                        quantity: drugQuantity
-                    }],
-                    notes: 'Doctor prescribed'
-                },
-                config
-            );
 
             // 3. Update encounter status to 'in_pharmacy'
             await axios.put(
@@ -416,14 +485,12 @@ const PatientDetails = () => {
                 config
             );
 
+            toast.success(`All prescriptions created! Status updated to Pharmacy.`);
 
-            toast.success(`Prescription created! Status updated to Pharmacy.`);
-            setSelectedDrug('');
-            setDrugQuantity(1);
-            setDrugDosage('');
-            setDrugFrequency('');
-            setDrugDuration('');
+            // Reset and close
+            setTempDrugs([]);
             setShowRxModal(false);
+
             // Refresh list
             const rxRes = await axios.get(`http://localhost:5000/api/prescriptions/visit/${encounter._id}`, config);
             setCurrentPrescriptions(rxRes.data);
@@ -432,7 +499,7 @@ const PatientDetails = () => {
             await fetchPatient();
         } catch (error) {
             console.error(error);
-            toast.error('Error prescribing drug');
+            toast.error('Error processing prescriptions');
         } finally {
             setLoading(false);
         }
@@ -1458,80 +1525,147 @@ const PatientDetails = () => {
                                 </button>
                             </div>
                             <div className="space-y-4">
-                                <div>
-                                    <label className="block text-gray-700 mb-2 font-semibold">Select Drug (from Inventory)</label>
-                                    <select
-                                        className="w-full border p-2 rounded"
-                                        value={selectedDrug}
-                                        onChange={(e) => setSelectedDrug(e.target.value)}
-                                    >
-                                        <option value="">-- Select Drug --</option>
-                                        {inventoryDrugs.map(drug => (
-                                            <option key={drug._id} value={drug._id}>
-                                                {drug.name} - ₦{drug.price} (Stock: {drug.quantity})
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <p className="text-xs text-gray-500 mt-1">Only drugs with available stock are shown</p>
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-gray-700 mb-2 font-semibold">Quantity</label>
-                                        <input
-                                            type="number"
-                                            className="w-full border p-2 rounded"
-                                            value={drugQuantity}
-                                            onChange={(e) => setDrugQuantity(parseInt(e.target.value))}
-                                            min="1"
-                                        />
+                                <div className="space-y-4">
+                                    {/* Drug Search & Add Form */}
+                                    <div className="bg-gray-50 p-4 rounded border">
+                                        <h4 className="font-semibold text-sm text-gray-700 mb-3">Add Drug to List</h4>
+                                        <div className="mb-3 relative">
+                                            <label className="block text-xs text-gray-600 mb-1">Search Drug</label>
+                                            <input
+                                                type="text"
+                                                className="w-full border p-2 rounded"
+                                                placeholder="Type to search..."
+                                                value={drugSearchTerm}
+                                                onChange={(e) => setDrugSearchTerm(e.target.value)}
+                                            />
+                                            {showDrugDropdown && filteredDrugs.length > 0 && (
+                                                <div className="absolute z-10 w-full bg-white border rounded shadow-lg max-h-40 overflow-y-auto mt-1">
+                                                    {filteredDrugs.map(drug => (
+                                                        <div
+                                                            key={drug._id}
+                                                            className="p-2 hover:bg-blue-50 cursor-pointer text-sm"
+                                                            onClick={() => handleSelectDrugFromSearch(drug)}
+                                                        >
+                                                            <div className="font-semibold">{drug.name}</div>
+                                                            <div className="text-xs text-gray-500">Stock: {drug.quantity} | ₦{drug.price}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {selectedDrug && (
+                                            <div className="grid grid-cols-5 gap-2 items-end">
+                                                <div className="col-span-1">
+                                                    <label className="block text-xs text-gray-600 mb-1">Qty</label>
+                                                    <input
+                                                        type="number"
+                                                        className="w-full border p-2 rounded text-sm"
+                                                        value={drugQuantity}
+                                                        onChange={(e) => setDrugQuantity(parseInt(e.target.value))}
+                                                        min="1"
+                                                    />
+                                                </div>
+                                                <div className="col-span-1">
+                                                    <label className="block text-xs text-gray-600 mb-1">Dosage</label>
+                                                    <input
+                                                        type="text"
+                                                        className="w-full border p-2 rounded text-sm"
+                                                        value={drugDosage}
+                                                        onChange={(e) => setDrugDosage(e.target.value)}
+                                                        placeholder="500mg"
+                                                    />
+                                                </div>
+                                                <div className="col-span-1">
+                                                    <label className="block text-xs text-gray-600 mb-1">Freq</label>
+                                                    <input
+                                                        type="text"
+                                                        className="w-full border p-2 rounded text-sm"
+                                                        value={drugFrequency}
+                                                        onChange={(e) => setDrugFrequency(e.target.value)}
+                                                        placeholder="BD"
+                                                    />
+                                                </div>
+                                                <div className="col-span-1">
+                                                    <label className="block text-xs text-gray-600 mb-1">Dur</label>
+                                                    <input
+                                                        type="text"
+                                                        className="w-full border p-2 rounded text-sm"
+                                                        value={drugDuration}
+                                                        onChange={(e) => setDrugDuration(e.target.value)}
+                                                        placeholder="5d"
+                                                    />
+                                                </div>
+                                                <div className="col-span-1">
+                                                    <button
+                                                        onClick={handleAddDrugToQueue}
+                                                        className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 text-sm font-semibold"
+                                                    >
+                                                        Add
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                    <div>
-                                        <label className="block text-gray-700 mb-2 font-semibold">Dosage</label>
-                                        <input
-                                            type="text"
-                                            className="w-full border p-2 rounded"
-                                            value={drugDosage}
-                                            onChange={(e) => setDrugDosage(e.target.value)}
-                                            placeholder="e.g., 500mg"
-                                        />
+
+                                    {/* Temporary Drug List */}
+                                    <div className="border rounded overflow-hidden">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-gray-100">
+                                                <tr>
+                                                    <th className="p-2">Drug</th>
+                                                    <th className="p-2">Qty</th>
+                                                    <th className="p-2">Dosage</th>
+                                                    <th className="p-2">Freq</th>
+                                                    <th className="p-2">Dur</th>
+                                                    <th className="p-2">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {tempDrugs.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan="6" className="p-4 text-center text-gray-500">
+                                                            No drugs added yet. Search and add drugs above.
+                                                        </td>
+                                                    </tr>
+                                                ) : (
+                                                    tempDrugs.map(drug => (
+                                                        <tr key={drug.id} className="border-b">
+                                                            <td className="p-2 font-semibold">{drug.name}</td>
+                                                            <td className="p-2">{drug.quantity}</td>
+                                                            <td className="p-2">{drug.dosage}</td>
+                                                            <td className="p-2">{drug.frequency}</td>
+                                                            <td className="p-2">{drug.duration}</td>
+                                                            <td className="p-2">
+                                                                <button
+                                                                    onClick={() => handleRemoveDrugFromQueue(drug.id)}
+                                                                    className="text-red-600 hover:text-red-800"
+                                                                >
+                                                                    <FaTrash />
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </table>
                                     </div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-gray-700 mb-2 font-semibold">Frequency</label>
-                                        <input
-                                            type="text"
-                                            className="w-full border p-2 rounded"
-                                            value={drugFrequency}
-                                            onChange={(e) => setDrugFrequency(e.target.value)}
-                                            placeholder="e.g., Twice daily"
-                                        />
+
+                                    <div className="flex gap-2 justify-end mt-4">
+                                        <button
+                                            onClick={() => setShowRxModal(false)}
+                                            className="bg-gray-400 text-white px-6 py-2 rounded hover:bg-gray-500"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={handlePrescribeAll}
+                                            disabled={tempDrugs.length === 0}
+                                            className="bg-pink-600 text-white px-6 py-2 rounded hover:bg-pink-700 disabled:bg-gray-400 font-semibold flex items-center gap-2"
+                                        >
+                                            <FaPills /> Prescribe All ({tempDrugs.length})
+                                        </button>
                                     </div>
-                                    <div>
-                                        <label className="block text-gray-700 mb-2 font-semibold">Duration</label>
-                                        <input
-                                            type="text"
-                                            className="w-full border p-2 rounded"
-                                            value={drugDuration}
-                                            onChange={(e) => setDrugDuration(e.target.value)}
-                                            placeholder="e.g., 7 days"
-                                        />
-                                    </div>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={handlePrescribeDrug}
-                                        disabled={!selectedDrug}
-                                        className="bg-pink-600 text-white px-6 py-2 rounded hover:bg-pink-700 disabled:bg-gray-400 font-semibold"
-                                    >
-                                        Prescribe
-                                    </button>
-                                    <button
-                                        onClick={() => setShowRxModal(false)}
-                                        className="bg-gray-400 text-white px-6 py-2 rounded hover:bg-gray-500"
-                                    >
-                                        Cancel
-                                    </button>
                                 </div>
                             </div>
                         </div>
