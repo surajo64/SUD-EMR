@@ -1,0 +1,684 @@
+import { useState, useEffect, useContext } from 'react';
+import axios from 'axios';
+import AuthContext from '../context/AuthContext';
+import Layout from '../components/Layout';
+import { FaDollarSign, FaFileInvoiceDollar, FaCheckCircle, FaUndo, FaWallet, FaPrint, FaSearch, FaUser, FaExclamationTriangle } from 'react-icons/fa';
+import { toast } from 'react-toastify';
+import LoadingOverlay from '../components/loadingOverlay';
+
+const BillingDashboard = () => {
+    const [loading, setLoading] = useState(false);
+    const [invoices, setInvoices] = useState([]);
+    const [receipts, setReceipts] = useState([]);
+    const [patients, setPatients] = useState([]);
+    const [showCreateForm, setShowCreateForm] = useState(false);
+    const [showDepositModal, setShowDepositModal] = useState(false);
+    const [selectedPatient, setSelectedPatient] = useState(null);
+    const [depositAmount, setDepositAmount] = useState('');
+    const [activeTab, setActiveTab] = useState('invoices');
+    const [selectedInsuranceInvoices, setSelectedInsuranceInvoices] = useState([]);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [showPatientSearch, setShowPatientSearch] = useState(false);
+    const [patientSearchTerm, setPatientSearchTerm] = useState('');
+    const [viewingPatient, setViewingPatient] = useState(null);
+    const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+    const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+    const [depositSearchTerm, setDepositSearchTerm] = useState('');
+
+    const { user } = useContext(AuthContext);
+
+    const [newInvoice, setNewInvoice] = useState({
+        patientId: '',
+        items: [{ description: '', cost: '' }],
+        paymentMethod: 'cash'
+    });
+
+    useEffect(() => {
+        fetchInvoices();
+        fetchPatients();
+        fetchReceipts();
+    }, []);
+
+    const fetchInvoices = async () => {
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get('http://localhost:5000/api/invoices', config);
+            setInvoices(data);
+        } catch (error) {
+            console.error(error);
+            toast.error('Error fetching invoices');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchPatients = async () => {
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get('http://localhost:5000/api/patients', config);
+            setPatients(data);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchReceipts = async () => {
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get('http://localhost:5000/api/receipts', config);
+            setReceipts(data);
+        } catch (error) {
+            console.error(error);
+            toast.error('Error fetching receipts');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+
+    const handleAddDeposit = async (e) => {
+        e.preventDefault();
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            await axios.post(`http://localhost:5000/api/patients/${selectedPatient}/deposit`,
+                { amount: parseFloat(depositAmount) }, config);
+            toast.success('Deposit added successfully!');
+            setShowDepositModal(false);
+            setDepositAmount('');
+            setSelectedPatient(null);
+            fetchPatients();
+        } catch (error) {
+            console.error(error);
+            toast.error(error.response?.data?.message || 'Error adding deposit');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleViewPatientDetails = async (patient) => {
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const depositRes = await axios.get(`http://localhost:5000/api/patients/${patient._id}/deposit`, config);
+            setViewingPatient({ ...patient, depositBalance: depositRes.data.balance, lowDepositThreshold: depositRes.data.threshold });
+        } catch (error) {
+            console.error(error);
+            toast.error('Error fetching patient details');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handlePrintPatientStatement = (patient) => {
+        const patientReceipts = receipts.filter(r => r.patient?._id === patient._id);
+        const totalSpent = patientReceipts.reduce((sum, r) => sum + r.amountPaid, 0);
+
+        const printWindow = window.open('', '', 'width=800,height=600');
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Patient Statement - ${patient.name}</title>
+                    <style>
+                        body { font-family: 'Helvetica', sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; color: #333; }
+                        .header { display: flex; justify-content: space-between; margin-bottom: 40px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
+                        .logo { font-size: 24px; font-weight: bold; color: #2c3e50; }
+                        .statement-title { font-size: 36px; color: #2c3e50; margin: 0; }
+                        .patient-info { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 30px; }
+                        .info-row { display: flex; justify-content: space-between; margin-bottom: 10px; }
+                        .table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+                        .table th { text-align: left; padding: 12px; background: #f8f9fa; border-bottom: 2px solid #eee; }
+                        .table td { padding: 12px; border-bottom: 1px solid #eee; }
+                        .summary { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-top: 30px; }
+                        .summary-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 16px; }
+                        .summary-row.total { font-size: 20px; font-weight: bold; border-top: 2px solid #333; padding-top: 10px; margin-top: 10px; }
+                        .footer { margin-top: 60px; text-align: center; font-size: 12px; color: #7f8c8d; border-top: 1px solid #eee; padding-top: 20px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <div class="logo">SUD EMR HOSPITAL</div>
+                        <div>
+                            <h1 class="statement-title">PATIENT STATEMENT</h1>
+                            <p>Date: ${new Date().toLocaleDateString()}</p>
+                        </div>
+                    </div>
+
+                    <div class="patient-info">
+                        <h3 style="margin-top: 0;">Patient Information</h3>
+                        <div class="info-row"><span><strong>Name:</strong></span> <span>${patient.name}</span></div>
+                        <div class="info-row"><span><strong>MRN:</strong></span> <span>${patient.mrn}</span></div>
+                        <div class="info-row"><span><strong>Contact:</strong></span> <span>${patient.contact || 'N/A'}</span></div>
+                        <div class="info-row"><span><strong>Deposit Balance:</strong></span> <span style="color: #28a745; font-weight: bold;">₦${(patient.depositBalance || 0).toLocaleString()}</span></div>
+                    </div>
+
+                    <h3>Transaction History</h3>
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Receipt #</th>
+                                <th>Services</th>
+                                <th>Amount</th>
+                                <th>Payment Method</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${patientReceipts.map(r => `
+                                <tr>
+                                    <td>${new Date(r.createdAt).toLocaleDateString()}</td>
+                                    <td>${r.receiptNumber}</td>
+                                    <td>${r.charges?.map(c => c.charge?.name || 'Service').join(', ') || 'N/A'}</td>
+                                    <td>₦${r.amountPaid.toLocaleString()}</td>
+                                    <td style="text-transform: capitalize;">${r.paymentMethod}</td>
+                                </tr>
+                            `).join('')}
+                            ${patientReceipts.length === 0 ? '<tr><td colspan="5" style="text-align: center; color: #999;">No transactions found</td></tr>' : ''}
+                        </tbody>
+                    </table>
+
+                    <div class="summary">
+                        <h3 style="margin-top: 0;">Summary</h3>
+                        <div class="summary-row"><span>Total Paid:</span> <span style="color: #28a745;">₦${totalSpent.toLocaleString()}</span></div>
+                        <div class="summary-row"><span>Total Receipts:</span> <span>${patientReceipts.length}</span></div>
+                        <div class="summary-row"><span>Current Deposit:</span> <span style="color: #17a2b8;">₦${(patient.depositBalance || 0).toLocaleString()}</span></div>
+                    </div>
+
+                    <div class="footer">
+                        <p>SUD EMR Hospital | 123 Hospital Road | Contact: +234 123 456 7890</p>
+                        <p>This is a computer-generated statement</p>
+                    </div>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
+    };
+
+    const handleReverseReceipt = async (receiptId) => {
+        if (!window.confirm('Are you sure you want to reverse this payment? This will restore the patient\'s deposit if paid via deposit.')) {
+            return;
+        }
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            await axios.post(`http://localhost:5000/api/receipts/${receiptId}/reverse`, {}, config);
+            toast.success('Payment reversed successfully!');
+            fetchReceipts();
+        } catch (error) {
+            console.error(error);
+            toast.error(error.response?.data?.message || 'Error reversing payment');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handlePrintReceipt = (receipt) => {
+        const printWindow = window.open('', '', 'width=600,height=600');
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Receipt ${receipt.receiptNumber}</title>
+                    <style>
+                        body { font-family: 'Courier New', monospace; padding: 20px; max-width: 400px; margin: 0 auto; }
+                        .header { text-align: center; margin-bottom: 20px; border-bottom: 2px dashed #000; padding-bottom: 10px; }
+                        .info-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px; }
+                        .items-table { width: 100%; margin-top: 15px; border-collapse: collapse; }
+                        .items-table th { text-align: left; border-bottom: 1px solid #000; padding-bottom: 5px; }
+                        .items-table td { padding: 5px 0; }
+                        .total-row { border-top: 2px dashed #000; margin-top: 10px; padding-top: 10px; font-weight: bold; font-size: 18px; display: flex; justify-content: space-between; }
+                        .footer { text-align: center; margin-top: 30px; font-size: 12px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h2>SUD EMR HOSPITAL</h2>
+                        <p>123 Hospital Road, City</p>
+                        <h3>PAYMENT RECEIPT</h3>
+                    </div>
+                    
+                    <div class="info-row"><span>Receipt #:</span> <strong>${receipt.receiptNumber}</strong></div>
+                    <div class="info-row"><span>Date:</span> <span>${new Date(receipt.paymentDate).toLocaleString()}</span></div>
+                    <div class="info-row"><span>Patient:</span> <strong>${receipt.patient?.name}</strong></div>
+                    <div class="info-row"><span>MRN:</span> <span>${receipt.patient?.mrn || 'N/A'}</span></div>
+                    <div class="info-row"><span>Cashier:</span> <strong>${receipt.cashier?.name || 'Unknown'}</strong></div>
+                    <div class="info-row"><span>Method:</span> <span style="text-transform: uppercase;">${receipt.paymentMethod}</span></div>
+
+                    <table class="items-table">
+                        <thead>
+                            <tr>
+                                <th>Item / Service</th>
+                                <th style="text-align: right;">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${receipt.charges?.map(c => `
+                                <tr>
+                                    <td>
+                                        ${c.charge?.name || 'Service'} 
+                                        ${c.quantity > 1 ? `(x${c.quantity})` : ''}
+                                    </td>
+                                    <td style="text-align: right;">₦${c.totalAmount.toFixed(2)}</td>
+                                </tr>
+                            `).join('') || '<tr><td colspan="2">No items</td></tr>'}
+                        </tbody>
+                    </table>
+
+                    <div class="total-row">
+                        <span>TOTAL PAID:</span>
+                        <span>₦${receipt.amountPaid.toFixed(2)}</span>
+                    </div>
+
+                    <div class="footer">
+                        <p>Thank you for your payment!</p>
+                        <p>Please retain this receipt for your records.</p>
+                    </div>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
+    };
+
+    const totalCollectedToday = receipts
+        .filter(r => new Date(r.createdAt).toDateString() === new Date().toDateString())
+        .reduce((sum, r) => sum + r.amountPaid, 0);
+
+    const totalReceiptsToday = receipts.filter(r => new Date(r.createdAt).toDateString() === new Date().toDateString()).length;
+
+    return (
+        <Layout>
+            {loading && <LoadingOverlay />}
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                    <FaFileInvoiceDollar className="text-green-600" /> Billing & Receipts
+                </h2>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => setShowPatientSearch(true)}
+                        className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 flex items-center gap-2"
+                    >
+                        <FaSearch /> Search Patient
+                    </button>
+                    <button
+                        onClick={() => setShowDepositModal(true)}
+                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center gap-2"
+                    >
+                        <FaWallet /> Add Deposit
+                    </button>
+                </div>
+            </div>
+
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="bg-green-50 p-6 rounded shadow">
+                    <p className="text-green-700 text-sm font-semibold">Collected Today</p>
+                    <p className="text-3xl font-bold text-green-800">₦{totalCollectedToday.toLocaleString()}</p>
+                </div>
+                <div className="bg-blue-50 p-6 rounded shadow">
+                    <p className="text-blue-700 text-sm font-semibold">Total Receipts Today</p>
+                    <p className="text-3xl font-bold text-blue-800">{totalReceiptsToday}</p>
+                </div>
+            </div>
+
+            {/* Deposit Modal */}
+            {showDepositModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white p-6 rounded-lg w-96 max-h-[90vh] overflow-y-auto">
+                        <h3 className="text-xl font-bold mb-4">Add Patient Deposit</h3>
+
+                        {!selectedPatient ? (
+                            <div>
+                                <div className="mb-4">
+                                    <label className="block text-gray-700 mb-2">Search Patient</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Name or MRN..."
+                                        className="w-full border p-2 rounded"
+                                        value={depositSearchTerm}
+                                        onChange={(e) => setDepositSearchTerm(e.target.value)}
+                                        autoFocus
+                                    />
+                                </div>
+                                <div className="space-y-2 max-h-60 overflow-y-auto">
+                                    {patients
+                                        .filter(p =>
+                                            !depositSearchTerm ||
+                                            p.name.toLowerCase().includes(depositSearchTerm.toLowerCase()) ||
+                                            (p.mrn && p.mrn.toLowerCase().includes(depositSearchTerm.toLowerCase()))
+                                        )
+                                        .slice(0, 10)
+                                        .map(p => (
+                                            <div
+                                                key={p._id}
+                                                onClick={() => setSelectedPatient(p._id)}
+                                                className="p-3 border rounded hover:bg-blue-50 cursor-pointer flex justify-between items-center"
+                                            >
+                                                <div>
+                                                    <p className="font-semibold">{p.name}</p>
+                                                    <p className="text-xs text-gray-500">{p.mrn}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-xs text-gray-500">Bal:</p>
+                                                    <p className="font-bold text-green-600">₦{p.depositBalance || 0}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                </div>
+                            </div>
+                        ) : (
+                            <form onSubmit={handleAddDeposit}>
+                                <div className="mb-4 p-3 bg-blue-50 rounded flex justify-between items-center">
+                                    <div>
+                                        <p className="text-sm text-gray-500">Selected Patient</p>
+                                        <p className="font-bold">
+                                            {patients.find(p => p._id === selectedPatient)?.name}
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedPatient(null)}
+                                        className="text-blue-600 text-sm hover:underline"
+                                    >
+                                        Change
+                                    </button>
+                                </div>
+
+                                <div className="mb-4">
+                                    <label className="block text-gray-700 mb-2">Amount (₦)</label>
+                                    <input
+                                        type="number"
+                                        className="w-full border p-2 rounded"
+                                        value={depositAmount}
+                                        onChange={(e) => setDepositAmount(e.target.value)}
+                                        required
+                                        min="0"
+                                        autoFocus
+                                    />
+                                </div>
+                                <div className="flex justify-end gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowDepositModal(false);
+                                            setSelectedPatient(null);
+                                            setDepositSearchTerm('');
+                                        }}
+                                        className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                                    >
+                                        Add Deposit
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Patient Search Modal */}
+            {showPatientSearch && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white p-6 rounded-lg w-[600px] max-h-[80vh] overflow-y-auto">
+                        <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                            <FaSearch /> Search Patient
+                        </h3>
+                        <input
+                            type="text"
+                            placeholder="Search by name or MRN..."
+                            className="w-full border p-2 rounded mb-4"
+                            value={patientSearchTerm}
+                            onChange={(e) => setPatientSearchTerm(e.target.value)}
+                        />
+                        <div className="space-y-2 mb-4">
+                            {patients
+                                .filter(p =>
+                                    p.name.toLowerCase().includes(patientSearchTerm.toLowerCase()) ||
+                                    (p.mrn && p.mrn.toLowerCase().includes(patientSearchTerm.toLowerCase()))
+                                )
+                                .slice(0, 10)
+                                .map(patient => (
+                                    <div
+                                        key={patient._id}
+                                        className="border p-3 rounded hover:bg-gray-50 cursor-pointer"
+                                        onClick={() => {
+                                            handleViewPatientDetails(patient);
+                                            setShowPatientSearch(false);
+                                        }}
+                                    >
+                                        <p className="font-semibold">{patient.name}</p>
+                                        <p className="text-sm text-gray-600">
+                                            MRN: {patient.mrn} | Age: {patient.age} | {patient.gender}
+                                        </p>
+                                    </div>
+                                ))}
+                            {patients.filter(p =>
+                                p.name.toLowerCase().includes(patientSearchTerm.toLowerCase()) ||
+                                (p.mrn && p.mrn.toLowerCase().includes(patientSearchTerm.toLowerCase()))
+                            ).length === 0 && (
+                                    <p className="text-gray-500 text-center py-4">No patients found</p>
+                                )}
+                        </div>
+                        <button
+                            onClick={() => {
+                                setShowPatientSearch(false);
+                                setPatientSearchTerm('');
+                            }}
+                            className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Patient Details Modal */}
+            {viewingPatient && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white p-6 rounded-lg w-[700px] max-h-[80vh] overflow-y-auto">
+                        <div className="flex justify-between items-start mb-4">
+                            <h3 className="text-xl font-bold flex items-center gap-2">
+                                <FaUser /> Patient Details
+                            </h3>
+                            <button
+                                onClick={() => setViewingPatient(null)}
+                                className="text-gray-500 hover:text-gray-700 text-2xl"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <div className="bg-gray-50 p-4 rounded mb-4">
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <p className="text-sm text-gray-600">Name</p>
+                                    <p className="font-semibold">{viewingPatient.name}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-600">MRN</p>
+                                    <p className="font-semibold">{viewingPatient.mrn}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-600">Age / Gender</p>
+                                    <p className="font-semibold">{viewingPatient.age} / {viewingPatient.gender}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-600">Contact</p>
+                                    <p className="font-semibold">{viewingPatient.contact || 'N/A'}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-blue-50 p-4 rounded mb-4">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <p className="text-sm text-blue-600">Deposit Balance</p>
+                                    <p className="text-3xl font-bold text-blue-800">
+                                        ₦{(viewingPatient.depositBalance || 0).toLocaleString()}
+                                    </p>
+                                </div>
+                                {(viewingPatient.depositBalance || 0) < (viewingPatient.lowDepositThreshold || 5000) && (
+                                    <div className="text-yellow-600 flex items-center gap-2">
+                                        <FaExclamationTriangle />
+                                        <span className="text-sm">Low Balance</span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="mb-4">
+                            <h4 className="font-bold mb-2">Transaction Summary</h4>
+                            <div className="grid grid-cols-3 gap-3">
+                                <div className="bg-green-50 p-3 rounded">
+                                    <p className="text-xs text-green-600">Paid</p>
+                                    <p className="text-lg font-bold text-green-700">
+                                        ₦{receipts
+                                            .filter(r => r.patient?._id === viewingPatient._id)
+                                            .reduce((sum, r) => sum + r.amountPaid, 0)
+                                            .toLocaleString()}
+                                    </p>
+                                </div>
+                                <div className="bg-yellow-50 p-3 rounded">
+                                    <p className="text-xs text-yellow-600">Pending</p>
+                                    <p className="text-lg font-bold text-yellow-700">
+                                        ₦0
+                                    </p>
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded">
+                                    <p className="text-xs text-gray-600">Total Receipts</p>
+                                    <p className="text-lg font-bold text-gray-700">
+                                        {receipts.filter(r => r.patient?._id === viewingPatient._id).length}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => handlePrintPatientStatement(viewingPatient)}
+                                className="flex-1 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center justify-center gap-2"
+                            >
+                                <FaPrint /> Print Statement
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setSelectedPatient(viewingPatient._id);
+                                    setShowDepositModal(true);
+                                    setViewingPatient(null);
+                                }}
+                                className="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center justify-center gap-2"
+                            >
+                                <FaWallet /> Add Deposit
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Recent Receipts */}
+            <div className="bg-white p-6 rounded shadow">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xl font-bold flex items-center gap-2">
+                        <FaDollarSign className="text-green-600" /> Receipts
+                    </h3>
+                    <div className="flex gap-2 items-center">
+                        <label className="text-sm font-semibold">From:</label>
+                        <input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className="border p-2 rounded text-sm"
+                        />
+                        <label className="text-sm font-semibold">To:</label>
+                        <input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className="border p-2 rounded text-sm"
+                        />
+                    </div>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                        <thead className="bg-gray-100">
+                            <tr>
+                                <th className="p-3 border-b">Receipt #</th>
+                                <th className="p-3 border-b">Patient</th>
+                                <th className="p-3 border-b">Services</th>
+                                <th className="p-3 border-b">Amount</th>
+                                <th className="p-3 border-b">Method</th>
+                                <th className="p-3 border-b">Received By</th>
+                                <th className="p-3 border-b">Time</th>
+                                <th className="p-3 border-b">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {receipts
+                                .filter(r => {
+                                    const receiptDate = new Date(r.createdAt).toISOString().split('T')[0];
+                                    return receiptDate >= startDate && receiptDate <= endDate;
+                                })
+                                .slice(0, 20)
+                                .map((receipt) => (
+                                    <tr key={receipt._id} className="hover:bg-gray-50">
+                                        <td className="p-3 border-b font-mono text-sm">{receipt.receiptNumber}</td>
+                                        <td className="p-3 border-b font-semibold">{receipt.patient?.name}</td>
+                                        <td className="p-3 border-b text-sm">
+                                            {receipt.charges?.map(c => c.charge?.name || 'Service').join(', ') || 'N/A'}
+                                        </td>
+                                        <td className="p-3 border-b text-green-600 font-bold">₦{receipt.amountPaid.toFixed(2)}</td>
+                                        <td className="p-3 border-b capitalize">{receipt.paymentMethod}</td>
+                                        <td className="p-3 border-b text-sm">{receipt.cashier?.name || 'N/A'}</td>
+                                        <td className="p-3 border-b text-sm">{new Date(receipt.paymentDate).toLocaleTimeString()}</td>
+                                        <td className="p-3 border-b">
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => handlePrintReceipt(receipt)}
+                                                    className="text-blue-600 hover:underline flex items-center gap-1 text-sm"
+                                                    title="Print Receipt"
+                                                >
+                                                    <FaPrint /> Print
+                                                </button>
+                                                {user?.role === 'admin' && (
+                                                    <button
+                                                        onClick={() => handleReverseReceipt(receipt._id)}
+                                                        className="text-red-600 hover:underline flex items-center gap-1 text-sm"
+                                                        title="Reverse Payment"
+                                                    >
+                                                        <FaUndo /> Reverse
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            {receipts.filter(r => {
+                                const receiptDate = new Date(r.createdAt).toISOString().split('T')[0];
+                                return receiptDate >= startDate && receiptDate <= endDate;
+                            }).length === 0 && (
+                                    <tr>
+                                        <td colSpan="7" className="p-4 text-center text-gray-500">
+                                            No receipts today
+                                        </td>
+                                    </tr>
+                                )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </Layout>
+    );
+};
+
+export default BillingDashboard;
