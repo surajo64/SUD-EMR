@@ -20,7 +20,7 @@ const getDisposals = async (req, res) => {
         }
 
         const disposals = await DrugDisposal.find(filter)
-            .populate('drug', 'name batchNumber')
+            .populate('drug', 'name batchNumber supplier barcode expiryDate price form purchasingPrice')
             .populate('pharmacy', 'name')
             .populate('processedBy', 'name')
             .sort({ createdAt: -1 });
@@ -66,6 +66,11 @@ const createDisposal = async (req, res) => {
             return res.status(400).json({ message: `Insufficient stock. Available: ${inventoryItem.quantity}` });
         }
 
+        // Calculate refund amount for supplier returns
+        const refundAmount = (reason === 'return_to_supplier' && inventoryItem.purchasingPrice)
+            ? inventoryItem.purchasingPrice * quantity
+            : 0;
+
         // Create disposal record
         const disposal = await DrugDisposal.create({
             drug,
@@ -75,6 +80,7 @@ const createDisposal = async (req, res) => {
             processedBy: req.user._id,
             batchNumber: inventoryItem.batchNumber,
             expiryDate: inventoryItem.expiryDate,
+            refundAmount,
             notes
         });
 
@@ -83,7 +89,7 @@ const createDisposal = async (req, res) => {
         await inventoryItem.save();
 
         const populatedDisposal = await DrugDisposal.findById(disposal._id)
-            .populate('drug', 'name batchNumber')
+            .populate('drug', 'name batchNumber supplier barcode expiryDate price form purchasingPrice')
             .populate('pharmacy', 'name')
             .populate('processedBy', 'name');
 
@@ -166,7 +172,7 @@ const returnToMainPharmacy = async (req, res) => {
         }
 
         const populatedDisposal = await DrugDisposal.findById(disposal._id)
-            .populate('drug', 'name batchNumber')
+            .populate('drug', 'name batchNumber supplier barcode expiryDate price form')
             .populate('pharmacy', 'name')
             .populate('processedBy', 'name');
 

@@ -74,8 +74,8 @@ const createTransferRequest = async (req, res) => {
 
         const transfer = await DrugTransfer.create({
             drug: inventoryItem._id,
-            fromPharmacy: mainPharmacy._id,
-            toPharmacy: toPharmacyId,
+            fromPharmacy: mainPharmacy._id, // Source: Main Pharmacy
+            toPharmacy: fromPharmacyId, // Destination: Requesting branch pharmacy
             requestedQuantity,
             requestedBy: req.user._id,
             notes,

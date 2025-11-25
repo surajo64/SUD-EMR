@@ -25,7 +25,7 @@ const getInventory = async (req, res) => {
 // @route POST /api/inventory
 // @access Private
 const addInventoryItem = async (req, res) => {
-    const { name, quantity, price, expiryDate, supplier, batchNumber, barcode, reorderLevel, route, form, dosage, frequency, drugUnit, pharmacy } = req.body;
+    const { name, quantity, price, purchasingPrice, expiryDate, supplier, batchNumber, barcode, reorderLevel, route, form, dosage, frequency, drugUnit, pharmacy } = req.body;
 
     if (!name || !quantity || !price || !expiryDate || !pharmacy) {
         return res.status(400).json({ message: "Please fill all required fields including pharmacy" });
@@ -35,6 +35,7 @@ const addInventoryItem = async (req, res) => {
         name,
         quantity,
         price,
+        purchasingPrice,
         expiryDate,
         supplier,
         batchNumber,
@@ -55,11 +56,11 @@ const addInventoryItem = async (req, res) => {
 // @route PUT /api/inventory/:id
 // @access Private
 const updateInventoryItem = async (req, res) => {
-    const { name, quantity, price, expiryDate, supplier, batchNumber, barcode, reorderLevel, route, form, dosage, frequency, drugUnit, pharmacy } = req.body;
+    const { name, quantity, price, purchasingPrice, expiryDate, supplier, batchNumber, barcode, reorderLevel, route, form, dosage, frequency, drugUnit, pharmacy } = req.body;
 
     const updatedItem = await Inventory.findByIdAndUpdate(
         req.params.id,
-        { name, quantity, price, expiryDate, supplier, batchNumber, barcode, reorderLevel, route, form, dosage, frequency, drugUnit, pharmacy },
+        { name, quantity, price, purchasingPrice, expiryDate, supplier, batchNumber, barcode, reorderLevel, route, form, dosage, frequency, drugUnit, pharmacy },
         { new: true }
     ).populate('pharmacy', 'name');
 

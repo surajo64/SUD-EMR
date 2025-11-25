@@ -33,6 +33,10 @@ const drugDisposalSchema = mongoose.Schema({
         refundAmount: Number,
         trackingNumber: String
     },
+    refundAmount: {
+        type: Number,
+        default: 0
+    },
     batchNumber: String,
     expiryDate: Date,
     notes: String

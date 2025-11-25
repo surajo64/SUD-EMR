@@ -154,10 +154,24 @@ const Inventory = () => {
 
     const handleOpenAddModal = () => {
         setIsEditMode(false);
+
+        // Set default pharmacy based on user role
+        let defaultPharmacy = "";
+        if (user.role === 'pharmacist' && user.assignedPharmacy) {
+            // Branch pharmacist: default to their assigned pharmacy
+            defaultPharmacy = user.assignedPharmacy._id || user.assignedPharmacy;
+        } else if (user.role === 'admin' || (user.role === 'pharmacist' && user.assignedPharmacy?.isMainPharmacy)) {
+            // Admin or main pharmacist: default to Main Pharmacy
+            defaultPharmacy = mainPharmacy?._id || selectedPharmacy || "";
+        } else {
+            defaultPharmacy = selectedPharmacy || "";
+        }
+
         setCurrentItem({
             name: "",
             quantity: "",
             price: "",
+            purchasingPrice: "",
             supplier: "",
             expiryDate: "",
             batchNumber: "",
@@ -168,7 +182,7 @@ const Inventory = () => {
             dosage: "",
             frequency: "",
             drugUnit: "unit",
-            pharmacy: selectedPharmacy || ""
+            pharmacy: defaultPharmacy
         });
         setShowModal(true);
     };
@@ -335,7 +349,7 @@ const Inventory = () => {
                     <option value="Expired">Expired</option>
                 </select>
                 <button onClick={exportExcel} className="bg-green-600 text-white px-4 py-2 rounded">
-                    Download Excel
+                    Download
                 </button>
             </div>
 
@@ -416,8 +430,8 @@ const Inventory = () => {
                             </button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="md:col-span-2">
+                        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="md:col-span-3">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Drug Name</label>
                                 <input
                                     className="w-full border p-2 rounded"
@@ -427,12 +441,13 @@ const Inventory = () => {
                                 />
                             </div>
 
-                            <div className="md:col-span-2">
+                            <div className="md:col-span-3">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Pharmacy Location</label>
                                 <select
                                     className="w-full border p-2 rounded"
                                     value={currentItem.pharmacy}
                                     onChange={(e) => setCurrentItem({ ...currentItem, pharmacy: e.target.value })}
+                                    disabled={user.role === 'pharmacist'}
                                     required
                                 >
                                     <option value="">-- Select Pharmacy --</option>
@@ -442,6 +457,9 @@ const Inventory = () => {
                                         </option>
                                     ))}
                                 </select>
+                                {user.role === 'pharmacist' && (
+                                    <p className="text-xs text-gray-500 mt-1">Locked to your assigned pharmacy</p>
+                                )}
                             </div>
 
                             <div>
@@ -456,13 +474,24 @@ const Inventory = () => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Price (₦)</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Selling Price (₦)</label>
                                 <input
                                     type="number"
                                     className="w-full border p-2 rounded"
                                     value={currentItem.price}
                                     onChange={(e) => setCurrentItem({ ...currentItem, price: e.target.value })}
                                     required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Purchasing Price (₦)</label>
+                                <input
+                                    type="number"
+                                    className="w-full border p-2 rounded"
+                                    value={currentItem.purchasingPrice}
+                                    onChange={(e) => setCurrentItem({ ...currentItem, purchasingPrice: e.target.value })}
+                                    placeholder="Cost price for refunds"
                                 />
                             </div>
 
@@ -583,7 +612,7 @@ const Inventory = () => {
                                 />
                             </div>
 
-                            <div className="md:col-span-2 flex justify-end gap-3 mt-4">
+                            <div className="md:col-span-3 flex justify-end gap-3 mt-4">
                                 <button
                                     type="button"
                                     onClick={() => setShowModal(false)}
