@@ -7,16 +7,22 @@ const Pharmacy = require('../models/pharmacyModel');
 // @access  Private
 const getDisposals = async (req, res) => {
     try {
-        const { disposalType, pharmacy } = req.query;
+        const { pharmacy, reason, type } = req.query;
         const filter = {};
 
-        if (disposalType) filter.disposalType = disposalType;
         if (pharmacy) filter.pharmacy = pharmacy;
+        if (reason) filter.reason = reason;
+
+        if (type === 'return') {
+            filter.reason = { $in: ['return_to_main', 'excess_stock', 'near_expiry'] };
+        } else if (type === 'disposal') {
+            filter.reason = { $in: ['expired', 'damaged', 'return_to_supplier', 'other'] };
+        }
 
         const disposals = await DrugDisposal.find(filter)
             .populate('drug', 'name batchNumber')
             .populate('pharmacy', 'name')
-            .populate('disposedBy', 'name')
+            .populate('processedBy', 'name')
             .sort({ createdAt: -1 });
 
         res.json(disposals);
@@ -30,30 +36,26 @@ const getDisposals = async (req, res) => {
 // @access  Private
 const createDisposal = async (req, res) => {
     try {
-        const {
-            drugId,
-            pharmacyId,
-            quantity,
-            disposalType,
-            reason,
-            supplierReturnDetails,
-            notes
-        } = req.body;
+        let { drug, quantity, reason, notes } = req.body;
+        quantity = Number(quantity);
 
-        // Verify pharmacy is main pharmacy for disposals
-        const pharmacy = await Pharmacy.findById(pharmacyId);
-        if (!pharmacy) {
-            return res.status(404).json({ message: 'Pharmacy not found' });
+        // Get user's pharmacy
+        const User = require('../models/userModel');
+        const currentUser = await User.findById(req.user._id).populate('assignedPharmacy');
+
+        if (!currentUser.assignedPharmacy) {
+            return res.status(400).json({ message: 'User not assigned to any pharmacy' });
         }
 
-        if (!pharmacy.isMainPharmacy) {
+        // Verify pharmacy is main pharmacy for disposals
+        if (!currentUser.assignedPharmacy.isMainPharmacy) {
             return res.status(400).json({ message: 'Drug disposal can only be done from Main Pharmacy' });
         }
 
         // Find inventory item
         const inventoryItem = await Inventory.findOne({
-            _id: drugId,
-            pharmacy: pharmacyId
+            _id: drug,
+            pharmacy: currentUser.assignedPharmacy._id
         });
 
         if (!inventoryItem) {
@@ -66,13 +68,11 @@ const createDisposal = async (req, res) => {
 
         // Create disposal record
         const disposal = await DrugDisposal.create({
-            drug: drugId,
-            pharmacy: pharmacyId,
+            drug,
+            pharmacy: currentUser.assignedPharmacy._id,
             quantity,
-            disposalType,
             reason,
-            disposedBy: req.user._id,
-            supplierReturnDetails: disposalType === 'return_to_supplier' ? supplierReturnDetails : undefined,
+            processedBy: req.user._id,
             batchNumber: inventoryItem.batchNumber,
             expiryDate: inventoryItem.expiryDate,
             notes
@@ -85,7 +85,90 @@ const createDisposal = async (req, res) => {
         const populatedDisposal = await DrugDisposal.findById(disposal._id)
             .populate('drug', 'name batchNumber')
             .populate('pharmacy', 'name')
-            .populate('disposedBy', 'name');
+            .populate('processedBy', 'name');
+
+        res.status(201).json(populatedDisposal);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Return drug to main pharmacy (from branch)
+// @route   POST /api/drug-disposal/return
+// @access  Private (Branch Pharmacist)
+const returnToMainPharmacy = async (req, res) => {
+    try {
+        let { drug, quantity, reason, notes } = req.body;
+        quantity = Number(quantity);
+
+        // Get user's pharmacy
+        const User = require('../models/userModel');
+        const currentUser = await User.findById(req.user._id).populate('assignedPharmacy');
+
+        if (!currentUser.assignedPharmacy) {
+            return res.status(400).json({ message: 'User not assigned to any pharmacy' });
+        }
+
+        // Find main pharmacy
+        const mainPharmacy = await Pharmacy.findOne({ isMainPharmacy: true });
+        if (!mainPharmacy) {
+            return res.status(404).json({ message: 'Main pharmacy not found' });
+        }
+
+        // Find inventory item in branch pharmacy
+        const branchItem = await Inventory.findOne({
+            _id: drug,
+            pharmacy: currentUser.assignedPharmacy._id
+        });
+
+        if (!branchItem) {
+            return res.status(404).json({ message: 'Drug not found in your pharmacy' });
+        }
+
+        if (branchItem.quantity < quantity) {
+            return res.status(400).json({ message: `Insufficient stock. Available: ${branchItem.quantity}` });
+        }
+
+        // Create disposal/return record
+        const disposal = await DrugDisposal.create({
+            drug,
+            pharmacy: currentUser.assignedPharmacy._id,
+            quantity,
+            reason,
+            processedBy: req.user._id,
+            batchNumber: branchItem.batchNumber,
+            expiryDate: branchItem.expiryDate,
+            notes
+        });
+
+        // Deduct from branch pharmacy
+        branchItem.quantity -= quantity;
+        await branchItem.save();
+
+        // Add to main pharmacy
+        let mainItem = await Inventory.findOne({
+            name: branchItem.name,
+            pharmacy: mainPharmacy._id,
+            batchNumber: branchItem.batchNumber
+        });
+
+        if (mainItem) {
+            mainItem.quantity += quantity;
+            await mainItem.save();
+        } else {
+            const newItem = new Inventory({
+                ...branchItem.toObject(),
+                _id: undefined,
+                quantity,
+                pharmacy: mainPharmacy._id
+            });
+            await newItem.save();
+        }
+
+        const populatedDisposal = await DrugDisposal.findById(disposal._id)
+            .populate('drug', 'name batchNumber')
+            .populate('pharmacy', 'name')
+            .populate('processedBy', 'name');
 
         res.status(201).json(populatedDisposal);
     } catch (error) {
@@ -134,5 +217,6 @@ const getDisposalStats = async (req, res) => {
 module.exports = {
     getDisposals,
     createDisposal,
+    returnToMainPharmacy,
     getDisposalStats
 };

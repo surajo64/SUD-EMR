@@ -114,6 +114,22 @@ const Sidebar = () => {
                         <Link to="/pharmacy/inventory" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/pharmacy/inventory')}`}>
                             <FaPills /> Inventory
                         </Link>
+                        {user.assignedPharmacy?.isMainPharmacy ? (
+                            <>
+                                <Link to="/pharmacy/transfers" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/pharmacy/transfers')}`}>
+                                    <FaExchangeAlt /> Transfer Requests
+                                </Link>
+                                <Link to="/pharmacy/disposal" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/pharmacy/disposal')}`}>
+                                    <FaTrash /> Drug Disposal
+                                </Link>
+                            </>
+                        ) : (
+                            <>
+                                <Link to="/pharmacy/transfers" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/pharmacy/transfers')}`}>
+                                    <FaExchangeAlt /> Request Drug Transfer
+                                </Link>
+                            </>
+                        )}
                     </>
                 )}
 

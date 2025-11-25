@@ -16,16 +16,12 @@ const drugDisposalSchema = mongoose.Schema({
         required: true,
         min: 1
     },
-    disposalType: {
-        type: String,
-        enum: ['destruction', 'return_to_supplier'],
-        required: true
-    },
     reason: {
         type: String,
+        enum: ['expired', 'damaged', 'return_to_supplier', 'return_to_main', 'excess_stock', 'near_expiry', 'destruction', 'other'],
         required: true
     },
-    disposedBy: {
+    processedBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true
