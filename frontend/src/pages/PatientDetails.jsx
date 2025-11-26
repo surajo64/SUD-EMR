@@ -35,6 +35,8 @@ const PatientDetails = () => {
     const [drugDosage, setDrugDosage] = useState('');
     const [drugFrequency, setDrugFrequency] = useState('');
     const [drugDuration, setDrugDuration] = useState('');
+    const [drugRoute, setDrugRoute] = useState('');
+    const [drugForm, setDrugForm] = useState('');
 
     // Multi-Drug Prescription State
     const [drugSearchTerm, setDrugSearchTerm] = useState('');
@@ -218,8 +220,12 @@ const PatientDetails = () => {
             setLabCharges(data.filter(c => c.type === 'lab'));
             setRadiologyCharges(data.filter(c => c.type === 'radiology'));
 
-            // Fetch inventory drugs instead of drug charges
-            const inventoryRes = await axios.get('http://localhost:5000/api/inventory', config);
+            // Fetch inventory drugs - filter by doctor's pharmacy if doctor role
+            let inventoryUrl = 'http://localhost:5000/api/inventory';
+            if (user.role === 'doctor' && user.assignedPharmacy) {
+                inventoryUrl += `?pharmacy=${user.assignedPharmacy._id || user.assignedPharmacy}`;
+            }
+            const inventoryRes = await axios.get(inventoryUrl, config);
             setInventoryDrugs(inventoryRes.data.filter(item => item.quantity > 0));
         } catch (error) {
             console.error(error);
@@ -372,6 +378,12 @@ const PatientDetails = () => {
         setSelectedDrug(drug._id);
         setDrugSearchTerm(drug.name);
         setShowDrugDropdown(false);
+
+        // Auto-populate fields from drug data
+        setDrugRoute(drug.route || '');
+        setDrugDosage(drug.dosage || '');
+        setDrugForm(drug.form || '');
+        setDrugFrequency(drug.frequency || '');
     };
 
     const handleAddDrugToQueue = () => {
@@ -386,7 +398,9 @@ const PatientDetails = () => {
             name: drugData.name,
             price: drugData.price,
             quantity: drugQuantity,
+            route: drugRoute || 'As directed',
             dosage: drugDosage || 'As directed',
+            form: drugForm || 'As directed',
             frequency: drugFrequency || 'As directed',
             duration: drugDuration || 'As directed'
         };
@@ -397,7 +411,9 @@ const PatientDetails = () => {
         setSelectedDrug('');
         setDrugSearchTerm('');
         setDrugQuantity(1);
+        setDrugRoute('');
         setDrugDosage('');
+        setDrugForm('');
         setDrugFrequency('');
         setDrugDuration('');
         toast.success('Drug added to list');
@@ -1517,7 +1533,7 @@ const PatientDetails = () => {
             {
                 showRxModal && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                        <div className="bg-white rounded-lg p-6 w-full max-w-lg">
+                        <div className="bg-white rounded-lg p-6 w-full max-w-4xl">
                             <div className="flex justify-between items-center mb-4">
                                 <h3 className="text-xl font-bold">Add Prescription</h3>
                                 <button onClick={() => setShowRxModal(false)} className="text-gray-500 hover:text-gray-700">
@@ -1555,18 +1571,18 @@ const PatientDetails = () => {
                                         </div>
 
                                         {selectedDrug && (
-                                            <div className="grid grid-cols-5 gap-2 items-end">
-                                                <div className="col-span-1">
-                                                    <label className="block text-xs text-gray-600 mb-1">Qty</label>
+                                            <div className="grid grid-cols-7 gap-2 items-end">
+                                                <div>
+                                                    <label className="block text-xs text-gray-600 mb-1">Route</label>
                                                     <input
-                                                        type="number"
+                                                        type="text"
                                                         className="w-full border p-2 rounded text-sm"
-                                                        value={drugQuantity}
-                                                        onChange={(e) => setDrugQuantity(parseInt(e.target.value))}
-                                                        min="1"
+                                                        value={drugRoute}
+                                                        onChange={(e) => setDrugRoute(e.target.value)}
+                                                        placeholder="Oral"
                                                     />
                                                 </div>
-                                                <div className="col-span-1">
+                                                <div>
                                                     <label className="block text-xs text-gray-600 mb-1">Dosage</label>
                                                     <input
                                                         type="text"
@@ -1576,8 +1592,18 @@ const PatientDetails = () => {
                                                         placeholder="500mg"
                                                     />
                                                 </div>
-                                                <div className="col-span-1">
-                                                    <label className="block text-xs text-gray-600 mb-1">Freq</label>
+                                                <div>
+                                                    <label className="block text-xs text-gray-600 mb-1">Form</label>
+                                                    <input
+                                                        type="text"
+                                                        className="w-full border p-2 rounded text-sm"
+                                                        value={drugForm}
+                                                        onChange={(e) => setDrugForm(e.target.value)}
+                                                        placeholder="Tablet"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs text-gray-600 mb-1">Frequency</label>
                                                     <input
                                                         type="text"
                                                         className="w-full border p-2 rounded text-sm"
@@ -1586,17 +1612,27 @@ const PatientDetails = () => {
                                                         placeholder="BD"
                                                     />
                                                 </div>
-                                                <div className="col-span-1">
-                                                    <label className="block text-xs text-gray-600 mb-1">Dur</label>
+                                                <div>
+                                                    <label className="block text-xs text-gray-600 mb-1">Duration</label>
                                                     <input
                                                         type="text"
                                                         className="w-full border p-2 rounded text-sm"
                                                         value={drugDuration}
                                                         onChange={(e) => setDrugDuration(e.target.value)}
-                                                        placeholder="5d"
+                                                        placeholder="5 days"
                                                     />
                                                 </div>
-                                                <div className="col-span-1">
+                                                <div>
+                                                    <label className="block text-xs text-gray-600 mb-1">Quantity</label>
+                                                    <input
+                                                        type="number"
+                                                        className="w-full border p-2 rounded text-sm"
+                                                        value={drugQuantity}
+                                                        onChange={(e) => setDrugQuantity(parseInt(e.target.value))}
+                                                        min="1"
+                                                    />
+                                                </div>
+                                                <div>
                                                     <button
                                                         onClick={handleAddDrugToQueue}
                                                         className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 text-sm font-semibold"
@@ -1614,17 +1650,19 @@ const PatientDetails = () => {
                                             <thead className="bg-gray-100">
                                                 <tr>
                                                     <th className="p-2">Drug</th>
-                                                    <th className="p-2">Qty</th>
+                                                    <th className="p-2">Route</th>
                                                     <th className="p-2">Dosage</th>
+                                                    <th className="p-2">Form</th>
                                                     <th className="p-2">Freq</th>
                                                     <th className="p-2">Dur</th>
+                                                    <th className="p-2">Qty</th>
                                                     <th className="p-2">Action</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {tempDrugs.length === 0 ? (
                                                     <tr>
-                                                        <td colSpan="6" className="p-4 text-center text-gray-500">
+                                                        <td colSpan="8" className="p-4 text-center text-gray-500">
                                                             No drugs added yet. Search and add drugs above.
                                                         </td>
                                                     </tr>
@@ -1632,10 +1670,12 @@ const PatientDetails = () => {
                                                     tempDrugs.map(drug => (
                                                         <tr key={drug.id} className="border-b">
                                                             <td className="p-2 font-semibold">{drug.name}</td>
-                                                            <td className="p-2">{drug.quantity}</td>
+                                                            <td className="p-2">{drug.route}</td>
                                                             <td className="p-2">{drug.dosage}</td>
+                                                            <td className="p-2">{drug.form}</td>
                                                             <td className="p-2">{drug.frequency}</td>
                                                             <td className="p-2">{drug.duration}</td>
+                                                            <td className="p-2">{drug.quantity}</td>
                                                             <td className="p-2">
                                                                 <button
                                                                     onClick={() => handleRemoveDrugFromQueue(drug.id)}

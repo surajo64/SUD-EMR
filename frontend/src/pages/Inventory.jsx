@@ -29,6 +29,7 @@ const Inventory = () => {
     // Modal State
     const [showModal, setShowModal] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
+    const [loading, setLoading] = useState(false);
     const [currentItem, setCurrentItem] = useState({
         name: "",
         quantity: "",
@@ -48,7 +49,7 @@ const Inventory = () => {
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 10;
+    const itemsPerPage = 5;
 
     // Fetch inventory on load
     useEffect(() => {
@@ -65,6 +66,7 @@ const Inventory = () => {
 
     const fetchPharmacies = async () => {
         try {
+            setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const { data } = await axios.get("http://localhost:5000/api/pharmacies", config);
             setPharmacies(data);
@@ -82,11 +84,14 @@ const Inventory = () => {
             }
         } catch (error) {
             console.error(error);
+        } finally {
+            setLoading(false);
         }
     };
 
     const fetchInventory = async () => {
         try {
+            setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const url = selectedPharmacy
                 ? `http://localhost:5000/api/inventory?pharmacy=${selectedPharmacy}`
@@ -95,6 +100,8 @@ const Inventory = () => {
             setItems(data);
         } catch (error) {
             console.error(error);
+        } finally {
+            setLoading(false);
         }
     };
 

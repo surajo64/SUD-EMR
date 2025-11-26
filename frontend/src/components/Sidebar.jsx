@@ -109,7 +109,7 @@ const Sidebar = () => {
                             <FaPills /> Prescriptions
                         </Link>
                         <Link to="/pharmacy/external-investigations" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/pharmacy/external-investigations')}`}>
-                            <FaPills /> External Pharmacy
+                            <FaPills /> External Purchase
                         </Link>
                         <Link to="/pharmacy/inventory" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/pharmacy/inventory')}`}>
                             <FaPills /> Inventory

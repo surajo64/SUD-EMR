@@ -368,7 +368,7 @@ const UserManagement = () => {
                                     <option value="admin">Admin</option>
                                 </select>
                             </div>
-                            {newUser.role === 'pharmacist' && (
+                            {(newUser.role === 'pharmacist' || newUser.role === 'doctor') && (
                                 <div>
                                     <label className="block text-sm font-semibold mb-1">Assigned Pharmacy</label>
                                     <select
@@ -454,7 +454,7 @@ const UserManagement = () => {
                                     <option value="admin">Admin</option>
                                 </select>
                             </div>
-                            {selectedUser.role === 'pharmacist' && (
+                            {(selectedUser.role === 'pharmacist' || selectedUser.role === 'doctor') && (
                                 <div>
                                     <label className="block text-sm font-semibold mb-1">Assigned Pharmacy</label>
                                     <select
