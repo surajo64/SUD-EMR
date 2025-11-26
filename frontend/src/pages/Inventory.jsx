@@ -396,12 +396,19 @@ const Inventory = () => {
                                     {checkExpiry(item.expiryDate) === "Good" && <span className="text-green-600">Good</span>}
                                 </td>
                                 <td className="p-4 border-b space-x-2">
-                                    <button onClick={() => handleOpenEditModal(item)} className="text-blue-600 hover:text-blue-800">
-                                        <FaEdit />
-                                    </button>
-                                    <button onClick={() => deleteItem(item._id)} className="text-red-600 hover:text-red-800">
-                                        <FaTrash />
-                                    </button>
+                                    {/* Only allow edit/delete for admin or main pharmacy pharmacists */}
+                                    {(user.role === 'admin' || (user.role === 'pharmacist' && user.assignedPharmacy?.isMainPharmacy)) ? (
+                                        <>
+                                            <button onClick={() => handleOpenEditModal(item)} className="text-blue-600 hover:text-blue-800">
+                                                <FaEdit />
+                                            </button>
+                                            <button onClick={() => deleteItem(item._id)} className="text-red-600 hover:text-red-800">
+                                                <FaTrash />
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <span className="text-xs text-gray-400 italic">View Only</span>
+                                    )}
                                 </td>
                             </tr>
                         ))}
