@@ -9,7 +9,7 @@ const invoiceSchema = mongoose.Schema({
     }],
     totalAmount: { type: Number, required: true },
     status: { type: String, enum: ['pending', 'paid', 'cancelled', 'reversed'], default: 'pending' },
-    paymentMethod: { type: String, enum: ['cash', 'card', 'insurance', 'deposit'], default: 'cash' },
+    paymentMethod: { type: String, enum: ['cash', 'card', 'insurance', 'deposit', 'retainership'], default: 'cash' },
     generatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Who created this invoice
     feeType: { type: String, enum: ['consultation', 'lab', 'radiology', 'drugs', 'nursing', 'other'], required: true },
     department: { type: String }, // Department name for reporting

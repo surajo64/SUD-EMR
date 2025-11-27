@@ -9,9 +9,14 @@ const patientSchema = mongoose.Schema({
     address: { type: String },
     medicalHistory: [{ type: String }],
 
-    // Insurance Details
-    insuranceProvider: { type: String },
-    policyNumber: { type: String },
+    // Insurance/Provider Details
+    provider: {
+        type: String,
+        enum: ['Standard', 'Retainership', 'NHIA', 'KSCHMA'],
+        default: 'Standard'
+    },
+    hmo: { type: String }, // Only for NHIA patients
+    insuranceNumber: { type: String },
 
     // Financials
     depositBalance: { type: Number, default: 0 },

@@ -34,6 +34,10 @@ app.use('/api/drug-metadata', require('./routes/drugMetadataRoutes'));
 app.use('/api/pharmacies', require('./routes/pharmacyRoutes'));
 app.use('/api/drug-transfers', require('./routes/drugTransferRoutes'));
 app.use('/api/drug-disposals', require('./routes/drugDisposalRoutes'));
+app.use('/api/referrals', require('./routes/referralRoutes'));
+app.use('/api/hmos', require('./routes/hmoRoutes'));
+app.use('/api/claims', require('./routes/claimRoutes'));
+app.use('/api/hmo-transactions', require('./routes/hmoTransactionRoutes'));
 
 
 

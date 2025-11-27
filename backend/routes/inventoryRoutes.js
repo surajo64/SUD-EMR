@@ -5,11 +5,13 @@ const {
     addInventoryItem,
     updateInventoryItem,
     deleteInventoryItem,
-    getInventoryAlerts
+    getInventoryAlerts,
+    getProfitLossReport
 } = require('../controllers/inventoryController');
 const { protect } = require('../middleware/authMiddleware');
 
 router.get("/alerts", protect, getInventoryAlerts);
+router.get("/reports/profit-loss", protect, getProfitLossReport);
 
 router.route("/")
     .get(protect, getInventory)

@@ -4,7 +4,7 @@ const Patient = require('../models/patientModel');
 // @route   POST /api/patients
 // @access  Private
 const registerPatient = async (req, res) => {
-    const { name, age, gender, contact, address, medicalHistory, insuranceProvider, policyNumber, emergencyContactName, emergencyContactPhone } = req.body;
+    const { name, age, gender, contact, address, medicalHistory, provider, hmo, insuranceNumber, emergencyContactName, emergencyContactPhone } = req.body;
 
     // Generate MRN: PAT-Timestamp-Random
     const mrn = `PAT-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -17,8 +17,9 @@ const registerPatient = async (req, res) => {
         contact,
         address,
         medicalHistory,
-        insuranceProvider,
-        policyNumber,
+        provider,
+        hmo,
+        insuranceNumber,
         emergencyContactName,
         emergencyContactPhone
     });
@@ -59,9 +60,10 @@ const updatePatient = async (req, res) => {
         patient.immunizations = req.body.immunizations || patient.immunizations;
         patient.pastSurgeries = req.body.pastSurgeries || patient.pastSurgeries;
 
-        // Update insurance info
-        patient.insuranceProvider = req.body.insuranceProvider || patient.insuranceProvider;
-        patient.policyNumber = req.body.policyNumber || patient.policyNumber;
+        // Update insurance/provider info
+        patient.provider = req.body.provider || patient.provider;
+        patient.hmo = req.body.hmo || patient.hmo;
+        patient.insuranceNumber = req.body.insuranceNumber || patient.insuranceNumber;
 
         const updatedPatient = await patient.save();
         res.json(updatedPatient);

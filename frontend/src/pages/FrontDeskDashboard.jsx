@@ -39,8 +39,9 @@ const FrontDeskDashboard = () => {
         gender: 'male',
         contact: '',
         address: '',
-        insuranceProvider: '',
-        policyNumber: '',
+        provider: 'Standard',
+        hmo: '',
+        insuranceNumber: '',
         emergencyContactName: '',
         emergencyContactPhone: ''
     });
@@ -193,7 +194,7 @@ const FrontDeskDashboard = () => {
             toast.success('Patient Registered Successfully!');
             setNewPatient({
                 name: '', age: '', gender: 'male', contact: '', address: '',
-                insuranceProvider: '', policyNumber: '', emergencyContactName: '', emergencyContactPhone: ''
+                provider: 'Standard', hmo: '', insuranceNumber: '', emergencyContactName: '', emergencyContactPhone: ''
             });
             setShowRegisterForm(false);
             fetchPatients();
@@ -390,19 +391,32 @@ const FrontDeskDashboard = () => {
                             value={newPatient.address}
                             onChange={(e) => setNewPatient({ ...newPatient, address: e.target.value })}
                         />
+                        <select
+                            className="border p-2 rounded"
+                            value={newPatient.provider}
+                            onChange={(e) => setNewPatient({ ...newPatient, provider: e.target.value })}
+                        >
+                            <option value="Standard">Standard</option>
+                            <option value="Retainership">Retainership</option>
+                            <option value="NHIA">NHIA</option>
+                            <option value="KSCHMA">KSCHMA</option>
+                        </select>
+                        {newPatient.provider === 'NHIA' && (
+                            <input
+                                type="text"
+                                placeholder="HMO *"
+                                className="border p-2 rounded"
+                                value={newPatient.hmo}
+                                onChange={(e) => setNewPatient({ ...newPatient, hmo: e.target.value })}
+                                required
+                            />
+                        )}
                         <input
                             type="text"
-                            placeholder="Insurance Provider (Optional)"
+                            placeholder="Insurance Number (Optional)"
                             className="border p-2 rounded"
-                            value={newPatient.insuranceProvider}
-                            onChange={(e) => setNewPatient({ ...newPatient, insuranceProvider: e.target.value })}
-                        />
-                        <input
-                            type="text"
-                            placeholder="Policy Number (Optional)"
-                            className="border p-2 rounded"
-                            value={newPatient.policyNumber}
-                            onChange={(e) => setNewPatient({ ...newPatient, policyNumber: e.target.value })}
+                            value={newPatient.insuranceNumber}
+                            onChange={(e) => setNewPatient({ ...newPatient, insuranceNumber: e.target.value })}
                         />
                         <input
                             type="text"

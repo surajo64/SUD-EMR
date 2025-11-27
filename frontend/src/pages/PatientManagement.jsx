@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import LoadingOverlay from '../components/loadingOverlay';
+import RegisterPatientModal from '../components/RegisterPatientModal';
 
 const PatientManagement = () => {
     const [loading, setLoading] = useState(false);
@@ -20,13 +21,16 @@ const PatientManagement = () => {
     const [encounters, setEncounters] = useState([]);
     const [showEncountersModal, setShowEncountersModal] = useState(false);
     const [showEditPatientModal, setShowEditPatientModal] = useState(false);
+    const [showRegisterPatientModal, setShowRegisterPatientModal] = useState(false);
     const [editPatient, setEditPatient] = useState(null);
+    const [hmos, setHMOs] = useState([]);
     const { user } = useContext(AuthContext);
     const navigate = useNavigate();
 
     useEffect(() => {
         if (user && (user.role === 'admin' || user.role === 'receptionist')) {
             fetchPatients();
+            fetchHMOs();
         }
     }, [user]);
 
@@ -46,6 +50,16 @@ const PatientManagement = () => {
             toast.error('Error fetching patients');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchHMOs = async () => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get('http://localhost:5000/api/hmos?active=true', config);
+            setHMOs(data);
+        } catch (error) {
+            console.error('Error fetching HMOs:', error);
         }
     };
 
@@ -234,6 +248,12 @@ const PatientManagement = () => {
                         </div>
                     </div>
                     <div className="mt-4 flex gap-2">
+                        <button
+                            onClick={() => setShowRegisterPatientModal(true)}
+                            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                        >
+                            <FaUserInjured /> Register Patient
+                        </button>
                         <button
                             onClick={exportToExcel}
                             className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
@@ -573,6 +593,95 @@ const PatientManagement = () => {
                                     onChange={(e) => setEditPatient({ ...editPatient, address: e.target.value })}
                                 />
                             </div>
+
+                            {/* Provider & Insurance Section */}
+                            <div className="border-t pt-4">
+                                <h4 className="font-semibold text-gray-700 mb-3">Provider Information</h4>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-1">Provider</label>
+                                        <select
+                                            className="w-full border p-2 rounded"
+                                            value={editPatient.provider || 'Standard'}
+                                            onChange={(e) => setEditPatient({ ...editPatient, provider: e.target.value })}
+                                        >
+                                            <option value="Standard">Standard</option>
+                                            <option value="Retainership">Retainership</option>
+                                            <option value="NHIA">NHIA</option>
+                                            <option value="KSCHMA">KSCHMA</option>
+                                        </select>
+                                    </div>
+
+                                    {/* HMO - Shown for Retainership, NHIA and KSCHMA */}
+                                    {(editPatient.provider === 'Retainership' || editPatient.provider === 'NHIA' || editPatient.provider === 'KSCHMA') && (
+                                        <div>
+                                            <label className="block text-sm font-semibold mb-1">
+                                                HMO <span className="text-red-500">*</span>
+                                            </label>
+                                            <select
+                                                className="w-full border p-2 rounded"
+                                                value={editPatient.hmo || ''}
+                                                onChange={(e) => setEditPatient({ ...editPatient, hmo: e.target.value })}
+                                                required={editPatient.provider === 'Retainership' || editPatient.provider === 'NHIA' || editPatient.provider === 'KSCHMA'}
+                                            >
+                                                <option value="">Select HMO *</option>
+                                                {hmos
+                                                    .filter(hmo => {
+                                                        // For NHIA and Retainership, show all HMOs except KSCHMA
+                                                        if (editPatient.provider === 'NHIA' || editPatient.provider === 'Retainership') {
+                                                            return hmo.name.toUpperCase() !== 'KSCHMA';
+                                                        }
+                                                        // For KSCHMA, show only KSCHMA HMO
+                                                        if (editPatient.provider === 'KSCHMA') {
+                                                            return hmo.name.toUpperCase() === 'KSCHMA';
+                                                        }
+                                                        return true;
+                                                    })
+                                                    .map(hmo => (
+                                                        <option key={hmo._id} value={hmo.name}>
+                                                            {hmo.name}
+                                                        </option>
+                                                    ))}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-1">Insurance Number</label>
+                                        <input
+                                            type="text"
+                                            className="w-full border p-2 rounded"
+                                            value={editPatient.insuranceNumber || ''}
+                                            onChange={(e) => setEditPatient({ ...editPatient, insuranceNumber: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Emergency Contact Section */}
+                            <div className="border-t pt-4">
+                                <h4 className="font-semibold text-gray-700 mb-3">Emergency Contact</h4>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-1">Contact Name</label>
+                                        <input
+                                            type="text"
+                                            className="w-full border p-2 rounded"
+                                            value={editPatient.emergencyContactName || ''}
+                                            onChange={(e) => setEditPatient({ ...editPatient, emergencyContactName: e.target.value })}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-1">Contact Phone</label>
+                                        <input
+                                            type="text"
+                                            className="w-full border p-2 rounded"
+                                            value={editPatient.emergencyContactPhone || ''}
+                                            onChange={(e) => setEditPatient({ ...editPatient, emergencyContactPhone: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
                             <div className="flex gap-2">
                                 <button
                                     type="submit"
@@ -595,6 +704,17 @@ const PatientManagement = () => {
                     </div>
                 </div>
             )}
+
+            {/* Register Patient Modal */}
+            <RegisterPatientModal
+                isOpen={showRegisterPatientModal}
+                onClose={() => setShowRegisterPatientModal(false)}
+                onSuccess={() => {
+                    fetchPatients();
+                    setShowRegisterPatientModal(false);
+                }}
+                userToken={user.token}
+            />
         </Layout>
     );
 };

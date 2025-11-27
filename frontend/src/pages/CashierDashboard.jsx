@@ -8,6 +8,9 @@ import LoadingOverlay from '../components/loadingOverlay';
 
 const CashierDashboard = () => {
     const [loading, setLoading] = useState(false);
+
+
+    // Patient Billing State
     const [receipts, setReceipts] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [patients, setPatients] = useState([]);
@@ -21,11 +24,15 @@ const CashierDashboard = () => {
     const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
     const [encounterPendingCharges, setEncounterPendingCharges] = useState({});
 
+
+
     const { user } = useContext(AuthContext);
 
     useEffect(() => {
         fetchReceipts();
     }, []);
+
+    // --- Patient Billing Functions ---
 
     const fetchReceipts = async () => {
         try {
@@ -66,6 +73,15 @@ const CashierDashboard = () => {
         setEncounterCharges([]);
         setSelectedCharges([]);
 
+        // Set default payment method based on provider
+        if (patient.provider === 'Retainership') {
+            setPaymentMethod('retainership');
+        } else if (['NHIA', 'KSCHMA', 'State Scheme'].includes(patient.provider)) {
+            setPaymentMethod('insurance');
+        } else {
+            setPaymentMethod('cash');
+        }
+
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
@@ -85,7 +101,7 @@ const CashierDashboard = () => {
                     );
                     const pending = chargesResponse.data.filter(c => c.status === 'pending');
                     if (pending.length > 0) {
-                        const totalPending = pending.reduce((sum, c) => sum + c.totalAmount, 0);
+                        const totalPending = pending.reduce((sum, c) => sum + (c.patientPortion !== undefined ? c.patientPortion : c.totalAmount), 0);
                         pendingChargesMap[encounter._id] = {
                             count: pending.length,
                             total: totalPending
@@ -227,9 +243,14 @@ const CashierDashboard = () => {
         printWindow.print();
     };
 
+
+
+
+    // --- Render Helpers ---
+
     const totalSelectedAmount = encounterCharges
         .filter(charge => selectedCharges.includes(charge._id))
-        .reduce((sum, charge) => sum + charge.totalAmount, 0);
+        .reduce((sum, charge) => sum + (charge.patientPortion !== undefined ? charge.patientPortion : charge.totalAmount), 0);
 
     const totalCollectedToday = receipts
         .filter(r => new Date(r.createdAt).toDateString() === new Date().toDateString())
@@ -240,9 +261,13 @@ const CashierDashboard = () => {
     return (
         <Layout>
             {loading && <LoadingOverlay />}
-            <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-                <FaDollarSign className="text-green-600" /> Cashier Dashboard
-            </h2>
+
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                    <FaDollarSign className="text-green-600" /> Cashier Dashboard
+                </h2>
+            </div>
+
 
             {/* Summary */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -301,18 +326,36 @@ const CashierDashboard = () => {
                 {selectedPatient && (
                     <div className="mt-4">
                         <div className="bg-blue-50 p-4 rounded mb-4">
-                            <p className="font-bold text-lg">{selectedPatient.name}</p>
-                            <p className="text-sm text-gray-600">MRN: {selectedPatient.mrn}</p>
-                            <button
-                                onClick={() => {
-                                    setSelectedPatient(null);
-                                    setEncounters([]);
-                                    setSelectedEncounter(null);
-                                }}
-                                className="text-blue-600 text-sm mt-2 hover:underline"
-                            >
-                                ← Change Patient
-                            </button>
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="font-bold text-lg">{selectedPatient.name}</p>
+                                    <p className="text-sm text-gray-600">MRN: {selectedPatient.mrn}</p>
+                                    <button
+                                        onClick={() => {
+                                            setSelectedPatient(null);
+                                            setEncounters([]);
+                                            setSelectedEncounter(null);
+                                        }}
+                                        className="text-blue-600 text-sm mt-2 hover:underline"
+                                    >
+                                        ← Change Patient
+                                    </button>
+                                </div>
+                                <div className="w-1/3">
+                                    <label className="block text-gray-700 text-sm font-semibold mb-1">Payment Method</label>
+                                    <select
+                                        value={paymentMethod}
+                                        onChange={(e) => setPaymentMethod(e.target.value)}
+                                        className="w-full border p-2 rounded text-sm bg-white"
+                                    >
+                                        <option value="cash">Cash</option>
+                                        <option value="card">Card/POS</option>
+                                        <option value="insurance">Insurance</option>
+                                        <option value="deposit">Patient Deposit</option>
+                                        <option value="retainership">Retainership</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
 
                         {encounters.length > 0 && !selectedEncounter && (
@@ -378,24 +421,7 @@ const CashierDashboard = () => {
 
                         {pendingCharges.length > 0 && (
                             <div className="bg-gray-50 p-4 rounded">
-                                <div className="mb-4">
-                                    <label className="block text-gray-700 mb-2 font-semibold">Payment Method</label>
-                                    <select
-                                        value={paymentMethod}
-                                        onChange={(e) => setPaymentMethod(e.target.value)}
-                                        className="w-full border p-2 rounded"
-                                    >
-                                        <option value="cash">Cash</option>
-                                        <option value="card">Card/POS</option>
-                                        <option value="insurance">Insurance</option>
-                                        <option value="deposit">Patient Deposit</option>
-                                    </select>
-                                </div>
 
-                                <div className="flex justify-between items-center mb-4">
-                                    <p className="text-lg font-semibold">Total Selected:</p>
-                                    <p className="text-2xl font-bold text-green-600">₦{totalSelectedAmount.toFixed(2)}</p>
-                                </div>
 
                                 <p className="font-semibold mb-2">Pending Charges:</p>
                                 <div className="space-y-2 mb-4">
@@ -416,7 +442,7 @@ const CashierDashboard = () => {
                                                     <p className="text-sm text-gray-600">Qty: {charge.quantity}</p>
                                                 </div>
                                             </div>
-                                            <p className="font-bold text-green-600">₦{charge.totalAmount.toFixed(2)}</p>
+                                            <p className="font-bold text-green-600">₦{(charge.patientPortion !== undefined ? charge.patientPortion : charge.totalAmount).toFixed(2)}</p>
                                         </div>
                                     ))}
                                 </div>
@@ -513,7 +539,8 @@ const CashierDashboard = () => {
                     </table>
                 </div>
             </div>
-        </Layout>
+
+        </Layout >
     );
 };
 

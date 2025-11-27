@@ -98,7 +98,10 @@ const Sidebar = () => {
                             <FaDollarSign /> Cashier
                         </Link>
                         <Link to="/billing" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/billing')}`}>
-                            <FaFileInvoiceDollar /> Billing (New)
+                            <FaFileInvoiceDollar /> Billing
+                        </Link>
+                        <Link to="/admin/claims-management" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/admin/claims-management')}`}>
+                            <FaFileInvoiceDollar /> HMO Claims
                         </Link>
                     </>
                 )}
@@ -194,6 +197,9 @@ const Sidebar = () => {
                             <Link to="/appointments" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/appointments')}`}>
                                 <FaCalendarAlt size={14} /> Appointments
                             </Link>
+                            <Link to="/admin/hmo-management" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/hmo-management')}`}>
+                                <FaHospital size={14} /> HMO Management
+                            </Link>
                         </SidebarDropdown>
 
                         <SidebarDropdown title="Service Management" icon={<FaHeart />} name="services">
@@ -232,6 +238,9 @@ const Sidebar = () => {
                         <SidebarDropdown title="Financials" icon={<FaMoneyBillWave />} name="financials">
                             <Link to="/billing" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/billing')}`}>
                                 <FaFileInvoiceDollar size={14} /> Billing
+                            </Link>
+                            <Link to="/admin/claims-management" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/admin/claims-management')}`}>
+                                <FaFileInvoiceDollar /> HMO Claims
                             </Link>
                             <Link to="/admin/reports" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/reports')}`}>
                                 <FaDollarSign size={14} /> Revenue Reports

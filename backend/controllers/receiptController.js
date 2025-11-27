@@ -147,6 +147,78 @@ const createReceiptForCharges = async (req, res) => {
             await patient.save();
         }
 
+        // Handle Retainership Payment
+        if (paymentMethod === 'retainership') {
+            const patient = await Patient.findById(patientId);
+            if (!patient) {
+                return res.status(404).json({ message: 'Patient not found' });
+            }
+
+            if (patient.provider !== 'Retainership') {
+                return res.status(400).json({ message: 'Patient is not a Retainership patient' });
+            }
+
+            const HMO = require('../models/hmoModel');
+            const HMOTransaction = require('../models/hmoTransactionModel');
+
+            const hmo = await HMO.findOne({ name: patient.hmo });
+            if (!hmo) {
+                return res.status(404).json({ message: `HMO '${patient.hmo}' not found` });
+            }
+
+            // Calculate HMO Balance
+            // 1. Total Deposits
+            const deposits = await HMOTransaction.find({ hmo: hmo._id });
+            const totalDeposits = deposits.reduce((sum, d) => sum + d.amount, 0);
+
+            // 2. Total Utilized (Charges for all patients of this HMO)
+            const hmoPatients = await Patient.find({ hmo: hmo.name }).select('_id');
+            const hmoPatientIds = hmoPatients.map(p => p._id);
+
+            const existingCharges = await EncounterCharge.find({
+                patient: { $in: hmoPatientIds },
+                hmoPortion: { $gt: 0 }
+            });
+            const totalUtilized = existingCharges.reduce((sum, c) => sum + c.hmoPortion, 0);
+
+            const balance = totalDeposits - totalUtilized;
+
+            if (balance < totalAmount) {
+                return res.status(400).json({
+                    message: `Insufficient HMO Retainership balance. Balance: ₦${balance.toLocaleString()}, Required: ₦${totalAmount.toLocaleString()}`
+                });
+            }
+
+            // Update charges to reflect HMO payment
+            // We set hmoPortion to the total amount and patientPortion to 0
+            // This ensures it counts towards 'Total Utilized' in the future
+            await EncounterCharge.updateMany(
+                { _id: { $in: chargeIds } },
+                {
+                    hmoPortion: totalAmount, // This might need to be per-charge, but updateMany sets same value. 
+                    // Ideally we iterate if charges differ, but usually we pay full.
+                    // Wait, updateMany with a static value sets that value for ALL docs.
+                    // We need to set hmoPortion = totalAmount (of that specific charge).
+                    // Since we can't reference the document's own field in a simple updateMany, 
+                    // we should iterate or use a bulkWrite.
+                }
+            );
+
+            // Correct approach for updating individual charges:
+            const bulkOps = charges.map(charge => ({
+                updateOne: {
+                    filter: { _id: charge._id },
+                    update: {
+                        $set: {
+                            hmoPortion: charge.totalAmount,
+                            patientPortion: 0
+                        }
+                    }
+                }
+            }));
+            await EncounterCharge.bulkWrite(bulkOps);
+        }
+
         // Generate receipt number
         const receiptNumber = `RCP-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
 

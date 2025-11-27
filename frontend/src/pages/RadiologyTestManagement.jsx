@@ -15,7 +15,10 @@ const RadiologyTestManagement = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [formData, setFormData] = useState({
         name: '',
-        basePrice: '',
+        standardFee: '',
+        retainershipFee: '',
+        nhiaFee: '',
+        kschmaFee: '',
         description: '',
         code: '',
         resultTemplate: ''
@@ -50,8 +53,8 @@ const RadiologyTestManagement = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        if (!formData.name || !formData.basePrice) {
-            toast.error('Please fill in test name and price');
+        if (!formData.name || !formData.standardFee) {
+            toast.error('Please fill in test name and standard fee');
             return;
         }
 
@@ -61,7 +64,11 @@ const RadiologyTestManagement = () => {
             const payload = {
                 name: formData.name,
                 type: 'radiology',
-                basePrice: parseFloat(formData.basePrice),
+                basePrice: parseFloat(formData.standardFee), // For backward compatibility
+                standardFee: parseFloat(formData.standardFee),
+                retainershipFee: parseFloat(formData.retainershipFee) || 0,
+                nhiaFee: parseFloat(formData.nhiaFee) || 0,
+                kschmaFee: parseFloat(formData.kschmaFee) || 0,
                 department: 'Radiology',
                 description: formData.description,
                 code: formData.code,
@@ -94,7 +101,10 @@ const RadiologyTestManagement = () => {
         setEditingTest(test);
         setFormData({
             name: test.name,
-            basePrice: test.basePrice.toString(),
+            standardFee: (test.standardFee || test.basePrice || 0).toString(),
+            retainershipFee: (test.retainershipFee || 0).toString(),
+            nhiaFee: (test.nhiaFee || 0).toString(),
+            kschmaFee: (test.kschmaFee || 0).toString(),
             description: test.description || '',
             code: test.code || '',
             resultTemplate: test.resultTemplate || ''
@@ -139,7 +149,10 @@ const RadiologyTestManagement = () => {
     const resetForm = () => {
         setFormData({
             name: '',
-            basePrice: '',
+            standardFee: '',
+            retainershipFee: '',
+            nhiaFee: '',
+            kschmaFee: '',
             description: '',
             code: '',
             resultTemplate: ''
@@ -385,21 +398,63 @@ _____________________________________
                                     required
                                 />
                             </div>
-                            <div>
-                                <label className="block text-gray-700 mb-2 font-semibold">
-                                    Price ($) <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                    type="number"
-                                    name="basePrice"
-                                    value={formData.basePrice}
-                                    onChange={handleInputChange}
-                                    className="w-full border p-2 rounded"
-                                    placeholder="0.00"
-                                    step="0.01"
-                                    min="0"
-                                    required
-                                />
+                        </div>
+                        <div className="mb-4">
+                            <label className="block text-gray-700 mb-2 font-semibold">Pricing Configuration</label>
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 bg-gray-50 p-4 rounded border">
+                                <div>
+                                    <label className="block text-xs font-semibold mb-1 text-blue-600">Standard Fee <span className="text-red-500">*</span></label>
+                                    <input
+                                        type="number"
+                                        name="standardFee"
+                                        value={formData.standardFee}
+                                        onChange={handleInputChange}
+                                        className="w-full border p-2 rounded text-sm border-blue-200 focus:border-blue-500"
+                                        placeholder="0.00"
+                                        step="0.01"
+                                        min="0"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold mb-1 text-purple-600">Retainership</label>
+                                    <input
+                                        type="number"
+                                        name="retainershipFee"
+                                        value={formData.retainershipFee}
+                                        onChange={handleInputChange}
+                                        className="w-full border p-2 rounded text-sm border-purple-200 focus:border-purple-500"
+                                        placeholder="0.00"
+                                        step="0.01"
+                                        min="0"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold mb-1 text-green-600">NHIA Fee</label>
+                                    <input
+                                        type="number"
+                                        name="nhiaFee"
+                                        value={formData.nhiaFee}
+                                        onChange={handleInputChange}
+                                        className="w-full border p-2 rounded text-sm border-green-200 focus:border-green-500"
+                                        placeholder="0.00"
+                                        step="0.01"
+                                        min="0"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold mb-1 text-orange-600">KSCHMA Fee</label>
+                                    <input
+                                        type="number"
+                                        name="kschmaFee"
+                                        value={formData.kschmaFee}
+                                        onChange={handleInputChange}
+                                        className="w-full border p-2 rounded text-sm border-orange-200 focus:border-orange-500"
+                                        placeholder="0.00"
+                                        step="0.01"
+                                        min="0"
+                                    />
+                                </div>
                             </div>
                         </div>
 
@@ -534,8 +589,41 @@ _____________________________________"
                                         <td className="p-3 text-sm text-gray-600">
                                             {test.code || '-'}
                                         </td>
-                                        <td className="p-3 font-semibold text-green-700">
-                                            ${test.basePrice.toFixed(2)}
+                                        <td className="p-3">
+                                            <div className="text-sm">
+                                                <div className="flex justify-between gap-2 border-b border-gray-100 pb-1 mb-1">
+                                                    <span className="text-gray-500">Standard:</span>
+                                                    <span className="font-semibold text-gray-800">${(test.standardFee || test.basePrice || 0).toFixed(2)}</span>
+                                                </div>
+                                                {(test.standardFee > 0 || test.retainershipFee > 0 || test.nhiaFee > 0 || test.kschmaFee > 0) && (
+                                                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                                                        {test.standardFee > 0 && (
+                                                            <div className="flex justify-between gap-1">
+                                                                <span className="text-blue-600">Std:</span>
+                                                                <span>${test.standardFee.toFixed(2)}</span>
+                                                            </div>
+                                                        )}
+                                                        {test.retainershipFee > 0 && (
+                                                            <div className="flex justify-between gap-1">
+                                                                <span className="text-purple-600">Ret:</span>
+                                                                <span>${test.retainershipFee.toFixed(2)}</span>
+                                                            </div>
+                                                        )}
+                                                        {test.nhiaFee > 0 && (
+                                                            <div className="flex justify-between gap-1">
+                                                                <span className="text-green-600">NHIA:</span>
+                                                                <span>${test.nhiaFee.toFixed(2)}</span>
+                                                            </div>
+                                                        )}
+                                                        {test.kschmaFee > 0 && (
+                                                            <div className="flex justify-between gap-1">
+                                                                <span className="text-orange-600">KSC:</span>
+                                                                <span>${test.kschmaFee.toFixed(2)}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="p-3">
                                             {test.resultTemplate ? (

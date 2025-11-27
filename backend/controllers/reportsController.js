@@ -300,9 +300,22 @@ const getOverallRevenue = async (req, res) => {
             .filter(c => c.status === 'paid')
             .reduce((sum, c) => sum + c.totalAmount, 0);
 
-        const pendingRevenue = charges
-            .filter(c => c.status === 'pending')
-            .reduce((sum, c) => sum + c.totalAmount, 0);
+        // Calculate pending revenue breakdown
+        let pendingInsuranceRevenue = 0;
+        let pendingPatientRevenue = 0;
+
+        charges.filter(c => c.status === 'pending').forEach(c => {
+            // If portions are defined, use them
+            if (c.hmoPortion !== undefined || c.patientPortion !== undefined) {
+                pendingInsuranceRevenue += (c.hmoPortion || 0);
+                pendingPatientRevenue += (c.patientPortion || 0);
+            } else {
+                // Fallback for old records - assume all is patient pending if not specified
+                pendingPatientRevenue += c.totalAmount;
+            }
+        });
+
+        const pendingRevenue = pendingInsuranceRevenue + pendingPatientRevenue;
 
         // Group by department
         const byDepartment = {
@@ -336,6 +349,8 @@ const getOverallRevenue = async (req, res) => {
                 paidCharges,
                 totalRevenue,
                 pendingRevenue,
+                pendingInsuranceRevenue,
+                pendingPatientRevenue,
                 dateRange: { start, end }
             },
             byDepartment,
@@ -400,10 +415,25 @@ const getDashboardStats = async (req, res) => {
         // Active encounters
         const activeEncounters = await Visit.countDocuments({ encounterStatus: 'active' });
 
-        // Pending payments
-        const pendingPayments = await EncounterCharge.aggregate([
+        // Pending payments breakdown
+        const pendingStats = await EncounterCharge.aggregate([
             { $match: { status: 'pending' } },
-            { $group: { _id: null, total: { $sum: '$totalAmount' } } }
+            {
+                $group: {
+                    _id: null,
+                    total: { $sum: '$totalAmount' },
+                    pendingInsurance: { $sum: { $ifNull: ['$hmoPortion', 0] } },
+                    pendingPatient: {
+                        $sum: {
+                            $cond: [
+                                { $ifNull: ['$patientPortion', false] }, // Check if patientPortion exists
+                                '$patientPortion',
+                                '$totalAmount' // Fallback if patientPortion doesn't exist (assume all patient)
+                            ]
+                        }
+                    }
+                }
+            }
         ]);
 
         // Revenue by Department (All Time)
@@ -444,7 +474,10 @@ const getDashboardStats = async (req, res) => {
                 charges: totalCharges
             },
             activeEncounters,
-            pendingPayments: pendingPayments[0]?.total || 0,
+            activeEncounters,
+            pendingPayments: pendingStats[0]?.total || 0,
+            pendingInsurance: pendingStats[0]?.pendingInsurance || 0,
+            pendingPatient: pendingStats[0]?.pendingPatient || 0,
             revenueByDepartment: revenueByDepartmentArray
         });
     } catch (error) {

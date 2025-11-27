@@ -119,10 +119,17 @@ const dispenseWithInventory = async (req, res) => {
         for (const med of medicines) {
             const { name, quantityDispensed } = med;
 
-            // Find inventory items for this drug, sorted by expiry date (FIFO)
+            // Find inventory items for this drug in the pharmacist's assigned pharmacy
+            // If admin or main pharmacy, maybe allow selection? For now, assume strict assignment.
+            const pharmacyFilter = {};
+            if (req.user.role === 'pharmacist' && req.user.assignedPharmacy) {
+                pharmacyFilter.pharmacy = req.user.assignedPharmacy._id || req.user.assignedPharmacy;
+            }
+
             const inventoryItems = await Inventory.find({
                 name: { $regex: new RegExp(name, 'i') },
-                quantity: { $gt: 0 }
+                quantity: { $gt: 0 },
+                ...pharmacyFilter
             }).sort({ expiryDate: 1 });
 
             if (inventoryItems.length === 0) {

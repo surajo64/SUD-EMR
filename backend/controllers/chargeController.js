@@ -5,7 +5,7 @@ const Charge = require('../models/chargeModel');
 // @access  Private (Admin only)
 const createCharge = async (req, res) => {
     try {
-        const { name, type, basePrice, department, description, code, resultTemplate } = req.body;
+        const { name, type, basePrice, department, description, code, resultTemplate, standardFee, retainershipFee, nhiaFee, kschmaFee } = req.body;
 
         const charge = await Charge.create({
             name,
@@ -14,7 +14,11 @@ const createCharge = async (req, res) => {
             department,
             description,
             code,
-            resultTemplate
+            resultTemplate,
+            standardFee,
+            retainershipFee,
+            nhiaFee,
+            kschmaFee
         });
 
         res.status(201).json(charge);
@@ -54,6 +58,12 @@ const updateCharge = async (req, res) => {
             charge.description = req.body.description || charge.description;
             charge.active = req.body.active !== undefined ? req.body.active : charge.active;
             charge.resultTemplate = req.body.resultTemplate !== undefined ? req.body.resultTemplate : charge.resultTemplate;
+
+            // Multi-tier pricing updates
+            charge.standardFee = req.body.standardFee !== undefined ? req.body.standardFee : charge.standardFee;
+            charge.retainershipFee = req.body.retainershipFee !== undefined ? req.body.retainershipFee : charge.retainershipFee;
+            charge.nhiaFee = req.body.nhiaFee !== undefined ? req.body.nhiaFee : charge.nhiaFee;
+            charge.kschmaFee = req.body.kschmaFee !== undefined ? req.body.kschmaFee : charge.kschmaFee;
 
             const updatedCharge = await charge.save();
             res.json(updatedCharge);

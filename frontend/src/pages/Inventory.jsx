@@ -4,7 +4,7 @@ import AuthContext from "../context/AuthContext";
 import Layout from "../components/Layout";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
-import { FaPlus, FaEdit, FaTrash, FaTimes } from 'react-icons/fa';
+import { FaPlus, FaEdit, FaTrash, FaTimes, FaChartLine, FaPrint } from 'react-icons/fa';
 
 const Inventory = () => {
     const { user } = useContext(AuthContext);
@@ -33,7 +33,11 @@ const Inventory = () => {
     const [currentItem, setCurrentItem] = useState({
         name: "",
         quantity: "",
-        price: "",
+        standardFee: "",
+        retainershipFee: "",
+        nhiaFee: "",
+        kschmaFee: "",
+        purchasingPrice: "",
         supplier: "",
         expiryDate: "",
         batchNumber: "",
@@ -47,6 +51,15 @@ const Inventory = () => {
         pharmacy: ""
     });
 
+    // Report State
+    const [showReportModal, setShowReportModal] = useState(false);
+    const [reportDateRange, setReportDateRange] = useState({
+        start: new Date().toISOString().split('T')[0],
+        end: new Date().toISOString().split('T')[0]
+    });
+    const [reportData, setReportData] = useState(null);
+    const [reportLoading, setReportLoading] = useState(false);
+
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 5;
@@ -58,11 +71,13 @@ const Inventory = () => {
     }, [user]);
 
     useEffect(() => {
-        if (selectedPharmacy) {
+        // Fetch inventory when pharmacy selection changes (including "All Pharmacies")
+        // Only skip if user hasn't loaded yet
+        if (user) {
             fetchInventory();
             fetchAlerts();
         }
-    }, [selectedPharmacy]);
+    }, [selectedPharmacy, user]);
 
     const fetchPharmacies = async () => {
         try {
@@ -152,7 +167,37 @@ const Inventory = () => {
     };
 
     const exportExcel = () => {
-        const ws = XLSX.utils.json_to_sheet(items);
+        // Format data for export with pharmacy information
+        const exportData = filteredItems.map(item => {
+            const baseData = {
+                'Drug Name': item.name,
+                'Form': item.form,
+                'Dosage': item.dosage,
+                'Route': item.route,
+                'Quantity': item.quantity,
+                'Unit': item.drugUnit,
+                'Price': item.price,
+                'Purchasing Price': item.purchasingPrice,
+                'Expiry Date': new Date(item.expiryDate).toLocaleDateString(),
+                'Supplier': item.supplier,
+                'Batch Number': item.batchNumber,
+                'Reorder Level': item.reorderLevel
+            };
+
+            // Add pharmacy information
+            if (!selectedPharmacy && item.pharmacies && item.pharmacies.length > 0) {
+                // For aggregated items, show pharmacy breakdown
+                baseData['Pharmacy'] = 'Multiple (See breakdown)';
+                baseData['Pharmacy Breakdown'] = item.pharmacies.map(p => `${p.name}: ${p.quantity}`).join('; ');
+            } else {
+                // For single pharmacy items
+                baseData['Pharmacy'] = item.pharmacy?.name || 'Unknown';
+            }
+
+            return baseData;
+        });
+
+        const ws = XLSX.utils.json_to_sheet(exportData);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Inventory");
         const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
@@ -177,7 +222,10 @@ const Inventory = () => {
         setCurrentItem({
             name: "",
             quantity: "",
-            price: "",
+            standardFee: "",
+            retainershipFee: "",
+            nhiaFee: "",
+            kschmaFee: "",
             purchasingPrice: "",
             supplier: "",
             expiryDate: "",
@@ -198,6 +246,10 @@ const Inventory = () => {
         setIsEditMode(true);
         setCurrentItem({
             ...item,
+            standardFee: item.standardFee || item.price || "",
+            retainershipFee: item.retainershipFee || "",
+            nhiaFee: item.nhiaFee || "",
+            kschmaFee: item.kschmaFee || "",
             expiryDate: item.expiryDate ? item.expiryDate.substring(0, 10) : "",
             pharmacy: item.pharmacy?._id || item.pharmacy || selectedPharmacy
         });
@@ -234,10 +286,67 @@ const Inventory = () => {
         }
     };
 
-    // Filtered & searched items
-    const filteredItems = items
+    const fetchReport = async () => {
+        if (!reportDateRange.start || !reportDateRange.end) {
+            alert('Please select both start and end dates');
+            return;
+        }
+        try {
+            setReportLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            let url = `http://localhost:5000/api/inventory/reports/profit-loss?startDate=${reportDateRange.start}&endDate=${reportDateRange.end}`;
+
+            if (selectedPharmacy) {
+                url += `&pharmacy=${selectedPharmacy}`;
+            }
+
+            const { data } = await axios.get(url, config);
+            setReportData(data);
+        } catch (error) {
+            console.error(error);
+            alert('Error fetching report');
+        } finally {
+            setReportLoading(false);
+        }
+    };
+
+    // Filtered & searched items with aggregation when viewing all pharmacies
+    let filteredItems = items
         .filter((item) => item.name.toLowerCase().includes(search.toLowerCase()))
         .filter((item) => expiryFilter === "All" || checkExpiry(item.expiryDate) === expiryFilter);
+
+    // If viewing all pharmacies, aggregate quantities by drug name
+    if (!selectedPharmacy) {
+        const aggregated = {};
+        filteredItems.forEach(item => {
+            const key = item.name.toLowerCase();
+            if (!aggregated[key]) {
+                aggregated[key] = {
+                    _id: `aggregated-${key}`, // Use unique ID for aggregated items
+                    name: item.name,
+                    form: item.form,
+                    dosage: item.dosage,
+                    route: item.route,
+                    drugUnit: item.drugUnit,
+                    price: item.price,
+                    expiryDate: item.expiryDate,
+                    reorderLevel: item.reorderLevel || 0,
+                    quantity: 0,
+                    pharmacies: []
+                };
+            }
+            aggregated[key].quantity += item.quantity;
+            aggregated[key].pharmacies.push({
+                name: item.pharmacy?.name || 'Unknown',
+                quantity: item.quantity
+            });
+            // Keep the earliest expiry date
+            if (new Date(item.expiryDate) < new Date(aggregated[key].expiryDate)) {
+                aggregated[key].expiryDate = item.expiryDate;
+            }
+        });
+        filteredItems = Object.values(aggregated);
+    }
 
     // Pagination logic
     const indexOfLastItem = currentPage * itemsPerPage;
@@ -249,8 +358,8 @@ const Inventory = () => {
     const handlePharmacyChange = (e) => {
         const newPharmacyId = e.target.value;
 
-        // Restrict pharmacists to their assigned pharmacy only
-        if (user.role === 'pharmacist' && user.assignedPharmacy) {
+        // Restrict pharmacists to their assigned pharmacy only (unless they are Main Pharmacy)
+        if (user.role === 'pharmacist' && user.assignedPharmacy && !user.assignedPharmacy.isMainPharmacy) {
             const assignedId = user.assignedPharmacy._id || user.assignedPharmacy;
             if (newPharmacyId !== assignedId) {
                 alert('⚠️ Access Denied: You do not have authorization to view this pharmacy inventory. You can only view your assigned pharmacy.');
@@ -272,7 +381,7 @@ const Inventory = () => {
                             value={selectedPharmacy}
                             onChange={handlePharmacyChange}
                             className="border p-2 rounded text-sm"
-                            disabled={user.role === 'pharmacist'}
+                            disabled={user?.role === 'pharmacist' && !user?.assignedPharmacy?.isMainPharmacy}
                         >
                             <option value="">-- All Pharmacies --</option>
                             {pharmacies.map(p => (
@@ -281,7 +390,7 @@ const Inventory = () => {
                                 </option>
                             ))}
                         </select>
-                        {user.role === 'pharmacist' && (
+                        {user?.role === 'pharmacist' && !user?.assignedPharmacy?.isMainPharmacy && (
                             <span className="ml-2 text-xs text-gray-500">(Locked to your pharmacy)</span>
                         )}
                     </div>
@@ -355,8 +464,14 @@ const Inventory = () => {
                     <option value="Expiring Soon">Expiring Soon</option>
                     <option value="Expired">Expired</option>
                 </select>
-                <button onClick={exportExcel} className="bg-green-600 text-white px-4 py-2 rounded">
+                <button onClick={exportExcel} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
                     Download
+                </button>
+                <button
+                    onClick={() => setShowReportModal(true)}
+                    className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-700"
+                >
+                    <FaChartLine /> Profit & Loss
                 </button>
             </div>
 
@@ -384,11 +499,53 @@ const Inventory = () => {
                                     </div>
                                 </td>
                                 <td className={`p-4 border-b ${item.quantity < item.reorderLevel ? "text-red-600 font-bold" : ""}`}>
-                                    {item.quantity}
+                                    <div className="font-semibold">{item.quantity}</div>
+                                    {!selectedPharmacy && item.pharmacies && item.pharmacies.length > 1 && (
+                                        <div className="text-xs text-gray-500 mt-1">
+                                            {item.pharmacies.map((p, idx) => (
+                                                <div key={idx}>{p.name}: {p.quantity}</div>
+                                            ))}
+                                        </div>
+                                    )}
                                     {item.quantity < item.reorderLevel && <span className="ml-2 text-xs bg-red-600 text-white px-2 py-1 rounded">LOW</span>}
                                 </td>
                                 <td className="p-4 border-b capitalize">{item.drugUnit}</td>
-                                <td className="p-4 border-b">₦{item.price}</td>
+                                <td className="p-4 border-b">
+                                    <div className="text-sm">
+                                        <div className="flex justify-between gap-2 border-b border-gray-100 pb-1 mb-1">
+                                            <span className="text-gray-500">Standard:</span>
+                                            <span className="font-semibold text-gray-800">₦{(item.standardFee || item.price || 0).toLocaleString()}</span>
+                                        </div>
+                                        {(item.standardFee > 0 || item.retainershipFee > 0 || item.nhiaFee > 0 || item.kschmaFee > 0) && (
+                                            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                                                {item.standardFee > 0 && (
+                                                    <div className="flex justify-between gap-1">
+                                                        <span className="text-blue-600">Std:</span>
+                                                        <span>₦{item.standardFee.toLocaleString()}</span>
+                                                    </div>
+                                                )}
+                                                {item.retainershipFee > 0 && (
+                                                    <div className="flex justify-between gap-1">
+                                                        <span className="text-purple-600">Ret:</span>
+                                                        <span>₦{item.retainershipFee.toLocaleString()}</span>
+                                                    </div>
+                                                )}
+                                                {item.nhiaFee > 0 && (
+                                                    <div className="flex justify-between gap-1">
+                                                        <span className="text-green-600">NHIA:</span>
+                                                        <span>₦{item.nhiaFee.toLocaleString()}</span>
+                                                    </div>
+                                                )}
+                                                {item.kschmaFee > 0 && (
+                                                    <div className="flex justify-between gap-1">
+                                                        <span className="text-orange-600">KSC:</span>
+                                                        <span>₦{item.kschmaFee.toLocaleString()}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </td>
                                 <td className="p-4 border-b">{new Date(item.expiryDate).toLocaleDateString()}</td>
                                 <td className="p-4 border-b font-semibold">
                                     {checkExpiry(item.expiryDate) === "Expired" && <span className="text-red-600">Expired</span>}
@@ -397,7 +554,7 @@ const Inventory = () => {
                                 </td>
                                 <td className="p-4 border-b space-x-2">
                                     {/* Only allow edit/delete for admin or main pharmacy pharmacists */}
-                                    {(user.role === 'admin' || (user.role === 'pharmacist' && user.assignedPharmacy?.isMainPharmacy)) ? (
+                                    {(user?.role === 'admin' || (user?.role === 'pharmacist' && user?.assignedPharmacy?.isMainPharmacy)) ? (
                                         <>
                                             <button onClick={() => handleOpenEditModal(item)} className="text-blue-600 hover:text-blue-800">
                                                 <FaEdit />
@@ -487,15 +644,51 @@ const Inventory = () => {
                                 />
                             </div>
 
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Selling Price (₦)</label>
-                                <input
-                                    type="number"
-                                    className="w-full border p-2 rounded"
-                                    value={currentItem.price}
-                                    onChange={(e) => setCurrentItem({ ...currentItem, price: e.target.value })}
-                                    required
-                                />
+                            <div className="md:col-span-3">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Pricing Configuration</label>
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 bg-gray-50 p-4 rounded border">
+                                    <div>
+                                        <label className="block text-xs font-semibold mb-1 text-blue-600">Standard Fee</label>
+                                        <input
+                                            type="number"
+                                            className="w-full border p-2 rounded text-sm border-blue-200 focus:border-blue-500"
+                                            value={currentItem.standardFee}
+                                            onChange={(e) => setCurrentItem({ ...currentItem, standardFee: e.target.value })}
+                                            placeholder="0.00"
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold mb-1 text-purple-600">Retainership</label>
+                                        <input
+                                            type="number"
+                                            className="w-full border p-2 rounded text-sm border-purple-200 focus:border-purple-500"
+                                            value={currentItem.retainershipFee}
+                                            onChange={(e) => setCurrentItem({ ...currentItem, retainershipFee: e.target.value })}
+                                            placeholder="0.00"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold mb-1 text-green-600">NHIA Fee</label>
+                                        <input
+                                            type="number"
+                                            className="w-full border p-2 rounded text-sm border-green-200 focus:border-green-500"
+                                            value={currentItem.nhiaFee}
+                                            onChange={(e) => setCurrentItem({ ...currentItem, nhiaFee: e.target.value })}
+                                            placeholder="0.00"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold mb-1 text-orange-600">KSCHMA Fee</label>
+                                        <input
+                                            type="number"
+                                            className="w-full border p-2 rounded text-sm border-orange-200 focus:border-orange-500"
+                                            value={currentItem.kschmaFee}
+                                            onChange={(e) => setCurrentItem({ ...currentItem, kschmaFee: e.target.value })}
+                                            placeholder="0.00"
+                                        />
+                                    </div>
+                                </div>
                             </div>
 
                             <div>
@@ -642,6 +835,137 @@ const Inventory = () => {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+            {/* Report Modal */}
+            {showReportModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-4xl my-8 max-h-[90vh] overflow-y-auto">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-bold">Profit & Loss Report</h3>
+                            <button onClick={() => setShowReportModal(false)} className="text-gray-500 hover:text-gray-700">
+                                <FaTimes size={24} />
+                            </button>
+                        </div>
+
+                        <div className="flex flex-wrap gap-4 items-end mb-6 bg-gray-50 p-4 rounded">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                                <input
+                                    type="date"
+                                    className="border p-2 rounded"
+                                    value={reportDateRange.start}
+                                    onChange={(e) => setReportDateRange({ ...reportDateRange, start: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                                <input
+                                    type="date"
+                                    className="border p-2 rounded"
+                                    value={reportDateRange.end}
+                                    onChange={(e) => setReportDateRange({ ...reportDateRange, end: e.target.value })}
+                                />
+                            </div>
+
+                            {/* Pharmacy Selector in Report Modal */}
+                            {(user?.role === 'admin' || (user?.role === 'pharmacist' && user?.assignedPharmacy?.isMainPharmacy)) && (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Pharmacy</label>
+                                    <select
+                                        value={selectedPharmacy}
+                                        onChange={handlePharmacyChange}
+                                        className="border p-2 rounded w-40"
+                                    >
+                                        <option value="">All Pharmacies</option>
+                                        {pharmacies.map(p => (
+                                            <option key={p._id} value={p._id}>
+                                                {p.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
+                            <button
+                                onClick={fetchReport}
+                                disabled={reportLoading}
+                                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400"
+                            >
+                                {reportLoading ? 'Generating...' : 'Generate Report'}
+                            </button>
+
+                            {reportData && (
+                                <button
+                                    onClick={() => window.print()}
+                                    className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center gap-2"
+                                >
+                                    <FaPrint /> Print Report
+                                </button>
+                            )}
+                        </div>
+
+                        {reportData && (
+                            <div className="space-y-6">
+                                {/* Summary Cards */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="bg-green-50 p-4 rounded border border-green-200">
+                                        <p className="text-sm text-green-600 font-semibold">Total Revenue</p>
+                                        <p className="text-2xl font-bold text-green-800">₦{reportData.summary.totalRevenue.toLocaleString()}</p>
+                                    </div>
+                                    <div className="bg-red-50 p-4 rounded border border-red-200">
+                                        <p className="text-sm text-red-600 font-semibold">Total Cost (COGS)</p>
+                                        <p className="text-2xl font-bold text-red-800">₦{reportData.summary.totalCost.toLocaleString()}</p>
+                                    </div>
+                                    <div className={`p-4 rounded border ${reportData.summary.netProfit >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'}`}>
+                                        <p className={`text-sm font-semibold ${reportData.summary.netProfit >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>Net Profit</p>
+                                        <p className={`text-2xl font-bold ${reportData.summary.netProfit >= 0 ? 'text-blue-800' : 'text-orange-800'}`}>
+                                            ₦{reportData.summary.netProfit.toLocaleString()}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Breakdown Table */}
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm text-left border">
+                                        <thead className="bg-gray-100">
+                                            <tr>
+                                                <th className="p-2 border">Date</th>
+                                                <th className="p-2 border">Item</th>
+                                                <th className="p-2 border">Qty</th>
+                                                <th className="p-2 border">Cost Price</th>
+                                                <th className="p-2 border">Selling Price</th>
+                                                <th className="p-2 border">Total Cost</th>
+                                                <th className="p-2 border">Revenue</th>
+                                                <th className="p-2 border">Profit</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {reportData.breakdown.map((item) => (
+                                                <tr key={item._id} className="hover:bg-gray-50 border-b">
+                                                    <td className="p-2 border">{new Date(item.date).toLocaleDateString()}</td>
+                                                    <td className="p-2 border font-medium">{item.itemName}</td>
+                                                    <td className="p-2 border">{item.quantity}</td>
+                                                    <td className="p-2 border">₦{item.costPrice.toLocaleString()}</td>
+                                                    <td className="p-2 border">₦{item.sellingPrice.toLocaleString()}</td>
+                                                    <td className="p-2 border text-red-600">₦{item.totalCost.toLocaleString()}</td>
+                                                    <td className="p-2 border text-green-600">₦{item.totalRevenue.toLocaleString()}</td>
+                                                    <td className={`p-2 border font-bold ${item.profit >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                                                        ₦{item.profit.toLocaleString()}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            {reportData.breakdown.length === 0 && (
+                                                <tr>
+                                                    <td colSpan="8" className="p-4 text-center text-gray-500">No sales found in this period.</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

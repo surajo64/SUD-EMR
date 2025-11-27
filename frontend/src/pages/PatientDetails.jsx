@@ -6,7 +6,7 @@ import AuthContext from '../context/AuthContext';
 import Layout from '../components/Layout';
 import LoadingOverlay from '../components/loadingOverlay';
 import AppointmentModal from '../components/AppointmentModal';
-import { FaTimes, FaFileMedical, FaPills, FaHeartbeat, FaNotesMedical, FaProcedures, FaXRay, FaVial, FaUserMd, FaCalendarPlus, FaPlus, FaTrash } from 'react-icons/fa';
+import { FaTimes, FaFileMedical, FaPills, FaChevronDown, FaHeartbeat, FaNotesMedical, FaProcedures, FaXRay, FaVial, FaUserMd, FaCalendarPlus, FaPlus, FaTrash, FaEdit } from 'react-icons/fa';
 
 const PatientDetails = () => {
     const { id } = useParams();
@@ -18,6 +18,7 @@ const PatientDetails = () => {
     const [labCharges, setLabCharges] = useState([]);
     const [radiologyCharges, setRadiologyCharges] = useState([]);
     const [inventoryDrugs, setInventoryDrugs] = useState([]);
+    const [expandedDays, setExpandedDays] = useState({});
 
     // SOAP Note
     const [soapNote, setSoapNote] = useState({
@@ -60,17 +61,31 @@ const PatientDetails = () => {
     const [showRadModal, setShowRadModal] = useState(false);
     const [showRxModal, setShowRxModal] = useState(false);
     const [showAppointmentModal, setShowAppointmentModal] = useState(false); // Appointment Modal State
+    const [showReferralModal, setShowReferralModal] = useState(false); // Referral Modal State
+    const [referrals, setReferrals] = useState([]); // List of referrals for current visit
+    const [editingReferral, setEditingReferral] = useState(null); // Track which referral is being edited
+    const [referralData, setReferralData] = useState({
+        referredTo: '',
+        reason: '',
+        diagnosis: '',
+        notes: '',
+        medicalHistory: ''
+    });
+
 
     // Tab State - default based on user role
     const getDefaultTab = () => {
         if (user?.role === 'lab_technician') return 'lab';
         if (user?.role === 'radiologist') return 'radiology';
         if (user?.role === 'pharmacist') return 'prescriptions';
+        if (user?.role === 'receptionist') return 'referrals'; // Receptionists start at referrals tab
         return 'vitals';
     };
     const [activeTab, setActiveTab] = useState(getDefaultTab());
     const [showEditEncounterModal, setShowEditEncounterModal] = useState(false);
     const [editEncounterStatus, setEditEncounterStatus] = useState('');
+
+
 
     // Nurse Workflow State
     const [showVitalsModal, setShowVitalsModal] = useState(false);
@@ -150,6 +165,10 @@ const PatientDetails = () => {
             const visitRes = await axios.get(`http://localhost:5000/api/visits/${encounterId}`, config);
             setClinicalNotes(visitRes.data.notes || []);
 
+            // Referrals
+            const referralsRes = await axios.get(`http://localhost:5000/api/referrals/visit/${encounterId}`, config);
+            setReferrals(referralsRes.data);
+
         } catch (error) {
             console.error('Error fetching encounter details', error);
         }
@@ -209,8 +228,8 @@ const PatientDetails = () => {
         }
     };
 
-    const canEdit = isEncounterActive();
-    console.log('🔍 canEdit:', canEdit);
+    // Determine if user can edit (read-only for receptionists, viewing past encounters, or inactive encounters)
+    const canEdit = user?.role !== 'receptionist' && user?.role === 'admin' && !viewingPastEncounter && isEncounterActive();
 
     const fetchCharges = async () => {
         try {
@@ -516,6 +535,108 @@ const PatientDetails = () => {
         } catch (error) {
             console.error(error);
             toast.error('Error processing prescriptions');
+            setLoading(false);
+        }
+    };
+
+    // Referral Functions
+    useEffect(() => {
+        if (showReferralModal && encounter) {
+            fetchReferrals();
+        }
+    }, [showReferralModal, encounter]);
+
+    const fetchReferrals = async () => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const res = await axios.get(`http://localhost:5000/api/referrals/visit/${encounter._id}`, config);
+            setReferrals(res.data);
+        } catch (error) {
+            console.error('Error fetching referrals:', error);
+        }
+    };
+
+    const handleCreateReferral = async () => {
+        if (!referralData.referredTo || !referralData.reason) {
+            toast.error('Please fill in "Referred To" and "Reason" fields');
+            return;
+        }
+
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+
+            if (editingReferral) {
+                // Update existing referral
+                const res = await axios.put(`http://localhost:5000/api/referrals/${editingReferral._id}`, {
+                    referredTo: referralData.referredTo,
+                    reason: referralData.reason,
+                    diagnosis: referralData.diagnosis,
+                    notes: referralData.notes,
+                    medicalHistory: referralData.medicalHistory
+                }, config);
+
+                setReferrals(referrals.map(ref => ref._id === editingReferral._id ? res.data : ref));
+                toast.success('Referral updated successfully');
+            } else {
+                // Create new referral
+                const res = await axios.post('http://localhost:5000/api/referrals', {
+                    patientId: patient._id,
+                    visitId: encounter._id,
+                    referredTo: referralData.referredTo,
+                    reason: referralData.reason,
+                    diagnosis: referralData.diagnosis,
+                    notes: referralData.notes,
+                    medicalHistory: referralData.medicalHistory
+                }, config);
+
+                setReferrals([...referrals, res.data]);
+                toast.success('Referral created successfully');
+            }
+
+            setReferralData({ referredTo: '', reason: '', diagnosis: '', notes: '', medicalHistory: '' });
+            setEditingReferral(null);
+            setShowReferralModal(false);
+        } catch (error) {
+            console.error(error);
+            toast.error(editingReferral ? 'Error updating referral' : 'Error creating referral');
+        }
+    };
+
+    const handleEditClick = (referral) => {
+        setEditingReferral(referral);
+        setReferralData({
+            referredTo: referral.referredTo,
+            reason: referral.reason,
+            diagnosis: referral.diagnosis,
+            notes: referral.notes || '',
+            medicalHistory: referral.medicalHistory || ''
+        });
+        setShowReferralModal(true);
+    };
+
+    const handleCancelEdit = () => {
+        setEditingReferral(null);
+        setReferralData({ referredTo: '', reason: '', diagnosis: '', notes: '', medicalHistory: '' });
+        setShowReferralModal(false);
+    };
+
+    const handleDischarge = async () => {
+        if (!encounter) return;
+        if (!window.confirm('Are you sure you want to discharge this patient? This will release the bed.')) return;
+
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            await axios.put(
+                `http://localhost:5000/api/visits/${encounter._id}`,
+                { encounterStatus: 'discharged', status: 'Discharged' },
+                config
+            );
+            toast.success('Patient discharged successfully');
+            fetchPatient(); // Refresh to update status
+        } catch (error) {
+            console.error(error);
+            toast.error('Error discharging patient');
         } finally {
             setLoading(false);
         }
@@ -544,31 +665,132 @@ const PatientDetails = () => {
         }
     };
 
-    const handleDischarge = async () => {
-        if (!encounter) return;
-        if (!window.confirm('Are you sure you want to discharge this patient? This will release the bed.')) return;
+    const printReferral = (referral) => {
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Referral Form - ${patient.name}</title>
+                    <style>
+                        body { font-family: 'Times New Roman', Times, serif; padding: 40px; max-width: 800px; margin: 0 auto; color: #000; }
+                        .header { text-align: center; margin-bottom: 20px; }
+                        .hospital-name { font-size: 24px; font-weight: bold; color: #2c5282; margin-bottom: 5px; text-transform: uppercase; }
+                        .hospital-info { font-size: 14px; margin-bottom: 3px; }
+                        .doc-title { font-size: 22px; margin-top: 20px; font-weight: bold; text-decoration: underline; color: #2c5282; text-align: center; }
+                        .content { margin-top: 30px; }
+                        .row { display: flex; justify-content: space-between; margin-bottom: 15px; align-items: flex-end; }
+                        .col { flex: 1; }
+                        .field-line { border-bottom: 1px solid #000; padding-bottom: 2px; display: inline-block; width: 100%; }
+                        .label { font-weight: bold; margin-right: 5px; }
+                        .section { margin-bottom: 25px; }
+                        .section-title { font-weight: bold; margin-bottom: 5px; }
+                        .lines { border-bottom: 1px solid #000; height: 25px; margin-bottom: 5px; }
+                        .footer { margin-top: 60px; }
+                        
+                        /* Specific adjustments to match image */
+                        .input-line { border-bottom: 1px solid #000; flex-grow: 1; margin-left: 5px; padding-left: 5px; }
+                        .flex-field { display: flex; align-items: flex-end; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <!-- Logo Placeholder -->
+                        <div style="margin-bottom: 10px;">
+                             <!-- <img src="/logo.png" style="height: 60px;" /> -->
+                        </div>
+                        <div class="hospital-name">KIRCT KILIMANJARO HOSPITAL</div>
+                        <div class="hospital-info">Km1 Kwanar Dawaki, Kano-Kaduna Express Way.</div>
+                        <div class="hospital-info">Email: kirctkilimanjarohospital@kirct.com , kirctkilimanjarohospital@gmail.com</div>
+                        <div class="hospital-info">Phone: +2348024646465</div>
+                        
+                        <div class="doc-title">Referral Form</div>
+                    </div>
+                    
+                    <div class="content">
+                        <div class="row">
+                            <div class="flex-field" style="flex: 2;">
+                                <span class="label">Full Name:</span>
+                                <span class="input-line">${patient.name}</span>
+                            </div>
+                            <div class="flex-field" style="flex: 1; margin-left: 20px;">
+                                <span class="label">Age:</span>
+                                <span class="input-line">${patient.age}</span>
+                            </div>
+                            <div class="flex-field" style="flex: 1; margin-left: 20px;">
+                                <span class="label">Gender:</span>
+                                <span class="input-line">${patient.gender}</span>
+                            </div>
+                        </div>
 
-        try {
-            setLoading(true);
-            const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            await axios.put(
-                `http://localhost:5000/api/visits/${encounter._id}`,
-                { encounterStatus: 'discharged', status: 'Discharged' },
-                config
-            );
-            toast.success('Patient discharged successfully');
-            fetchPatient(); // Refresh to update status
-        } catch (error) {
-            console.error(error);
-            toast.error('Error discharging patient');
-        } finally {
-            setLoading(false);
-        }
+                        <div class="row">
+                            <div class="flex-field" style="flex: 2;">
+                                <span class="label">Address:</span>
+                                <span class="input-line">${patient.address || ''}</span>
+                            </div>
+                            <div class="flex-field" style="flex: 1; margin-left: 20px;">
+                                <span class="label">Phone:</span>
+                                <span class="input-line">${patient.phone || ''}</span>
+                            </div>
+                        </div>
+
+                        <div class="section">
+                            <div class="flex-field">
+                                <span class="label">Referred Clinic/hospital:</span>
+                                <span class="input-line">${referral.referredTo}</span>
+                            </div>
+                        </div>
+
+                        <div class="section">
+                            <div class="label">Reason For Referral:</div>
+                            <div style="border-bottom: 1px solid #000; min-height: 25px; margin-top: 5px;">${referral.reason}</div>
+                            <div class="lines"></div>
+                            <div class="lines"></div>
+                        </div>
+
+                        <div class="section">
+                            <div class="label">Client Medical History:</div>
+                            <div style="border-bottom: 1px solid #000; min-height: 25px; margin-top: 5px;">${referral.medicalHistory || referral.diagnosis || ''}</div>
+                            <div class="lines"></div>
+                            <div class="lines"></div>
+                            <div class="lines"></div>
+                        </div>
+
+                        <div class="section">
+                            <div class="label">Client Examination Findings:</div>
+                            <div class="row" style="margin-top: 15px;">
+                                <div class="flex-field" style="flex: 1;">
+                                    <span class="label">Blood Pressure:</span>
+                                    <span class="input-line">${vitals?.bloodPressure || ''}</span>
+                                </div>
+                                <div class="flex-field" style="flex: 1; margin-left: 20px;">
+                                    <span class="label">Height:</span>
+                                    <span class="input-line">${vitals?.height || ''}</span>
+                                </div>
+                                <div class="flex-field" style="flex: 1; margin-left: 20px;">
+                                    <span class="label">Weight:</span>
+                                    <span class="input-line">${vitals?.weight || ''}</span>
+                                </div>
+                            </div>
+                            <div class="lines"></div>
+                            <div class="lines"></div>
+                            <div class="lines"></div>
+                        </div>
+
+                        <div class="footer">
+                            <div class="flex-field">
+                                <span class="label">Referrer Name & Signature:</span>
+                                <span style="border-bottom: 1px solid #000; flex-grow: 1; padding-left: 10px;">Dr. ${user.name}</span>
+                            </div>
+                        </div>
+                    </div>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
     };
 
-    if (!patient) {
-        return <Layout><p>Loading...</p></Layout>;
-    }
+    if (!patient) return <LoadingOverlay />;
 
     return (
         <Layout>
@@ -589,16 +811,24 @@ const PatientDetails = () => {
                     </div>
                 )}
             </div>
-            {user.role === 'doctor' && (
-                <div className="flex justify-end mb-4">
-                    <button
-                        onClick={() => setShowAppointmentModal(true)}
-                        className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-700"
-                    >
-                        <FaCalendarPlus /> Schedule Follow-up
-                    </button>
-                </div>
-            )}
+            {
+                user.role === 'doctor' && (
+                    <div className="flex justify-end mb-4">
+                        <button
+                            onClick={() => setShowAppointmentModal(true)}
+                            className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-700"
+                        >
+                            <FaCalendarPlus /> Schedule Follow-up
+                        </button>
+                        <button
+                            onClick={() => setShowReferralModal(true)}
+                            className="bg-purple-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-purple-700 ml-2"
+                        >
+                            <FaFileMedical /> Referral
+                        </button>
+                    </div>
+                )
+            }
 
             <div className="flex gap-6">
                 {/* History Sidebar */}
@@ -655,7 +885,7 @@ const PatientDetails = () => {
                                     </>
                                 )}
 
-                                {/* Lab Orders - Show for doctors, lab_technician, and lab_scientist */}
+                                {/* Lab Orders - Show for doctors, lab_technician, lab_scientist, and receptionist */}
                                 {!['radiologist', 'pharmacist'].includes(user.role) && (
                                     <button
                                         onClick={() => setActiveTab('lab')}
@@ -665,7 +895,7 @@ const PatientDetails = () => {
                                     </button>
                                 )}
 
-                                {/* Radiology - Show for doctors and radiologist */}
+                                {/* Radiology - Show for doctors, radiologist, and receptionist */}
                                 {!['lab_technician', 'pharmacist'].includes(user.role) && (
                                     <button
                                         onClick={() => setActiveTab('radiology')}
@@ -675,7 +905,7 @@ const PatientDetails = () => {
                                     </button>
                                 )}
 
-                                {/* Prescriptions - Show for doctors and pharmacist */}
+                                {/* Prescriptions - Show for doctors, pharmacist, and receptionist */}
                                 {!['lab_technician', 'radiologist'].includes(user.role) && (
                                     <button
                                         onClick={() => setActiveTab('prescriptions')}
@@ -685,8 +915,16 @@ const PatientDetails = () => {
                                     </button>
                                 )}
 
-                                {/* Clinical Notes - Show for doctors and nurses, ONLY for Inpatient */}
-                                {['doctor', 'nurse'].includes(user.role) && encounter?.type === 'Inpatient' && (
+                                {/* Referrals Tab - Show for all users */}
+                                <button
+                                    onClick={() => setActiveTab('referrals')}
+                                    className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'referrals' ? 'border-b-2 border-orange-600 text-orange-600' : 'text-gray-600 hover:text-gray-800'}`}
+                                >
+                                    <FaFileMedical /> Referrals ({referrals.length})
+                                </button>
+
+                                {/* Clinical Notes - Show for doctors, nurses, and receptionists (read-only), ONLY for Inpatient */}
+                                {['doctor', 'nurse', 'receptionist'].includes(user.role) && encounter?.type === 'Inpatient' && (
                                     <button
                                         onClick={() => setActiveTab('notes')}
                                         className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'notes' ? 'border-b-2 border-yellow-600 text-yellow-600' : 'text-gray-600 hover:text-gray-800'}`}
@@ -984,38 +1222,95 @@ const PatientDetails = () => {
                                                 <FaPlus /> Add Prescription
                                             </button>
                                         </div>
+
                                         {currentPrescriptions.length > 0 ? (
                                             <div className="space-y-3">
-                                                {currentPrescriptions.map(rx => (
-                                                    <div key={rx._id} className="bg-pink-50 p-4 rounded border">
-                                                        <div className="flex justify-between items-start">
-                                                            <div className="flex-1">
-                                                                {rx.medicines.map((med, idx) => (
-                                                                    <div key={idx} className="mb-2">
-                                                                        <p className="font-semibold text-lg">{med.name}</p>
-                                                                        <p className="text-sm text-gray-600">
-                                                                            {med.dosage} - {med.frequency} - {med.duration}
-                                                                        </p>
-                                                                    </div>
-                                                                ))}
-                                                                <p className="text-sm text-gray-600">Prescribed: {new Date(rx.createdAt).toLocaleString()}</p>
-                                                            </div>
-                                                            <div className="flex gap-2 ml-4">
-                                                                <span className={`text-xs px-3 py-1 rounded ${rx.charge?.status === 'paid' ? 'bg-green-200 text-green-800' : 'bg-yellow-200 text-yellow-800'}`}>
-                                                                    {rx.charge?.status === 'paid' ? 'Paid' : 'Unpaid'}
-                                                                </span>
-                                                                <span className={`text-xs px-3 py-1 rounded ${rx.status === 'dispensed' ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'}`}>
-                                                                    {rx.status}
-                                                                </span>
-                                                            </div>
+                                                {/* Group prescriptions by date and sort by latest first */}
+                                                {Object.entries(
+                                                    currentPrescriptions.reduce((acc, rx) => {
+                                                        const date = new Date(rx.createdAt).toLocaleDateString();
+                                                        if (!acc[date]) acc[date] = [];
+                                                        acc[date].push(rx);
+                                                        return acc;
+                                                    }, {})
+                                                )
+                                                    .sort(([dateA], [dateB]) => new Date(dateB) - new Date(dateA)) // Sort dates descending (newest first)
+                                                    .map(([date, prescriptions]) => (
+                                                        <div key={date} className="border rounded-lg overflow-hidden">
+                                                            {/* Day Header - Collapsible */}
+                                                            <button
+                                                                onClick={() => {
+                                                                    const newExpandedDays = { ...expandedDays };
+                                                                    newExpandedDays[date] = !newExpandedDays[date];
+                                                                    setExpandedDays(newExpandedDays);
+                                                                }}
+                                                                className="w-full bg-pink-100 hover:bg-pink-200 p-4 flex justify-between items-center transition-colors"
+                                                            >
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className={`transform transition-transform ${expandedDays[date] ? 'rotate-180' : ''}`}>
+                                                                        <FaChevronDown />
+                                                                    </span>
+                                                                    <h4 className="font-semibold text-lg">
+                                                                        {new Date(date).toLocaleDateString('en-US', {
+                                                                            weekday: 'long',
+                                                                            year: 'numeric',
+                                                                            month: 'long',
+                                                                            day: 'numeric'
+                                                                        })}
+                                                                    </h4>
+                                                                    <span className="bg-pink-600 text-white text-xs px-2 py-1 rounded-full">
+                                                                        {prescriptions.length} prescription{prescriptions.length > 1 ? 's' : ''}
+                                                                    </span>
+                                                                </div>
+                                                                <FaChevronDown className={`transform transition-transform ${expandedDays[date] ? 'rotate-180' : ''}`} />
+                                                            </button>
+
+                                                            {/* Prescriptions List - Collapsible Content */}
+                                                            {expandedDays[date] && (
+                                                                <div className="bg-white divide-y">
+                                                                    {prescriptions
+                                                                        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) // Sort prescriptions within day (newest first)
+                                                                        .map(rx => (
+                                                                            <div key={rx._id} className="p-4 hover:bg-gray-50 transition-colors">
+                                                                                <div className="flex justify-between items-start">
+                                                                                    <div className="flex-1">
+                                                                                        {rx.medicines.map((med, idx) => (
+                                                                                            <div key={idx} className="mb-3 last:mb-0">
+                                                                                                <p className="font-semibold text-lg text-gray-800">{med.name}</p>
+                                                                                                <div className="text-sm text-gray-600 space-y-1 mt-1">
+                                                                                                    <p><span className="font-medium">Dosage:</span> {med.dosage}</p>
+                                                                                                    <p><span className="font-medium">Frequency:</span> {med.frequency}</p>
+                                                                                                    <p><span className="font-medium">Duration:</span> {med.duration}</p>
+                                                                                                    {med.instructions && (
+                                                                                                        <p><span className="font-medium">Instructions:</span> {med.instructions}</p>
+                                                                                                    )}
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        ))}
+                                                                                        <p className="text-xs text-gray-500 mt-2">
+                                                                                            Prescribed at: {new Date(rx.createdAt).toLocaleString()}
+                                                                                        </p>
+                                                                                    </div>
+                                                                                    <div className="flex flex-col gap-2 ml-4">
+                                                                                        <span className={`text-xs px-3 py-1 rounded text-center ${rx.charge?.status === 'paid' ? 'bg-green-200 text-green-800' : 'bg-yellow-200 text-yellow-800'}`}>
+                                                                                            {rx.charge?.status === 'paid' ? 'Paid' : 'Unpaid'}
+                                                                                        </span>
+                                                                                        <span className={`text-xs px-3 py-1 rounded text-center ${rx.status === 'dispensed' ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'}`}>
+                                                                                            {rx.status}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                </div>
+                                                                                {rx.dispensedBy && (
+                                                                                    <p className="text-xs text-gray-500 mt-2 italic border-t pt-2">
+                                                                                        Dispensed by: {rx.dispensedBy.name}
+                                                                                    </p>
+                                                                                )}
+                                                                            </div>
+                                                                        ))}
+                                                                </div>
+                                                            )}
                                                         </div>
-                                                        {rx.dispensedBy && (
-                                                            <p className="text-xs text-gray-500 mt-2 italic border-t pt-2">
-                                                                Dispensed by: {rx.dispensedBy.name}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                ))}
+                                                    ))}
                                             </div>
                                         ) : (
                                             <p className="text-gray-500">No prescriptions yet. Click "Add Prescription" to prescribe medications.</p>
@@ -1023,8 +1318,47 @@ const PatientDetails = () => {
                                     </div>
                                 )}
 
+                                {/* Referrals Tab */}
+                                {activeTab === 'referrals' && (
+                                    <div className="p-6">
+                                        <h3 className="text-xl font-bold text-gray-700 mb-4">Referral Letters</h3>
+                                        {referrals.length === 0 ? (
+                                            <p className="text-gray-500">No referrals created for this visit.</p>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                {referrals.map(ref => (
+                                                    <div key={ref._id} className="border p-4 rounded bg-gray-50 flex justify-between items-start">
+                                                        <div className="flex-1">
+                                                            <p className="font-semibold text-lg">{ref.referredTo}</p>
+                                                            <p className="text-sm text-gray-600 mt-1"><strong>Diagnosis:</strong> {ref.diagnosis}</p>
+                                                            <p className="text-sm text-gray-600 mt-1"><strong>Reason:</strong> {ref.reason}</p>
+                                                            <p className="text-xs text-gray-500 mt-2">Created: {new Date(ref.createdAt).toLocaleDateString()} by Dr. {ref.doctor?.name || 'Unknown'}</p>
+                                                        </div>
+                                                        <div className="flex gap-2 ml-4">
+                                                            {ref.doctor?._id === user._id && user.role === 'doctor' && (
+                                                                <button
+                                                                    onClick={() => handleEditClick(ref)}
+                                                                    className="text-green-600 hover:text-green-800 flex items-center gap-1 px-3 py-2 border border-green-600 rounded hover:bg-green-50"
+                                                                >
+                                                                    <FaEdit /> Edit
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                onClick={() => printReferral(ref)}
+                                                                className="text-blue-600 hover:text-blue-800 flex items-center gap-1 px-3 py-2 border border-blue-600 rounded hover:bg-blue-50"
+                                                            >
+                                                                <FaFileMedical /> Print
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
                                 {/* Clinical Notes Tab */}
-                                {activeTab === 'notes' && encounter.type === 'Inpatient' && (
+                                {activeTab === 'notes' && (
                                     <div>
                                         <div className="flex justify-between items-center mb-4">
                                             <h3 className="text-xl font-bold">Ward Round Notes</h3>
@@ -1722,6 +2056,109 @@ const PatientDetails = () => {
                 doctorId={user._id} // Pre-fill current doctor
                 user={user}
             />
+            {/* Referral Modal */}
+            {
+                showReferralModal && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                        <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                            <div className="sticky top-0 bg-white border-b px-6 py-4">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-lg font-bold">
+                                        {editingReferral ? 'Edit Referral' : 'Create Referral'}
+                                    </h3>
+                                    <button
+                                        onClick={handleCancelEdit}
+                                        className="text-gray-500 hover:text-gray-700"
+                                    >
+                                        <FaTimes size={20} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="p-6 space-y-4">
+                                <div className="grid grid-cols-1 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Referred To
+                                        </label>
+                                        <input
+                                            type="text"
+                                            className="w-full border p-2 rounded text-sm"
+                                            value={referralData.referredTo}
+                                            onChange={(e) => setReferralData({ ...referralData, referredTo: e.target.value })}
+                                            placeholder="Specialist/Facility"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Diagnosis
+                                        </label>
+                                        <input
+                                            type="text"
+                                            className="w-full border p-2 rounded text-sm"
+                                            value={referralData.diagnosis}
+                                            onChange={(e) => setReferralData({ ...referralData, diagnosis: e.target.value })}
+                                            placeholder="Current diagnosis"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Reason for Referral
+                                        </label>
+                                        <textarea
+                                            className="w-full border p-2 rounded text-sm h-20"
+                                            value={referralData.reason}
+                                            onChange={(e) => setReferralData({ ...referralData, reason: e.target.value })}
+                                            placeholder="Detailed reason..."
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Medical History
+                                        </label>
+                                        <textarea
+                                            className="w-full border p-2 rounded text-sm h-20"
+                                            value={referralData.medicalHistory}
+                                            onChange={(e) => setReferralData({ ...referralData, medicalHistory: e.target.value })}
+                                            placeholder="Patient medical history..."
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Additional Notes
+                                        </label>
+                                        <textarea
+                                            className="w-full border p-2 rounded text-sm h-20"
+                                            value={referralData.notes}
+                                            onChange={(e) => setReferralData({ ...referralData, notes: e.target.value })}
+                                            placeholder="Other relevant information..."
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-end gap-3 pt-4">
+                                    <button
+                                        onClick={handleCancelEdit}
+                                        className="px-4 py-2 text-sm bg-gray-300 rounded hover:bg-gray-400 text-gray-800"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleCreateReferral}
+                                        className="px-4 py-2 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 font-medium"
+                                    >
+                                        {editingReferral ? 'Update' : 'Create'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
         </Layout >
     );
 };

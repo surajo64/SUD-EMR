@@ -1,5 +1,6 @@
 const EncounterCharge = require('../models/encounterChargeModel');
 const Charge = require('../models/chargeModel');
+const Patient = require('../models/patientModel');
 
 // @desc    Add charge to encounter
 // @route   POST /api/encounter-charges
@@ -14,14 +15,67 @@ const addChargeToEncounter = async (req, res) => {
             return res.status(404).json({ message: 'Charge not found' });
         }
 
-        const totalAmount = charge.basePrice * (quantity || 1);
+        // Get patient details to determine provider
+        const patient = await Patient.findById(patientId);
+        if (!patient) {
+            return res.status(404).json({ message: 'Patient not found' });
+        }
+
+        // Determine fee based on provider
+        let fee = 0;
+        switch (patient.provider) {
+            case 'Retainership':
+                fee = charge.retainershipFee;
+                break;
+            case 'NHIA':
+                fee = charge.nhiaFee;
+                break;
+            case 'KSCHMA':
+                fee = charge.kschmaFee;
+                break;
+            case 'Standard':
+            default:
+                fee = charge.standardFee;
+                break;
+        }
+
+        // Fallback to basePrice if fee is 0
+        if (fee === 0 && charge.basePrice) {
+            fee = charge.basePrice;
+        }
+
+        const totalAmount = fee * (quantity || 1);
+
+        // Calculate patient vs HMO portions based on provider type
+        let patientPortion = totalAmount;
+        let hmoPortion = 0;
+
+        if (patient.provider === 'Retainership') {
+            // Retainership: HMO covers 100% of ALL charges (including drugs)
+            patientPortion = 0;
+            hmoPortion = totalAmount;
+        } else if (patient.provider === 'NHIA' || patient.provider === 'KSCHMA') {
+            // NHIA/KSCHMA: Patient pays 10% for drugs, HMO covers 90% for drugs
+            // HMO covers 100% for other services
+            if (charge.type === 'drugs') {
+                patientPortion = totalAmount * 0.1;
+                hmoPortion = totalAmount * 0.9;
+            } else {
+                patientPortion = 0;
+                hmoPortion = totalAmount;
+            }
+        }
+        // Standard: Patient pays 100% (default values already set above)
 
         const encounterCharge = await EncounterCharge.create({
             encounter: encounterId,
             patient: patientId,
             charge: chargeId,
             quantity: quantity || 1,
+            unitPrice: fee,
             totalAmount,
+            patientPortion,
+            hmoPortion,
             addedBy: req.user._id,
             notes
         });

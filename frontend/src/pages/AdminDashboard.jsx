@@ -10,6 +10,7 @@ import {
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { toast } from 'react-toastify';
 import { Link } from 'react-router-dom';
+import RegisterPatientModal from '../components/RegisterPatientModal';
 
 const AdminDashboard = () => {
     const { user } = useContext(AuthContext);
@@ -25,6 +26,7 @@ const AdminDashboard = () => {
     const [revenueByDepartment, setRevenueByDepartment] = useState([]);
     const [recentActivity, setRecentActivity] = useState([]);
     const [activeTab, setActiveTab] = useState('overview'); // overview, reports, users
+    const [showRegisterPatientModal, setShowRegisterPatientModal] = useState(false);
 
     useEffect(() => {
         if (user && user.role === 'admin') {
@@ -184,10 +186,21 @@ const AdminDashboard = () => {
                     <div className="bg-white p-6 rounded-lg shadow">
                         <h3 className="text-xl font-bold mb-4 text-gray-800">Quick Actions</h3>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <Link to="/admin/patients" className="p-4 border-2 border-green-200 rounded-lg hover:bg-green-50 transition flex flex-col items-center gap-2">
+                            <div className="p-4 border-2 border-green-200 rounded-lg hover:bg-green-50 transition flex flex-col items-center gap-2">
                                 <FaUserInjured className="text-3xl text-green-600" />
                                 <span className="text-sm font-semibold text-gray-700">Manage Patients</span>
-                            </Link>
+                                <div className="flex gap-2 w-full mt-2">
+                                    <Link to="/admin/patients" className="flex-1 bg-green-600 text-white text-xs px-3 py-1 rounded hover:bg-green-700 text-center">
+                                        View All
+                                    </Link>
+                                    <button
+                                        onClick={() => setShowRegisterPatientModal(true)}
+                                        className="flex-1 bg-blue-600 text-white text-xs px-3 py-1 rounded hover:bg-blue-700"
+                                    >
+                                        Register
+                                    </button>
+                                </div>
+                            </div>
                             <Link to="/billing" className="p-4 border-2 border-blue-200 rounded-lg hover:bg-blue-50 transition flex flex-col items-center gap-2">
                                 <FaDollarSign className="text-3xl text-blue-600" />
                                 <span className="text-sm font-semibold text-gray-700">View Billing</span>
@@ -356,6 +369,17 @@ const AdminDashboard = () => {
                     </div>
                 </div>
             )}
+
+            {/* Register Patient Modal */}
+            <RegisterPatientModal
+                isOpen={showRegisterPatientModal}
+                onClose={() => setShowRegisterPatientModal(false)}
+                onSuccess={() => {
+                    setShowRegisterPatientModal(false);
+                    // Could add a refresh or notification here
+                }}
+                userToken={user.token}
+            />
         </Layout>
     );
 };

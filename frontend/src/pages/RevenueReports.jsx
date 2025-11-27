@@ -221,7 +221,7 @@ const RevenueReports = () => {
                 ) : reportData ? (
                     <>
                         {/* Summary Cards */}
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                             <div className="bg-white p-6 rounded-lg shadow">
                                 <p className="text-gray-600 text-sm font-semibold mb-2">Total Revenue</p>
                                 <p className="text-3xl font-bold text-green-600">
@@ -230,11 +230,18 @@ const RevenueReports = () => {
                                 <p className="text-xs text-gray-500 mt-2">Paid transactions</p>
                             </div>
                             <div className="bg-white p-6 rounded-lg shadow">
-                                <p className="text-gray-600 text-sm font-semibold mb-2">Pending Revenue</p>
+                                <p className="text-gray-600 text-sm font-semibold mb-2">Pending Insurance</p>
                                 <p className="text-3xl font-bold text-orange-600">
-                                    ₦{reportData.summary?.pendingRevenue?.toLocaleString() || 0}
+                                    ₦{reportData.summary?.pendingInsuranceRevenue?.toLocaleString() || 0}
                                 </p>
-                                <p className="text-xs text-gray-500 mt-2">Awaiting payment</p>
+                                <p className="text-xs text-gray-500 mt-2">Awaiting HMO payment</p>
+                            </div>
+                            <div className="bg-white p-6 rounded-lg shadow">
+                                <p className="text-gray-600 text-sm font-semibold mb-2">Pending Patient</p>
+                                <p className="text-3xl font-bold text-yellow-600">
+                                    ₦{reportData.summary?.pendingPatientRevenue?.toLocaleString() || 0}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-2">Awaiting patient payment</p>
                             </div>
                             <div className="bg-white p-6 rounded-lg shadow">
                                 <p className="text-gray-600 text-sm font-semibold mb-2">
