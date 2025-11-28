@@ -5,6 +5,7 @@ const {
     getRadiologyRevenue,
     getPharmacyRevenue,
     getConsultationRevenue,
+    getNurseTriageRevenue,
     getOverallRevenue,
     getDashboardStats
 } = require('../controllers/reportsController');
@@ -14,6 +15,7 @@ router.get('/lab-revenue', protect, admin, getLabRevenue);
 router.get('/radiology-revenue', protect, admin, getRadiologyRevenue);
 router.get('/pharmacy-revenue', protect, admin, getPharmacyRevenue);
 router.get('/consultation-revenue', protect, admin, getConsultationRevenue);
+router.get('/nurse-triage-revenue', protect, admin, getNurseTriageRevenue);
 router.get('/overall-revenue', protect, admin, getOverallRevenue);
 router.get('/dashboard-stats', protect, admin, getDashboardStats);
 

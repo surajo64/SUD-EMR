@@ -20,10 +20,14 @@ const WardManagement = () => {
         type: 'General',
         description: '',
         bedCount: 0,
-        dailyRate: 0
+        dailyRate: 0,
+        rates: {
+            Standard: 0,
+            NHIA: 0,
+            Retainership: 0,
+            KSCHMA: 0
+        }
     });
-
-    const [editWard, setEditWard] = useState(null);
 
     useEffect(() => {
         if (user) {
@@ -50,10 +54,24 @@ const WardManagement = () => {
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            await axios.post('http://localhost:5000/api/wards', newWard, config);
+
+            // Ensure dailyRate matches Standard rate if not set explicitly
+            const payload = {
+                ...newWard,
+                dailyRate: newWard.rates.Standard
+            };
+
+            await axios.post('http://localhost:5000/api/wards', payload, config);
             toast.success('Ward created successfully!');
             setShowModal(false);
-            setNewWard({ name: '', type: 'General', description: '', bedCount: 0, dailyRate: 0 });
+            setNewWard({
+                name: '',
+                type: 'General',
+                description: '',
+                bedCount: 0,
+                dailyRate: 0,
+                rates: { Standard: 0, NHIA: 0, Retainership: 0, KSCHMA: 0 }
+            });
             fetchWards();
         } catch (error) {
             console.error(error);
@@ -84,7 +102,14 @@ const WardManagement = () => {
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            await axios.put(`http://localhost:5000/api/wards/${selectedWard._id}`, selectedWard, config);
+
+            // Sync dailyRate with Standard rate
+            const payload = {
+                ...selectedWard,
+                dailyRate: selectedWard.rates?.Standard || selectedWard.dailyRate
+            };
+
+            await axios.put(`http://localhost:5000/api/wards/${selectedWard._id}`, payload, config);
             toast.success('Ward updated successfully!');
             setShowManageModal(false);
             fetchWards();
@@ -111,6 +136,26 @@ const WardManagement = () => {
         const updatedBeds = [...selectedWard.beds];
         updatedBeds[index].number = value;
         setSelectedWard({ ...selectedWard, beds: updatedBeds });
+    };
+
+    const handleRateChange = (provider, value) => {
+        setNewWard(prev => ({
+            ...prev,
+            rates: {
+                ...prev.rates,
+                [provider]: parseFloat(value) || 0
+            }
+        }));
+    };
+
+    const handleSelectedRateChange = (provider, value) => {
+        setSelectedWard(prev => ({
+            ...prev,
+            rates: {
+                ...(prev.rates || { Standard: prev.dailyRate || 0, NHIA: 0, Retainership: 0, KSCHMA: 0 }),
+                [provider]: parseFloat(value) || 0
+            }
+        }));
     };
 
     return (
@@ -141,7 +186,15 @@ const WardManagement = () => {
                             <div className="flex gap-2">
                                 <button
                                     onClick={() => {
-                                        setSelectedWard(ward);
+                                        setSelectedWard({
+                                            ...ward,
+                                            rates: ward.rates || {
+                                                Standard: ward.dailyRate || 0,
+                                                NHIA: 0,
+                                                Retainership: 0,
+                                                KSCHMA: 0
+                                            }
+                                        });
                                         setShowManageModal(true);
                                     }}
                                     className="text-blue-600 hover:text-blue-800"
@@ -166,7 +219,7 @@ const WardManagement = () => {
                             </span>
                         </div>
                         <div className="mt-2 text-sm text-gray-500">
-                            Daily Rate: ₦{ward.dailyRate}
+                            Standard Rate: ₦{ward.dailyRate}
                         </div>
                     </div>
                 ))}
@@ -175,55 +228,94 @@ const WardManagement = () => {
             {/* Create Ward Modal */}
             {showModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-md">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                         <h3 className="text-xl font-bold mb-4">Add New Ward</h3>
                         <form onSubmit={handleCreateWard} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-semibold mb-1">Ward Name</label>
-                                <input
-                                    type="text"
-                                    className="w-full border p-2 rounded"
-                                    value={newWard.name}
-                                    onChange={(e) => setNewWard({ ...newWard, name: e.target.value })}
-                                    required
-                                />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-semibold mb-1">Ward Name</label>
+                                    <input
+                                        type="text"
+                                        className="w-full border p-2 rounded"
+                                        value={newWard.name}
+                                        onChange={(e) => setNewWard({ ...newWard, name: e.target.value })}
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold mb-1">Type</label>
+                                    <select
+                                        className="w-full border p-2 rounded"
+                                        value={newWard.type}
+                                        onChange={(e) => setNewWard({ ...newWard, type: e.target.value })}
+                                    >
+                                        <option value="General">General</option>
+                                        <option value="Private">Private</option>
+                                        <option value="ICU">ICU</option>
+                                        <option value="Emergency">Emergency</option>
+                                        <option value="Maternity">Maternity</option>
+                                        <option value="Pediatric">Pediatric</option>
+                                        <option value="Surgical">Surgical</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold mb-1">Initial Bed Count</label>
+                                    <input
+                                        type="number"
+                                        className="w-full border p-2 rounded"
+                                        value={newWard.bedCount}
+                                        onChange={(e) => setNewWard({ ...newWard, bedCount: parseInt(e.target.value) })}
+                                        min="0"
+                                    />
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-sm font-semibold mb-1">Type</label>
-                                <select
-                                    className="w-full border p-2 rounded"
-                                    value={newWard.type}
-                                    onChange={(e) => setNewWard({ ...newWard, type: e.target.value })}
-                                >
-                                    <option value="General">General</option>
-                                    <option value="Private">Private</option>
-                                    <option value="ICU">ICU</option>
-                                    <option value="Emergency">Emergency</option>
-                                    <option value="Maternity">Maternity</option>
-                                    <option value="Pediatric">Pediatric</option>
-                                    <option value="Surgical">Surgical</option>
-                                </select>
+
+                            <div className="border-t pt-4 mt-4">
+                                <h4 className="font-semibold text-gray-700 mb-2">Daily Rates by Provider</h4>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-1">Standard (Cash)</label>
+                                        <input
+                                            type="number"
+                                            className="w-full border p-2 rounded"
+                                            value={newWard.rates.Standard}
+                                            onChange={(e) => handleRateChange('Standard', e.target.value)}
+                                            min="0"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-1">NHIA</label>
+                                        <input
+                                            type="number"
+                                            className="w-full border p-2 rounded"
+                                            value={newWard.rates.NHIA}
+                                            onChange={(e) => handleRateChange('NHIA', e.target.value)}
+                                            min="0"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-1">Retainership</label>
+                                        <input
+                                            type="number"
+                                            className="w-full border p-2 rounded"
+                                            value={newWard.rates.Retainership}
+                                            onChange={(e) => handleRateChange('Retainership', e.target.value)}
+                                            min="0"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-1">KSCHMA</label>
+                                        <input
+                                            type="number"
+                                            className="w-full border p-2 rounded"
+                                            value={newWard.rates.KSCHMA}
+                                            onChange={(e) => handleRateChange('KSCHMA', e.target.value)}
+                                            min="0"
+                                        />
+                                    </div>
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-sm font-semibold mb-1">Initial Bed Count</label>
-                                <input
-                                    type="number"
-                                    className="w-full border p-2 rounded"
-                                    value={newWard.bedCount}
-                                    onChange={(e) => setNewWard({ ...newWard, bedCount: parseInt(e.target.value) })}
-                                    min="0"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-semibold mb-1">Daily Rate</label>
-                                <input
-                                    type="number"
-                                    className="w-full border p-2 rounded"
-                                    value={newWard.dailyRate}
-                                    onChange={(e) => setNewWard({ ...newWard, dailyRate: parseFloat(e.target.value) })}
-                                    min="0"
-                                />
-                            </div>
+
                             <div>
                                 <label className="block text-sm font-semibold mb-1">Description</label>
                                 <textarea
@@ -257,21 +349,68 @@ const WardManagement = () => {
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-bold">Manage Ward: {selectedWard.name}</h3>
+                            <h3 className="text-xl font-bold">Manage Ward</h3>
                             <button onClick={() => setShowManageModal(false)} className="text-gray-500 hover:text-gray-700">
                                 <FaTimes size={24} />
                             </button>
                         </div>
 
-                        <div className="mb-6">
-                            <label className="block text-sm font-semibold mb-1">Daily Rate</label>
-                            <input
-                                type="number"
-                                className="w-full border p-2 rounded"
-                                value={selectedWard.dailyRate || 0}
-                                onChange={(e) => setSelectedWard({ ...selectedWard, dailyRate: parseFloat(e.target.value) })}
-                                min="0"
-                            />
+                        <div className="mb-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-semibold mb-1">Ward Name</label>
+                                <input
+                                    type="text"
+                                    className="w-full border p-2 rounded"
+                                    value={selectedWard.name}
+                                    onChange={(e) => setSelectedWard({ ...selectedWard, name: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="border p-4 rounded bg-gray-50">
+                                <h4 className="font-semibold text-gray-700 mb-3">Daily Rates Configuration</h4>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-1">Standard (Cash)</label>
+                                        <input
+                                            type="number"
+                                            className="w-full border p-2 rounded"
+                                            value={selectedWard.rates?.Standard || 0}
+                                            onChange={(e) => handleSelectedRateChange('Standard', e.target.value)}
+                                            min="0"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-1">NHIA</label>
+                                        <input
+                                            type="number"
+                                            className="w-full border p-2 rounded"
+                                            value={selectedWard.rates?.NHIA || 0}
+                                            onChange={(e) => handleSelectedRateChange('NHIA', e.target.value)}
+                                            min="0"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-1">Retainership</label>
+                                        <input
+                                            type="number"
+                                            className="w-full border p-2 rounded"
+                                            value={selectedWard.rates?.Retainership || 0}
+                                            onChange={(e) => handleSelectedRateChange('Retainership', e.target.value)}
+                                            min="0"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-1">KSCHMA</label>
+                                        <input
+                                            type="number"
+                                            className="w-full border p-2 rounded"
+                                            value={selectedWard.rates?.KSCHMA || 0}
+                                            onChange={(e) => handleSelectedRateChange('KSCHMA', e.target.value)}
+                                            min="0"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <div className="mb-6">

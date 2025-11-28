@@ -49,7 +49,7 @@ const LabTestManagement = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        if (!formData.name || !formData.basePrice) {
+        if (!formData.name || !formData.standardFee) {
             toast.error('Please fill in test name and price');
             return;
         }

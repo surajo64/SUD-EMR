@@ -267,12 +267,19 @@ const createReceiptForCharges = async (req, res) => {
         // Generate receipt number
         const receiptNumber = `RCP-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
 
+        // Calculate amount paid based on payment method
+        let amountPaid = totalAmount;
+        if (paymentMethod === 'insurance') {
+            // For insurance payments, only count the patient portion
+            amountPaid = charges.reduce((sum, charge) => sum + (charge.patientPortion || 0), 0);
+        }
+
         // Create receipt
         const receipt = await Receipt.create({
             patient: patientId,
             encounter: encounterId,
             charges: chargeIds,
-            amountPaid: totalAmount,
+            amountPaid: amountPaid,
             paymentMethod: paymentMethod || 'cash',
             cashier: req.user._id,
             receiptNumber,

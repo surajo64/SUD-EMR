@@ -233,9 +233,60 @@ const getConsultationRevenue = async (req, res) => {
         const totalConsultations = consultationCharges.length;
         const paidConsultations = consultationCharges.filter(c => c.status === 'paid').length;
 
-        const totalRevenue = consultationCharges
-            .filter(c => c.status === 'paid')
-            .reduce((sum, c) => sum + c.totalAmount, 0);
+        // Calculate revenue using cash basis for HMO portions
+        const paidCharges = consultationCharges.filter(c => c.status === 'paid');
+
+
+
+        // Separate insurance vs non-insurance payments
+
+        const insuranceCharges = paidCharges.filter(c => c.receipt?.paymentMethod === 'insurance');
+        const nonInsuranceCharges = paidCharges.filter(c =>
+            c.receipt && c.receipt.paymentMethod !== 'insurance'
+        );
+
+
+
+        // Non-insurance revenue (full amount counted immediately)
+        const nonInsuranceRevenue = nonInsuranceCharges.reduce((sum, c) => sum + c.totalAmount, 0);
+
+        // Insurance revenue - patient portion only initially (and only if > 0)
+        const insurancePatientRevenue = insuranceCharges
+            .filter(c => (c.patientPortion || 0) > 0)
+            .reduce((sum, c) => sum + c.patientPortion, 0);
+
+        // Find charges with paid claims to add HMO portion
+        const insuranceEncounterIds = [...new Set(insuranceCharges.map(c => c.encounter?._id || c.encounter).filter(id => id))];
+        let insuranceHMORevenue = 0;
+
+        if (insuranceEncounterIds.length > 0) {
+            const Claim = require('../models/claimModel');
+            const paidClaims = await Claim.find({
+                encounter: { $in: insuranceEncounterIds },
+                status: 'paid'
+            });
+
+            const paidClaimsMap = new Map(paidClaims.map(c => [c.encounter.toString(), c]));
+
+            // Add HMO portion for charges with paid claims
+            // Only include charges created BEFORE the claim was paid
+            insuranceHMORevenue = insuranceCharges
+                .filter(c => {
+                    const encId = (c.encounter?._id || c.encounter)?.toString();
+                    const claim = paidClaimsMap.get(encId);
+
+                    if (!claim) return false;
+
+                    // Only include if claim has been paid AND charge was created before payment
+                    if (!claim.paidDate) return false;
+                    if (new Date(c.createdAt) > new Date(claim.paidDate)) return false;
+
+                    return true;
+                })
+                .reduce((sum, c) => sum + (c.hmoPortion || 0), 0);
+        }
+
+        const totalRevenue = nonInsuranceRevenue + insurancePatientRevenue + insuranceHMORevenue;
 
         const pendingRevenue = consultationCharges
             .filter(c => c.status === 'pending')
@@ -337,14 +388,60 @@ const getOverallRevenue = async (req, res) => {
             createdAt: { $gte: start, $lte: end }
         })
             .populate('charge', 'type name')
-            .populate('patient', 'name');
+            .populate('patient', 'name')
+            .populate('receipt'); // Populate receipt for payment method
 
         const totalCharges = charges.length;
-        const paidCharges = charges.filter(c => c.status === 'paid').length;
+        const paidCharges = charges.filter(c => c.status === 'paid');
+        const paidChargesCount = paidCharges.length;
 
-        const totalRevenue = charges
-            .filter(c => c.status === 'paid')
-            .reduce((sum, c) => sum + c.totalAmount, 0);
+        // Calculate revenue using cash basis for HMO portions
+        const insuranceCharges = paidCharges.filter(c => c.receipt?.paymentMethod === 'insurance');
+
+        const nonInsuranceCharges = paidCharges.filter(c =>
+            c.receipt && c.receipt.paymentMethod !== 'insurance'
+        );
+
+
+
+        const nonInsuranceRevenue = nonInsuranceCharges.reduce((sum, c) => sum + c.totalAmount, 0);
+        const insurancePatientRevenue = insuranceCharges
+            .filter(c => (c.patientPortion || 0) > 0)
+            .reduce((sum, c) => sum + c.patientPortion, 0);
+
+        const insuranceEncounterIds = [...new Set(insuranceCharges.map(c => c.encounter?._id || c.encounter).filter(id => id))];
+        let insuranceHMORevenue = 0;
+
+        if (insuranceEncounterIds.length > 0) {
+            const Claim = require('../models/claimModel');
+            const paidClaims = await Claim.find({
+                encounter: { $in: insuranceEncounterIds },
+                status: 'paid'
+            });
+
+            const paidClaimsMap = new Map(paidClaims.map(c => [c.encounter.toString(), c]));
+
+            // Add HMO portion for charges with paid claims
+            // Only include charges created BEFORE the claim was paid
+            insuranceHMORevenue = insuranceCharges
+                .filter(c => {
+                    const encId = (c.encounter?._id || c.encounter)?.toString();
+                    const claim = paidClaimsMap.get(encId);
+
+                    if (!claim) return false;
+
+                    // Only include if claim has been paid AND charge was created before payment
+                    if (!claim.paidDate) return false;
+                    if (new Date(c.createdAt) > new Date(claim.paidDate)) return false;
+
+                    return true;
+                })
+                .reduce((sum, c) => sum + (c.hmoPortion || 0), 0);
+        }
+
+        const totalRevenue = nonInsuranceRevenue + insurancePatientRevenue + insuranceHMORevenue;
+
+
 
         // Calculate pending revenue breakdown
         let pendingInsuranceRevenue = 0;
@@ -363,7 +460,41 @@ const getOverallRevenue = async (req, res) => {
 
         const pendingRevenue = pendingInsuranceRevenue + pendingPatientRevenue;
 
-        // Group by department
+        // Calculate Pending HMO Amount - sum HMO portions where claim is not paid
+        let pendingHMOAmount = 0;
+
+        // Get all insurance charges
+        const paidInsuranceCharges = paidCharges.filter(c =>
+            c.receipt?.paymentMethod === 'insurance'
+        );
+
+        if (paidInsuranceCharges.length > 0) {
+            // Get unique encounter IDs
+            const insuranceEncIds = [...new Set(paidInsuranceCharges.map(c =>
+                (c.encounter?._id || c.encounter)?.toString()
+            ).filter(id => id))];
+
+            if (insuranceEncIds.length > 0) {
+                const Claim = require('../models/claimModel');
+                // Find claims that are NOT paid
+                const unpaidClaims = await Claim.find({
+                    encounter: { $in: insuranceEncIds },
+                    status: { $ne: 'paid' } // pending, submitted, approved, rejected
+                });
+
+                const unpaidClaimEncounters = new Set(unpaidClaims.map(c => c.encounter.toString()));
+
+                // Sum HMO portions for charges with unpaid claims
+                pendingHMOAmount = paidInsuranceCharges
+                    .filter(c => {
+                        const encId = (c.encounter?._id || c.encounter)?.toString();
+                        return encId && unpaidClaimEncounters.has(encId);
+                    })
+                    .reduce((sum, c) => sum + (c.hmoPortion || 0), 0);
+            }
+        }
+
+        // Group by department - use same revenue logic as totalRevenue
         const byDepartment = {
             lab: { revenue: 0, count: 0 },
             radiology: { revenue: 0, count: 0 },
@@ -372,35 +503,242 @@ const getOverallRevenue = async (req, res) => {
             other: { revenue: 0, count: 0 }
         };
 
-        charges.forEach(charge => {
+        // Create a set of encounter IDs with paid claims for quick lookup
+        const paidClaimEncounterSet = new Set();
+        if (insuranceEncounterIds.length > 0) {
+            const Claim = require('../models/claimModel');
+            const paidClaims = await Claim.find({
+                encounter: { $in: insuranceEncounterIds },
+                status: 'paid'
+            });
+            const paidClaimsMap = new Map(paidClaims.map(c => [c.encounter.toString(), c]));
+
+            paidCharges.forEach(charge => {
+                const encId = (charge.encounter?._id || charge.encounter)?.toString();
+                const claim = paidClaimsMap.get(encId);
+                if (claim && claim.paidDate && new Date(charge.createdAt) <= new Date(claim.paidDate)) {
+                    paidClaimEncounterSet.add(encId);
+                }
+            });
+        }
+
+        paidCharges.forEach(charge => {
             const type = charge.charge?.type || 'other';
             const dept = type === 'drugs' ? 'pharmacy' : type;
 
             if (byDepartment[dept]) {
                 byDepartment[dept].count++;
-                if (charge.status === 'paid') {
-                    byDepartment[dept].revenue += charge.totalAmount;
+
+                // Calculate revenue based on payment method
+                let chargeRevenue = 0;
+                if (charge.receipt?.paymentMethod === 'insurance') {
+                    // Insurance: add patient portion (if any)
+                    chargeRevenue += (charge.patientPortion || 0);
+
+                    // Insurance: add HMO portion only if claim is paid
+                    const encId = (charge.encounter?._id || charge.encounter)?.toString();
+                    if (encId && paidClaimEncounterSet.has(encId)) {
+                        chargeRevenue += (charge.hmoPortion || 0);
+                    }
+                } else if (charge.receipt) {
+                    // Non-insurance: add full amount
+                    chargeRevenue = charge.totalAmount;
                 }
+
+                byDepartment[dept].revenue += chargeRevenue;
             } else {
                 byDepartment.other.count++;
-                if (charge.status === 'paid') {
-                    byDepartment.other.revenue += charge.totalAmount;
+
+                // Same logic for 'other' department
+                let chargeRevenue = 0;
+                if (charge.receipt?.paymentMethod === 'insurance') {
+                    chargeRevenue += (charge.patientPortion || 0);
+                    const encId = (charge.encounter?._id || charge.encounter)?.toString();
+                    if (encId && paidClaimEncounterSet.has(encId)) {
+                        chargeRevenue += (charge.hmoPortion || 0);
+                    }
+                } else if (charge.receipt) {
+                    chargeRevenue = charge.totalAmount;
                 }
+
+                byDepartment.other.revenue += chargeRevenue;
             }
         });
 
         res.json({
             summary: {
                 totalCharges,
-                paidCharges,
+                paidCharges: paidChargesCount,
                 totalRevenue,
                 pendingRevenue,
                 pendingInsuranceRevenue,
                 pendingPatientRevenue,
+                pendingHMOAmount,
                 dateRange: { start, end }
             },
             byDepartment,
             charges
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+
+// @desc    Get nurse triage revenue report by date range
+// @route   GET /api/reports/nurse-triage-revenue?startDate=&endDate=
+// @access  Private (Admin)
+const getNurseTriageRevenue = async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+
+        const start = startDate ? new Date(startDate) : new Date(0);
+        const end = endDate ? new Date(endDate) : new Date();
+        end.setHours(23, 59, 59, 999);
+
+        // Find all charges first, then filter for nursing
+        const allCharges = await EncounterCharge.find({
+            createdAt: { $gte: start, $lte: end }
+        })
+            .populate('charge')
+            .populate('patient', 'name mrn')
+            .populate('encounter')
+            .populate('receipt')
+            .sort({ createdAt: -1 });
+
+        // Filter for nursing charges
+        const nursingCharges = allCharges.filter(c => c.charge?.type === 'nursing');
+
+        const totalNursingServices = nursingCharges.length;
+        const paidNursingServices = nursingCharges.filter(c => c.status === 'paid').length;
+
+        // Calculate revenue using cash basis for HMO portions
+        const paidCharges = nursingCharges.filter(c => c.status === 'paid');
+
+
+        const insuranceCharges = paidCharges.filter(c => c.receipt?.paymentMethod === 'insurance');
+        const nonInsuranceCharges = paidCharges.filter(c =>
+            c.receipt && c.receipt.paymentMethod !== 'insurance'
+        );
+
+        const nonInsuranceRevenue = nonInsuranceCharges.reduce((sum, c) => sum + c.totalAmount, 0);
+        const insurancePatientRevenue = insuranceCharges
+            .filter(c => (c.patientPortion || 0) > 0)
+            .reduce((sum, c) => sum + c.patientPortion, 0);
+
+        const insuranceEncounterIds = [...new Set(insuranceCharges.map(c => c.encounter?._id || c.encounter).filter(id => id))];
+        let insuranceHMORevenue = 0;
+
+        if (insuranceEncounterIds.length > 0) {
+            const Claim = require('../models/claimModel');
+            const paidClaims = await Claim.find({
+                encounter: { $in: insuranceEncounterIds },
+                status: 'paid'
+            });
+
+            const paidClaimsMap = new Map(paidClaims.map(c => [c.encounter.toString(), c]));
+
+            // Add HMO portion for charges with paid claims
+            // Only include charges created BEFORE the claim was paid
+            insuranceHMORevenue = insuranceCharges
+                .filter(c => {
+                    const encId = (c.encounter?._id || c.encounter)?.toString();
+                    const claim = paidClaimsMap.get(encId);
+
+                    if (!claim) return false;
+
+                    // Only include if claim has been paid AND charge was created before payment
+                    if (!claim.paidDate) return false;
+                    if (new Date(c.createdAt) > new Date(claim.paidDate)) return false;
+
+                    return true;
+                })
+                .reduce((sum, c) => sum + (c.hmoPortion || 0), 0);
+        }
+
+        const totalRevenue = nonInsuranceRevenue + insurancePatientRevenue + insuranceHMORevenue;
+
+
+
+        const pendingRevenue = nursingCharges
+            .filter(c => c.status === 'pending')
+            .reduce((sum, c) => sum + c.totalAmount, 0);
+
+        // Group by service name
+        const byService = {};
+        nursingCharges.forEach(c => {
+            const serviceName = c.charge?.name || 'Unknown';
+            if (!byService[serviceName]) {
+                byService[serviceName] = {
+                    count: 0,
+                    revenue: 0,
+                    paid: 0,
+                    pending: 0
+                };
+            }
+            byService[serviceName].count++;
+            if (c.status === 'paid') {
+                byService[serviceName].revenue += c.totalAmount;
+                byService[serviceName].paid++;
+            } else {
+                byService[serviceName].pending++;
+            }
+        });
+
+        // Calculate pending revenue breakdown
+        let pendingInsuranceRevenue = 0;
+        let pendingPatientRevenue = 0;
+
+        nursingCharges.forEach(c => {
+            if (c.status === 'pending') {
+                if (c.hmoPortion !== undefined || c.patientPortion !== undefined) {
+                    pendingInsuranceRevenue += (c.hmoPortion || 0);
+                    pendingPatientRevenue += (c.patientPortion || 0);
+                } else {
+                    pendingPatientRevenue += (c.totalAmount || 0);
+                }
+            }
+        });
+
+        // Calculate Pending HMO Amount
+        const paidInsuranceCharges = nursingCharges.filter(c =>
+            c.status === 'paid' &&
+            c.receipt?.paymentMethod === 'insurance'
+        );
+        const receiptIds = [...new Set(paidInsuranceCharges.map(c => c.receipt._id).filter(id => id))];
+
+        let pendingHMOAmount = 0;
+        if (receiptIds.length > 0) {
+            const pendingHMOReceipts = await Receipt.aggregate([
+                { $match: { _id: { $in: receiptIds } } },
+                {
+                    $lookup: {
+                        from: 'claims',
+                        localField: 'encounter',
+                        foreignField: 'encounter',
+                        as: 'claim'
+                    }
+                },
+                { $unwind: '$claim' },
+                { $match: { 'claim.status': { $ne: 'paid' } } },
+                { $group: { _id: null, total: { $sum: '$amountPaid' } } }
+            ]);
+            pendingHMOAmount = pendingHMOReceipts[0]?.total || 0;
+        }
+
+        res.json({
+            summary: {
+                totalNursingServices,
+                paidNursingServices,
+                totalRevenue,
+                pendingRevenue,
+                pendingInsuranceRevenue,
+                pendingPatientRevenue,
+                pendingHMOAmount,
+                dateRange: { start, end }
+            },
+            byService,
+            charges: nursingCharges
         });
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -532,6 +870,7 @@ module.exports = {
     getRadiologyRevenue,
     getPharmacyRevenue,
     getConsultationRevenue,
+    getNurseTriageRevenue,
     getOverallRevenue,
     getDashboardStats
 };

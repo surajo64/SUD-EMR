@@ -50,6 +50,9 @@ const RevenueReports = () => {
                 case 'consultation':
                     endpoint = 'consultation-revenue';
                     break;
+                case 'nurse-triage':
+                    endpoint = 'nurse-triage-revenue';
+                    break;
                 case 'overall':
                     endpoint = 'overall-revenue';
                     break;
@@ -120,6 +123,16 @@ const RevenueReports = () => {
                 'Status': charge.status,
                 'Amount': charge.totalAmount
             }));
+        } else if (department === 'nurse-triage') {
+            filename = `Nurse_Triage_Revenue_Report_${startDate}_to_${endDate}.xlsx`;
+            worksheetData = reportData.charges.map(charge => ({
+                'Date': new Date(charge.createdAt).toLocaleDateString(),
+                'Patient': charge.patient?.name || 'N/A',
+                'MRN': charge.patient?.mrn || 'N/A',
+                'Service': charge.charge?.name || 'N/A',
+                'Status': charge.status,
+                'Amount': charge.totalAmount
+            }));
         } else {
             filename = `Overall_Revenue_Report_${startDate}_to_${endDate}.xlsx`;
             worksheetData = reportData.charges.map(charge => ({
@@ -182,6 +195,7 @@ const RevenueReports = () => {
                                 <option value="radiology">Radiology</option>
                                 <option value="pharmacy">Pharmacy</option>
                                 <option value="consultation">Consultation</option>
+                                <option value="nurse-triage">Nurse Triage</option>
                             </select>
                         </div>
                         <div>

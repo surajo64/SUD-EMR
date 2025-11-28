@@ -185,6 +185,13 @@ const FrontDeskDashboard = () => {
         });
     };
 
+    const hasActiveInpatientEncounter = (patientId) => {
+        const encounters = patientEncounters[patientId] || [];
+        return encounters.some(encounter =>
+            encounter.type === 'Inpatient' && encounter.encounterStatus !== 'discharged'
+        );
+    };
+
     const handleRegisterPatient = async (e) => {
         e.preventDefault();
         try {
@@ -208,7 +215,13 @@ const FrontDeskDashboard = () => {
     };
 
     const openEncounterModal = (patient) => {
-        // Check if patient already has an encounter today
+        // 1. Check for active Inpatient encounter (must be discharged first)
+        if (hasActiveInpatientEncounter(patient._id)) {
+            toast.warning(`${patient.name} has an active Inpatient encounter. They must be discharged before creating a new encounter.`);
+            return;
+        }
+
+        // 2. Check if patient already has an encounter today (for non-inpatient logic)
         if (hasEncounterToday(patient._id)) {
             toast.warning(`${patient.name} already has an encounter created today. Cannot create another encounter.`);
             return;

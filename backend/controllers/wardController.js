@@ -4,7 +4,7 @@ const Ward = require('../models/wardModel');
 // @route   POST /api/wards
 // @access  Private/Admin
 const createWard = async (req, res) => {
-    const { name, type, description, bedCount, dailyRate } = req.body;
+    const { name, type, description, bedCount, dailyRate, rates } = req.body;
 
     try {
         const wardExists = await Ward.findOne({ name });
@@ -26,7 +26,13 @@ const createWard = async (req, res) => {
             type,
             description,
             beds,
-            dailyRate
+            dailyRate,
+            rates: rates || {
+                Standard: dailyRate || 0,
+                NHIA: 0,
+                Retainership: 0,
+                KSCHMA: 0
+            }
         });
 
         if (ward) {
@@ -55,7 +61,7 @@ const getWards = async (req, res) => {
 // @route   PUT /api/wards/:id
 // @access  Private/Admin
 const updateWard = async (req, res) => {
-    const { name, type, description, beds, dailyRate } = req.body;
+    const { name, type, description, beds, dailyRate, rates } = req.body;
 
     try {
         const ward = await Ward.findById(req.params.id);
@@ -65,6 +71,9 @@ const updateWard = async (req, res) => {
             ward.type = type || ward.type;
             ward.description = description || ward.description;
             ward.dailyRate = dailyRate !== undefined ? dailyRate : ward.dailyRate;
+            if (rates) {
+                ward.rates = rates;
+            }
             if (beds) {
                 ward.beds = beds;
             }

@@ -16,6 +16,12 @@ const wardSchema = mongoose.Schema({
         required: true,
         default: 0
     },
+    rates: {
+        Standard: { type: Number, default: 0 },
+        NHIA: { type: Number, default: 0 },
+        Retainership: { type: Number, default: 0 },
+        KSCHMA: { type: Number, default: 0 }
+    },
     description: {
         type: String
     },

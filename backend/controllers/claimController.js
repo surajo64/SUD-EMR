@@ -328,9 +328,17 @@ const exportClaimsToExcel = async (req, res) => {
 // @access  Private
 const getClaimsSummary = async (req, res) => {
     try {
-        const { startDate, endDate } = req.query;
+        const { hmo, status, startDate, endDate } = req.query;
 
         const filter = {};
+
+        if (hmo) {
+            filter.hmo = hmo;
+        }
+
+        if (status) {
+            filter.status = status;
+        }
 
         if (startDate && endDate) {
             filter.createdAt = {

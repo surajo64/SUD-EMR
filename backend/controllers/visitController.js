@@ -67,19 +67,33 @@ const createVisit = async (req, res) => {
     });
 
     // Apply Initial Ward Charge for Inpatient
-    if (type === 'Inpatient' && wardDoc && wardDoc.dailyRate > 0) {
-        const EncounterCharge = require('../models/encounterChargeModel');
-        await EncounterCharge.create({
-            encounter: visit._id,
-            patient: patientId,
-            itemType: 'Daily Bed Fee',
-            itemName: `Initial Ward Charge - ${wardDoc.name}`,
-            cost: wardDoc.dailyRate,
-            quantity: 1,
-            totalAmount: wardDoc.dailyRate,
-            status: 'pending',
-            addedBy: req.user._id
-        });
+    if (type === 'Inpatient' && wardDoc) {
+        // Fetch patient to get provider
+        const Patient = require('../models/patientModel');
+        const patient = await Patient.findById(patientId);
+
+        let dailyFee = wardDoc.dailyRate; // Default fallback
+
+        if (patient && patient.provider && wardDoc.rates && wardDoc.rates[patient.provider]) {
+            dailyFee = wardDoc.rates[patient.provider];
+        } else if (wardDoc.rates && wardDoc.rates.Standard) {
+            dailyFee = wardDoc.rates.Standard;
+        }
+
+        if (dailyFee > 0) {
+            const EncounterCharge = require('../models/encounterChargeModel');
+            await EncounterCharge.create({
+                encounter: visit._id,
+                patient: patientId,
+                itemType: 'Daily Bed Fee',
+                itemName: `Initial Ward Charge - ${wardDoc.name} (${patient.provider || 'Standard'})`,
+                cost: dailyFee,
+                quantity: 1,
+                totalAmount: dailyFee,
+                status: 'pending',
+                addedBy: req.user._id
+            });
+        }
     }
 
     res.status(201).json(visit);
@@ -201,7 +215,8 @@ const getVisitsByPatient = async (req, res) => {
         const visits = await Visit.find({ patient: req.params.patientId })
             .sort({ createdAt: -1 })
             .populate('doctor', 'name')
-            .populate('clinic', 'name department');
+            .populate('clinic', 'name department')
+            .populate('ward', 'name');
         res.json(visits);
     } catch (error) {
         res.status(500).json({ message: error.message });

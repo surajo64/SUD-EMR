@@ -52,7 +52,7 @@ const NursingServiceManagement = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        if (!formData.name || !formData.basePrice) {
+        if (!formData.name || !formData.standardFee) {
             toast.error('Please fill in service name and price');
             return;
         }

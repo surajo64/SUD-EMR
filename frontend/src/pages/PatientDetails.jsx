@@ -790,6 +790,56 @@ const PatientDetails = () => {
         printWindow.print();
     };
 
+    // Helper function to get color class for vital signs based on normal ranges
+    const getVitalColorClass = (vitalType, value) => {
+        if (!value || value === '-') return '';
+
+        const numValue = parseFloat(value);
+        if (isNaN(numValue)) return '';
+
+        switch (vitalType) {
+            case 'temperature':
+                // Normal: 36.1-37.2°C
+                if (numValue < 36.1) return 'text-yellow-600 font-semibold';
+                if (numValue > 37.2) return 'text-red-600 font-semibold';
+                return '';
+
+            case 'heartRate':
+                // Normal: 60-100 bpm
+                if (numValue < 60) return 'text-yellow-600 font-semibold';
+                if (numValue > 100) return 'text-red-600 font-semibold';
+                return '';
+
+            case 'respiratoryRate':
+                // Normal: 12-20 breaths/min
+                if (numValue < 12) return 'text-yellow-600 font-semibold';
+                if (numValue > 20) return 'text-red-600 font-semibold';
+                return '';
+
+            case 'spo2':
+                // Normal: ≥95%
+                if (numValue < 95) return 'text-red-600 font-semibold';
+                if (numValue < 90) return 'text-red-700 font-bold';
+                return '';
+
+            case 'bloodPressure':
+                // Parse systolic/diastolic (e.g., "120/80")
+                const parts = value.toString().split('/');
+                if (parts.length === 2) {
+                    const systolic = parseFloat(parts[0]);
+                    const diastolic = parseFloat(parts[1]);
+
+                    // Normal: Systolic 90-120, Diastolic 60-80
+                    if (systolic < 90 || diastolic < 60) return 'text-yellow-600 font-semibold';
+                    if (systolic > 140 || diastolic > 90) return 'text-red-600 font-semibold';
+                }
+                return '';
+
+            default:
+                return '';
+        }
+    };
+
     if (!patient) return <LoadingOverlay />;
 
     return (
@@ -942,43 +992,45 @@ const PatientDetails = () => {
                                         <h3 className="text-xl font-bold mb-4">Vital Signs & Nursing Assessment</h3>
                                         {vitals ? (
                                             <div>
-                                                <div className="grid grid-cols-3 md:grid-cols-6 gap-4 mb-4">
-                                                    {vitals.temperature && (
-                                                        <div className="bg-blue-50 p-3 rounded">
-                                                            <p className="text-xs text-gray-600">Temp (°C)</p>
-                                                            <p className="font-bold">{vitals.temperature}</p>
-                                                        </div>
-                                                    )}
-                                                    {vitals.bloodPressure && (
-                                                        <div className="bg-blue-50 p-3 rounded">
-                                                            <p className="text-xs text-gray-600">BP (mmHg)</p>
-                                                            <p className="font-bold">{vitals.bloodPressure}</p>
-                                                        </div>
-                                                    )}
-                                                    {vitals.heartRate && (
-                                                        <div className="bg-blue-50 p-3 rounded">
-                                                            <p className="text-xs text-gray-600">HR (bpm)</p>
-                                                            <p className="font-bold">{vitals.heartRate}</p>
-                                                        </div>
-                                                    )}
-                                                    {vitals.respiratoryRate && (
-                                                        <div className="bg-blue-50 p-3 rounded">
-                                                            <p className="text-xs text-gray-600">RR</p>
-                                                            <p className="font-bold">{vitals.respiratoryRate}</p>
-                                                        </div>
-                                                    )}
-                                                    {vitals.weight && (
-                                                        <div className="bg-blue-50 p-3 rounded">
-                                                            <p className="text-xs text-gray-600">Weight (kg)</p>
-                                                            <p className="font-bold">{vitals.weight}</p>
-                                                        </div>
-                                                    )}
-                                                    {vitals.height && (
-                                                        <div className="bg-blue-50 p-3 rounded">
-                                                            <p className="text-xs text-gray-600">Height (cm)</p>
-                                                            <p className="font-bold">{vitals.height}</p>
-                                                        </div>
-                                                    )}
+                                                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 mb-4">
+                                                    <div className="bg-blue-50 p-2 rounded text-center">
+                                                        <p className="text-xs text-gray-600">Temp (°C)</p>
+                                                        <p className={`font-bold ${getVitalColorClass('temperature', vitals.temperature)}`}>
+                                                            {vitals.temperature || '-'}
+                                                        </p>
+                                                    </div>
+                                                    <div className="bg-blue-50 p-2 rounded text-center">
+                                                        <p className="text-xs text-gray-600">BP (mmHg)</p>
+                                                        <p className={`font-bold ${getVitalColorClass('bloodPressure', vitals.bloodPressure)}`}>
+                                                            {vitals.bloodPressure || '-'}
+                                                        </p>
+                                                    </div>
+                                                    <div className="bg-blue-50 p-2 rounded text-center">
+                                                        <p className="text-xs text-gray-600">HR (bpm)</p>
+                                                        <p className={`font-bold ${getVitalColorClass('heartRate', vitals.heartRate || vitals.pulseRate)}`}>
+                                                            {vitals.heartRate || vitals.pulseRate || '-'}
+                                                        </p>
+                                                    </div>
+                                                    <div className="bg-blue-50 p-2 rounded text-center">
+                                                        <p className="text-xs text-gray-600">RR (/min)</p>
+                                                        <p className={`font-bold ${getVitalColorClass('respiratoryRate', vitals.respiratoryRate)}`}>
+                                                            {vitals.respiratoryRate || '-'}
+                                                        </p>
+                                                    </div>
+                                                    <div className="bg-blue-50 p-2 rounded text-center">
+                                                        <p className="text-xs text-gray-600">SpO2 (%)</p>
+                                                        <p className={`font-bold ${getVitalColorClass('spo2', vitals.spo2)}`}>
+                                                            {vitals.spo2 || '-'}
+                                                        </p>
+                                                    </div>
+                                                    <div className="bg-blue-50 p-2 rounded text-center">
+                                                        <p className="text-xs text-gray-600">Weight (kg)</p>
+                                                        <p className="font-bold">{vitals.weight || '-'}</p>
+                                                    </div>
+                                                    <div className="bg-blue-50 p-2 rounded text-center">
+                                                        <p className="text-xs text-gray-600">Height (cm)</p>
+                                                        <p className="font-bold">{vitals.height || '-'}</p>
+                                                    </div>
                                                 </div>
                                                 {vitals.nurse && (
                                                     <p className="text-xs text-gray-500 mt-2 italic">

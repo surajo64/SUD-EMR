@@ -85,6 +85,8 @@ const ClaimsManagement = () => {
             if (!user?.token) return;
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const params = {};
+            if (selectedHMO) params.hmo = selectedHMO;
+            if (selectedStatus) params.status = selectedStatus;
             if (startDate) params.startDate = startDate;
             if (endDate) params.endDate = endDate;
 
@@ -453,8 +455,8 @@ const ClaimsManagement = () => {
                             onClick={handlePrintBatchClaims}
                             disabled={!selectedHMO}
                             className={`w-full px-4 py-2 rounded flex items-center justify-center gap-2 ${selectedHMO
-                                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                                 }`}
                             title={!selectedHMO ? 'Select an HMO to print batch claims' : 'Print all claims for selected HMO'}
                         >
