@@ -20,7 +20,8 @@ const AdminDashboard = () => {
         totalInvoices: 0,
         totalReceipts: 0,
         totalRevenue: 0,
-        pendingPayments: 0
+        pendingPayments: 0,
+        pendingHMOAmount: 0
     });
 
     const [revenueByDepartment, setRevenueByDepartment] = useState([]);
@@ -48,6 +49,7 @@ const AdminDashboard = () => {
                 totalReceipts: data.counts.receipts,
                 totalRevenue: data.revenue.total,
                 pendingPayments: data.pendingPayments,
+                pendingHMOAmount: data.pendingHMOAmount,
                 dashboardStats: data
             });
 
@@ -126,7 +128,7 @@ const AdminDashboard = () => {
                             <div className="flex justify-between items-start">
                                 <div>
                                     <p className="text-green-600 text-sm font-semibold mb-2">Total Revenue</p>
-                                    <p className="text-4xl font-bold text-green-800">${stats.totalRevenue.toFixed(2)}</p>
+                                    <p className="text-4xl font-bold text-green-800">₦{stats.totalRevenue.toLocaleString()}</p>
                                     <p className="text-sm text-green-600 mt-2">All-time collected</p>
                                 </div>
                                 <FaDollarSign className="text-5xl text-green-400 opacity-50" />
@@ -138,10 +140,22 @@ const AdminDashboard = () => {
                             <div className="flex justify-between items-start">
                                 <div>
                                     <p className="text-yellow-600 text-sm font-semibold mb-2">Pending Payments</p>
-                                    <p className="text-4xl font-bold text-yellow-800">${stats.pendingPayments.toFixed(2)}</p>
+                                    <p className="text-4xl font-bold text-yellow-800">₦{stats.pendingPayments.toLocaleString()}</p>
                                     <p className="text-sm text-yellow-600 mt-2">Awaiting collection</p>
                                 </div>
                                 <FaFileInvoiceDollar className="text-5xl text-yellow-400 opacity-50" />
+                            </div>
+                        </div>
+
+                        {/* Pending to HMOs */}
+                        <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-lg shadow hover:shadow-md transition">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="text-orange-600 text-sm font-semibold mb-2">Pending to HMOs</p>
+                                    <p className="text-4xl font-bold text-orange-800">₦{stats.pendingHMOAmount.toLocaleString()}</p>
+                                    <p className="text-sm text-orange-600 mt-2">Unpaid insurance claims</p>
+                                </div>
+                                <FaFileInvoiceDollar className="text-5xl text-orange-400 opacity-50" />
                             </div>
                         </div>
 

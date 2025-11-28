@@ -4,6 +4,7 @@ const Prescription = require('../models/prescriptionModel');
 const EncounterCharge = require('../models/encounterChargeModel');
 const Visit = require('../models/visitModel');
 const Patient = require('../models/patientModel');
+const Receipt = require('../models/receiptModel');
 
 // @desc    Get lab revenue report by date range
 // @route   GET /api/reports/lab-revenue?startDate=&endDate=
@@ -222,7 +223,8 @@ const getConsultationRevenue = async (req, res) => {
         })
             .populate('charge')
             .populate('patient', 'name mrn')
-            .populate('encounter') // To get doctor if needed
+            .populate('encounter')
+            .populate('receipt')
             .sort({ createdAt: -1 });
 
         // Filter for consultation charges
@@ -260,12 +262,56 @@ const getConsultationRevenue = async (req, res) => {
             }
         });
 
+        // Calculate pending revenue breakdown
+        let pendingInsuranceRevenue = 0;
+        let pendingPatientRevenue = 0;
+
+        consultationCharges.forEach(c => {
+            if (c.status === 'pending') {
+                if (c.hmoPortion !== undefined || c.patientPortion !== undefined) {
+                    pendingInsuranceRevenue += (c.hmoPortion || 0);
+                    pendingPatientRevenue += (c.patientPortion || 0);
+                } else {
+                    pendingPatientRevenue += (c.totalAmount || 0);
+                }
+            }
+        });
+
+        // Calculate Pending HMO Amount
+        const paidInsuranceCharges = consultationCharges.filter(c =>
+            c.status === 'paid' &&
+            c.receipt?.paymentMethod === 'insurance'
+        );
+        const receiptIds = [...new Set(paidInsuranceCharges.map(c => c.receipt._id).filter(id => id))];
+
+        let pendingHMOAmount = 0;
+        if (receiptIds.length > 0) {
+            const pendingHMOReceipts = await Receipt.aggregate([
+                { $match: { _id: { $in: receiptIds } } },
+                {
+                    $lookup: {
+                        from: 'claims',
+                        localField: 'encounter',
+                        foreignField: 'encounter',
+                        as: 'claim'
+                    }
+                },
+                { $unwind: '$claim' },
+                { $match: { 'claim.status': { $ne: 'paid' } } },
+                { $group: { _id: null, total: { $sum: '$amountPaid' } } }
+            ]);
+            pendingHMOAmount = pendingHMOReceipts[0]?.total || 0;
+        }
+
         res.json({
             summary: {
                 totalConsultations,
                 paidConsultations,
                 totalRevenue,
                 pendingRevenue,
+                pendingInsuranceRevenue,
+                pendingPatientRevenue,
+                pendingHMOAmount,
                 dateRange: { start, end }
             },
             byService,
@@ -361,10 +407,6 @@ const getOverallRevenue = async (req, res) => {
     }
 };
 
-const User = require('../models/userModel');
-const Receipt = require('../models/receiptModel');
-
-// ... (keep existing imports)
 
 // @desc    Get dashboard statistics
 // @route   GET /api/reports/dashboard-stats

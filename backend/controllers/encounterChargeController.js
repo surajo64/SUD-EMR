@@ -23,6 +23,8 @@ const addChargeToEncounter = async (req, res) => {
 
         // Determine fee based on provider
         let fee = 0;
+        let isCovered = true; // Flag to track if service is covered by insurance
+
         switch (patient.provider) {
             case 'Retainership':
                 fee = charge.retainershipFee;
@@ -39,7 +41,13 @@ const addChargeToEncounter = async (req, res) => {
                 break;
         }
 
-        // Fallback to basePrice if fee is 0
+        // Check if fee is 0 (not covered) for insurance/retainership patients
+        if (fee === 0 && patient.provider !== 'Standard') {
+            isCovered = false;
+            fee = charge.standardFee || charge.basePrice; // Fallback to standard fee
+        }
+
+        // Fallback to basePrice if fee is still 0 (shouldn't happen if standardFee is set)
         if (fee === 0 && charge.basePrice) {
             fee = charge.basePrice;
         }
@@ -50,7 +58,11 @@ const addChargeToEncounter = async (req, res) => {
         let patientPortion = totalAmount;
         let hmoPortion = 0;
 
-        if (patient.provider === 'Retainership') {
+        if (!isCovered) {
+            // If not covered (fee was 0), patient pays 100%
+            patientPortion = totalAmount;
+            hmoPortion = 0;
+        } else if (patient.provider === 'Retainership') {
             // Retainership: HMO covers 100% of ALL charges (including drugs)
             patientPortion = 0;
             hmoPortion = totalAmount;

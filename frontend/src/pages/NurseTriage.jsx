@@ -246,6 +246,56 @@ const NurseTriage = () => {
         });
     };
 
+    // Helper function to get color class for vital signs based on normal ranges
+    const getVitalColorClass = (vitalType, value) => {
+        if (!value || value === '-') return '';
+
+        const numValue = parseFloat(value);
+        if (isNaN(numValue)) return '';
+
+        switch (vitalType) {
+            case 'temperature':
+                // Normal: 36.1-37.2°C
+                if (numValue < 36.1) return 'text-yellow-600 font-semibold';
+                if (numValue > 37.2) return 'text-red-600 font-semibold';
+                return '';
+
+            case 'heartRate':
+                // Normal: 60-100 bpm
+                if (numValue < 60) return 'text-yellow-600 font-semibold';
+                if (numValue > 100) return 'text-red-600 font-semibold';
+                return '';
+
+            case 'respiratoryRate':
+                // Normal: 12-20 breaths/min
+                if (numValue < 12) return 'text-yellow-600 font-semibold';
+                if (numValue > 20) return 'text-red-600 font-semibold';
+                return '';
+
+            case 'spo2':
+                // Normal: ≥95%
+                if (numValue < 95) return 'text-red-600 font-semibold';
+                if (numValue < 90) return 'text-red-700 font-bold';
+                return '';
+
+            case 'bloodPressure':
+                // Parse systolic/diastolic (e.g., "120/80")
+                const parts = value.toString().split('/');
+                if (parts.length === 2) {
+                    const systolic = parseFloat(parts[0]);
+                    const diastolic = parseFloat(parts[1]);
+
+                    // Normal: Systolic 90-120, Diastolic 60-80
+                    if (systolic < 90 || diastolic < 60) return 'text-yellow-600 font-semibold';
+                    if (systolic > 140 || diastolic > 90) return 'text-red-600 font-semibold';
+                }
+                return '';
+
+            default:
+                return '';
+        }
+    };
+
     const handleRecordVitals = async () => {
         // Check if at least one vital is entered
         if (!vitals.temperature && !vitals.bloodPressure && !vitals.heartRate && !vitals.weight && !vitals.respiratoryRate && !vitals.height && !vitals.spo2) {
@@ -489,16 +539,7 @@ const NurseTriage = () => {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
 
-            // 1. Save Vitals (if any new ones entered)
-            if (vitals.temperature || vitals.bloodPressure || vitals.heartRate || vitals.respiratoryRate || vitals.weight || vitals.height) {
-                await axios.post('http://localhost:5000/api/vitals', {
-                    visitId: selectedEncounter._id,
-                    patientId: selectedPatient._id,
-                    ...vitals
-                }, config);
-            }
-
-            // 2. Update Visit Status to 'with_doctor' AND save Nursing Notes
+            // Update Visit Status to 'with_doctor' AND save Nursing Notes
             await axios.put(`http://localhost:5000/api/visits/${selectedEncounter._id}`, {
                 encounterStatus: 'with_doctor',
                 nursingNotes: JSON.stringify(nursingNotesList) // Save structured notes
@@ -692,13 +733,13 @@ const NurseTriage = () => {
                                             <thead className="bg-gray-100">
                                                 <tr>
                                                     <th className="p-2">Time</th>
-                                                    <th className="p-2">BP</th>
-                                                    <th className="p-2">Temp</th>
-                                                    <th className="p-2">HR</th>
-                                                    <th className="p-2">RR</th>
-                                                    <th className="p-2">SpO2</th>
-                                                    <th className="p-2">Wt</th>
-                                                    <th className="p-2">Ht</th>
+                                                    <th className="p-2">BP (mmHg)</th>
+                                                    <th className="p-2">Temp (°C)</th>
+                                                    <th className="p-2">HR (bpm)</th>
+                                                    <th className="p-2">RR (/min)</th>
+                                                    <th className="p-2">SpO2 (%)</th>
+                                                    <th className="p-2">Wt (kg)</th>
+                                                    <th className="p-2">Ht (cm)</th>
                                                     <th className="p-2">Nurse</th>
                                                     <th className="p-2">Action</th>
                                                 </tr>
@@ -707,11 +748,21 @@ const NurseTriage = () => {
                                                 {existingVitals.map((v, idx) => (
                                                     <tr key={idx} className="border-b">
                                                         <td className="p-2">{new Date(v.createdAt).toLocaleTimeString()}</td>
-                                                        <td className="p-2">{v.bloodPressure || '-'}</td>
-                                                        <td className="p-2">{v.temperature ? `${v.temperature}°C` : '-'}</td>
-                                                        <td className="p-2">{v.pulseRate || '-'}</td>
-                                                        <td className="p-2">{v.respiratoryRate || '-'}</td>
-                                                        <td className="p-2">{v.spo2 ? `${v.spo2}%` : '-'}</td>
+                                                        <td className={`p-2 ${getVitalColorClass('bloodPressure', v.bloodPressure)}`}>
+                                                            {v.bloodPressure || '-'}
+                                                        </td>
+                                                        <td className={`p-2 ${getVitalColorClass('temperature', v.temperature)}`}>
+                                                            {v.temperature ? `${v.temperature}` : '-'}
+                                                        </td>
+                                                        <td className={`p-2 ${getVitalColorClass('heartRate', v.pulseRate)}`}>
+                                                            {v.pulseRate || '-'}
+                                                        </td>
+                                                        <td className={`p-2 ${getVitalColorClass('respiratoryRate', v.respiratoryRate)}`}>
+                                                            {v.respiratoryRate || '-'}
+                                                        </td>
+                                                        <td className={`p-2 ${getVitalColorClass('spo2', v.spo2)}`}>
+                                                            {v.spo2 ? `${v.spo2}` : '-'}
+                                                        </td>
                                                         <td className="p-2">{v.weight || '-'}</td>
                                                         <td className="p-2">{v.height || '-'}</td>
                                                         <td className="p-2">{v.nurse?.name || 'Unknown'}</td>

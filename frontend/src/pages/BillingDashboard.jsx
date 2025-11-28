@@ -26,7 +26,6 @@ const BillingDashboard = () => {
     const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
     const [depositSearchTerm, setDepositSearchTerm] = useState('');
 
-    // Retainership Billing State
     const [retainershipSearchTerm, setRetainershipSearchTerm] = useState('');
     const [retainershipHMOs, setRetainershipHMOs] = useState([]);
     const [selectedHMO, setSelectedHMO] = useState(null);
@@ -35,6 +34,8 @@ const BillingDashboard = () => {
     const [hmoDepositAmount, setHmoDepositAmount] = useState('');
     const [hmoDepositDescription, setHmoDepositDescription] = useState('Deposit');
     const [hmoDepositReference, setHmoDepositReference] = useState('');
+    const [statementStartDate, setStatementStartDate] = useState('');
+    const [statementEndDate, setStatementEndDate] = useState('');
 
     const { user } = useContext(AuthContext);
 
@@ -81,7 +82,7 @@ const BillingDashboard = () => {
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const { data } = await axios.get('http://localhost:5000/api/receipts', config);
+            const { data } = await axios.get('http://localhost:5000/api/receipts/with-claim-status', config);
             setReceipts(data);
         } catch (error) {
             console.error(error);
@@ -126,8 +127,12 @@ const BillingDashboard = () => {
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const { data } = await axios.get(`http://localhost:5000/api/hmo-transactions/statement/${hmoId}`, config);
-            setHmoStatement(data);
+            let url = `http://localhost:5000/api/hmo-transactions/statement/${hmoId}`;
+            if (statementStartDate && statementEndDate) {
+                url += `?startDate=${statementStartDate}&endDate=${statementEndDate}`;
+            }
+            const response = await axios.get(url, config);
+            setHmoStatement(response.data);
         } catch (error) {
             console.error(error);
             toast.error('Error fetching HMO statement');
@@ -374,8 +379,26 @@ const BillingDashboard = () => {
         printWindow.print();
     };
 
-    const totalCollectedToday = receipts
+    // Filter receipts:
+    // Collected: Cash, Deposit, Retainership, OR Insurance where claim is PAID
+    // Pending HMO: Insurance where claim is NOT PAID
+
+    const collectedReceipts = receipts.filter(r => {
+        if (r.paymentMethod === 'insurance') {
+            return r.claimStatus === 'paid';
+        }
+        return true;
+    });
+
+    const pendingHMOReceipts = receipts.filter(r => {
+        return r.paymentMethod === 'insurance' && r.claimStatus !== 'paid';
+    });
+
+    const totalCollectedToday = collectedReceipts
         .filter(r => new Date(r.createdAt).toDateString() === new Date().toDateString())
+        .reduce((sum, r) => sum + r.amountPaid, 0);
+
+    const totalPendingHMO = pendingHMOReceipts
         .reduce((sum, r) => sum + r.amountPaid, 0);
 
     const totalReceiptsToday = receipts.filter(r => new Date(r.createdAt).toDateString() === new Date().toDateString()).length;
@@ -431,10 +454,15 @@ const BillingDashboard = () => {
             {activeTab === 'invoices' ? (
                 <>
                     {/* Summary Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                         <div className="bg-green-50 p-6 rounded shadow">
                             <p className="text-green-700 text-sm font-semibold">Collected Today</p>
                             <p className="text-3xl font-bold text-green-800">₦{totalCollectedToday.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-yellow-50 p-6 rounded shadow">
+                            <p className="text-yellow-700 text-sm font-semibold">Pending to HMOs</p>
+                            <p className="text-3xl font-bold text-yellow-800">₦{totalPendingHMO.toLocaleString()}</p>
+                            <p className="text-xs text-yellow-600 mt-1">{pendingHMOReceipts.length} pending receipts</p>
                         </div>
                         <div className="bg-blue-50 p-6 rounded shadow">
                             <p className="text-blue-700 text-sm font-semibold">Total Receipts Today</p>
@@ -755,7 +783,14 @@ const BillingDashboard = () => {
                                                     {receipt.charges?.map(c => c.charge?.name || 'Service').join(', ') || 'N/A'}
                                                 </td>
                                                 <td className="p-3 border-b text-green-600 font-bold">₦{receipt.amountPaid.toFixed(2)}</td>
-                                                <td className="p-3 border-b capitalize">{receipt.paymentMethod}</td>
+                                                <td className="p-3 border-b capitalize">
+                                                    {receipt.paymentMethod}
+                                                    {receipt.paymentMethod === 'insurance' && receipt.claimStatus !== 'paid' && (
+                                                        <span className="ml-2 bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">
+                                                            Pending HMO
+                                                        </span>
+                                                    )}
+                                                </td>
                                                 <td className="p-3 border-b text-sm">{receipt.cashier?.name || 'N/A'}</td>
                                                 <td className="p-3 border-b text-sm">{new Date(receipt.paymentDate).toLocaleTimeString()}</td>
                                                 <td className="p-3 border-b">
@@ -870,6 +905,126 @@ const BillingDashboard = () => {
                                     </button>
                                 </div>
 
+                                {/* Date Range Filter */}
+                                <div className="flex gap-4 items-end mb-6 bg-gray-50 p-4 rounded border">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Start Date</label>
+                                        <input
+                                            type="date"
+                                            value={statementStartDate}
+                                            onChange={(e) => setStatementStartDate(e.target.value)}
+                                            className="border p-2 rounded text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">End Date</label>
+                                        <input
+                                            type="date"
+                                            value={statementEndDate}
+                                            onChange={(e) => setStatementEndDate(e.target.value)}
+                                            className="border p-2 rounded text-sm"
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={() => fetchHMOStatement(selectedHMO._id)}
+                                        className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 text-sm font-semibold h-10"
+                                    >
+                                        Filter Statement
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setStatementStartDate('');
+                                            setStatementEndDate('');
+                                            fetchHMOStatement(selectedHMO._id);
+                                        }}
+                                        className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 text-sm font-semibold h-10"
+                                    >
+                                        Clear
+                                    </button>
+                                    <div className="flex-1 text-right">
+                                        <button
+                                            onClick={() => {
+                                                const printWindow = window.open('', '', 'width=800,height=600');
+                                                printWindow.document.write(`
+                                                    <html>
+                                                        <head>
+                                                            <title>Retainership Statement - ${selectedHMO.name}</title>
+                                                            <style>
+                                                                body { font-family: sans-serif; padding: 20px; }
+                                                                .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+                                                                .hmo-info { margin-bottom: 20px; }
+                                                                .summary-box { display: flex; justify-content: space-between; margin-bottom: 30px; background: #f9f9f9; padding: 15px; border: 1px solid #ddd; }
+                                                                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+                                                                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                                                                th { background-color: #f2f2f2; }
+                                                                .credit { color: green; }
+                                                                .debit { color: red; }
+                                                                .text-right { text-align: right; }
+                                                            </style>
+                                                        </head>
+                                                        <body>
+                                                            <div class="header">
+                                                                <h1>SUD EMR HOSPITAL</h1>
+                                                                <h2>Retainership Account Statement</h2>
+                                                                ${statementStartDate && statementEndDate ? `<p>Period: ${new Date(statementStartDate).toLocaleDateString()} to ${new Date(statementEndDate).toLocaleDateString()}</p>` : ''}
+                                                            </div>
+                                                            
+                                                            <div class="hmo-info">
+                                                                <h3>${selectedHMO.name}</h3>
+                                                                <p>Category: ${selectedHMO.category}</p>
+                                                                <p>Contact: ${selectedHMO.contactPerson || 'N/A'}</p>
+                                                            </div>
+
+                                                            <div class="summary-box">
+                                                                <div><strong>Total Deposits:</strong> ₦${hmoStatement.summary.totalDeposits.toLocaleString()}</div>
+                                                                <div><strong>Total Utilized:</strong> ₦${hmoStatement.summary.totalCharges.toLocaleString()}</div>
+                                                                <div><strong>Balance:</strong> ₦${hmoStatement.summary.balance.toLocaleString()}</div>
+                                                            </div>
+
+                                                            <h3>Transaction History</h3>
+                                                            <table>
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th>Date</th>
+                                                                        <th>Type</th>
+                                                                        <th>Patient</th>
+                                                                        <th>Service Name</th>
+                                                                        <th>Description</th>
+                                                                        <th>Reference</th>
+                                                                        <th class="text-right">Amount</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    ${hmoStatement.transactions.map(tx => `
+                                                                        <tr>
+                                                                            <td>${new Date(tx.date).toLocaleDateString()}</td>
+                                                                            <td><strong>${tx.type}</strong></td>
+                                                                            <td>${tx.patientName}</td>
+                                                                            <td><strong>${tx.serviceName || 'Deposit'}</strong></td>
+                                                                            <td>${tx.description || 'Service'}</td>
+                                                                            <td>${tx.reference || '-'}</td>
+                                                                            <td class="text-right ${tx.isCredit ? 'credit' : 'debit'}">
+                                                                                ${tx.isCredit ? '+' : '-'}₦${tx.amount.toLocaleString()}
+                                                                            </td>
+                                                                        </tr>
+                                                                    `).join('')}
+                                                                </tbody>
+                                                            </table>
+                                                            
+                                                            <p style="margin-top: 30px; font-size: 12px; text-align: center;">Generated on ${new Date().toLocaleString()}</p>
+                                                        </body>
+                                                    </html>
+                                                `);
+                                                printWindow.document.close();
+                                                printWindow.print();
+                                            }}
+                                            className="bg-gray-800 text-white px-4 py-2 rounded hover:bg-gray-900 text-sm font-semibold h-10 flex items-center gap-2 ml-auto"
+                                        >
+                                            <FaPrint /> Print Statement
+                                        </button>
+                                    </div>
+                                </div>
+
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                     <div className="bg-green-50 p-6 rounded shadow border-l-4 border-green-500">
                                         <p className="text-green-700 text-sm font-semibold flex items-center gap-2">
@@ -910,6 +1065,7 @@ const BillingDashboard = () => {
                                                 <th className="p-3 border-b">Date</th>
                                                 <th className="p-3 border-b">Type</th>
                                                 <th className="p-3 border-b">Patient</th>
+                                                <th className="p-3 border-b">Service Name</th>
                                                 <th className="p-3 border-b">Description</th>
                                                 <th className="p-3 border-b">Reference</th>
                                                 <th className="p-3 border-b text-right">Amount</th>
@@ -918,7 +1074,7 @@ const BillingDashboard = () => {
                                         <tbody>
                                             {hmoStatement.transactions.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan="6" className="p-8 text-center text-gray-500">
+                                                    <td colSpan="7" className="p-8 text-center text-gray-500">
                                                         No transactions found
                                                     </td>
                                                 </tr>
@@ -936,6 +1092,9 @@ const BillingDashboard = () => {
                                                         </td>
                                                         <td className="p-3 border-b font-semibold text-gray-700">
                                                             {tx.patientName}
+                                                        </td>
+                                                        <td className="p-3 border-b text-sm font-bold text-blue-700">
+                                                            {tx.serviceName || 'Deposit'}
                                                         </td>
                                                         <td className="p-3 border-b text-sm text-gray-600">
                                                             {tx.description}

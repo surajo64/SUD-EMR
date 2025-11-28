@@ -2,9 +2,10 @@ import { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import Layout from '../components/Layout';
-import { FaFileInvoiceDollar, FaFilter, FaDownload, FaEye, FaCheck, FaTimes, FaMoneyBillWave } from 'react-icons/fa';
+import { FaFileInvoiceDollar, FaFilter, FaDownload, FaEye, FaCheck, FaTimes, FaMoneyBillWave, FaPrint } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx';
+import LoadingOverlay from '../components/loadingOverlay';
 
 const ClaimsManagement = () => {
     const { user } = useContext(AuthContext);
@@ -26,23 +27,30 @@ const ClaimsManagement = () => {
     const [newStatus, setNewStatus] = useState('');
     const [rejectionReason, setRejectionReason] = useState('');
     const [notes, setNotes] = useState('');
+    const [defaultBank, setDefaultBank] = useState(null);
 
     useEffect(() => {
-        fetchHMOs();
-        fetchClaims();
-        fetchSummary();
-    }, []);
+        if (user?.token) {
+            fetchHMOs();
+            fetchClaims();
+            fetchSummary();
+            fetchDefaultBank();
+        }
+    }, [user]);
 
     useEffect(() => {
-        fetchClaims();
-        fetchSummary();
-    }, [selectedHMO, selectedStatus, startDate, endDate]);
+        if (user?.token) {
+            fetchClaims();
+            fetchSummary();
+        }
+    }, [selectedHMO, selectedStatus, startDate, endDate, user]);
 
     const fetchHMOs = async () => {
         try {
+            if (!user?.token) return;
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const { data } = await axios.get('http://localhost:5000/api/hmos', config);
-            setHMOs(data.filter(hmo => hmo.active));
+            setHMOs(data.filter(hmo => hmo.active && hmo.category !== 'Retainership'));
         } catch (error) {
             console.error(error);
         }
@@ -50,6 +58,10 @@ const ClaimsManagement = () => {
 
     const fetchClaims = async () => {
         try {
+            if (!user?.token) {
+                console.log('User not authenticated');
+                return;
+            }
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const params = {};
@@ -70,6 +82,7 @@ const ClaimsManagement = () => {
 
     const fetchSummary = async () => {
         try {
+            if (!user?.token) return;
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const params = {};
             if (startDate) params.startDate = startDate;
@@ -155,6 +168,190 @@ const ClaimsManagement = () => {
         }
     };
 
+    const fetchDefaultBank = async () => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get('http://localhost:5000/api/banks/default', config);
+            setDefaultBank(data);
+        } catch (error) {
+            console.error('No default bank set:', error);
+        }
+    };
+
+    const handlePrintClaim = async (claimId) => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get(`http://localhost:5000/api/claims/${claimId}`, config);
+
+            const printWindow = window.open('', '', 'width=800,height=600');
+            printWindow.document.write(`
+                <html>
+                <head>
+                    <title>Claim Statement - ${data.claimNumber}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 20px; }
+                        .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+                        .header h1 { margin: 0; color: #2d5016; }
+                        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+                        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                        th { background-color: #f2f2f2; font-weight: bold; }
+                        .total-row { font-weight: bold; background-color: #f9f9f9; }
+                        .bank-details { background-color: #f0f8ff; padding: 15px; border-radius: 5px; margin: 20px 0; }
+                        @media print { button { display: none; } }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h1>SUD EMR - HMO Claim Statement</h1>
+                        <p>Claim: ${data.claimNumber} | Date: ${new Date().toLocaleDateString()}</p>
+                    </div>
+                    <p><strong>Patient:</strong> ${data.patient?.name || 'N/A'} (MRN: ${data.patient?.mrn || 'N/A'})</p>
+                    <p><strong>HMO:</strong> ${data.hmo?.name || 'N/A'}</p>
+                    <table>
+                        <thead><tr><th>Service</th><th>Type</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead>
+                        <tbody>
+                            ${data.claimItems.map(item => `
+                                <tr>
+                                    <td>${item.description}</td>
+                                    <td>${item.chargeType}</td>
+                                    <td>${item.quantity}</td>
+                                    <td>₦${item.unitPrice.toLocaleString()}</td>
+                                    <td>₦${item.totalAmount.toLocaleString()}</td>
+                                </tr>
+                            `).join('')}
+                            <tr class="total-row">
+                                <td colspan="4" style="text-align: right;">Total:</td>
+                                <td>₦${data.totalClaimAmount.toLocaleString()}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    ${defaultBank ? `
+                    <div class="bank-details">
+                        <h3>Payment Details</h3>
+                        <p><strong>Bank:</strong> ${defaultBank.bankName}</p>
+                        <p><strong>Account Name:</strong> ${defaultBank.accountName}</p>
+                        <p><strong>Account Number:</strong> ${defaultBank.accountNumber}</p>
+                        ${defaultBank.branchName ? `<p><strong>Branch:</strong> ${defaultBank.branchName}</p>` : ''}
+                    </div>
+                    ` : '<p style="color: red;">No bank details available.</p>'}
+                    <div style="text-align: center; margin: 20px;">
+                        <button onclick="window.print()" style="padding: 10px 20px; background: #2d5016; color: white; border: none; border-radius: 5px; cursor: pointer;">Print</button>
+                        <button onclick="window.close()" style="padding: 10px 20px; background: #666; color: white; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px;">Close</button>
+                    </div>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+        } catch (error) {
+            console.error(error);
+            toast.error('Error generating claim statement');
+        }
+    };
+
+    const handlePrintBatchClaims = async () => {
+        try {
+            if (!selectedHMO) {
+                toast.error('Please select an HMO to print batch claims');
+                return;
+            }
+
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const params = { hmo: selectedHMO };
+            if (startDate) params.startDate = startDate;
+            if (endDate) params.endDate = endDate;
+
+            const { data } = await axios.get('http://localhost:5000/api/claims', { ...config, params });
+
+            if (data.length === 0) {
+                toast.error('No claims found for the selected HMO');
+                return;
+            }
+
+            const hmoName = hmos.find(h => h._id === selectedHMO)?.name || 'HMO';
+            const grandTotal = data.reduce((sum, claim) => sum + claim.totalClaimAmount, 0);
+
+            const printWindow = window.open('', '', 'width=1000,height=800');
+            printWindow.document.write(`
+                <html>
+                <head>
+                    <title>Batch Claim Statement - ${hmoName}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 20px; }
+                        .header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #2d5016; padding-bottom: 15px; }
+                        .header h1 { margin: 0; color: #2d5016; font-size: 24px; }
+                        .patient-section { margin: 30px 0; page-break-inside: avoid; border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
+                        .patient-header { background-color: #f5f5f5; padding: 10px; margin: -15px -15px 15px -15px; }
+                        .patient-header h3 { margin: 0; color: #2d5016; }
+                        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+                        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }
+                        th { background-color: #f2f2f2; font-weight: bold; }
+                        .subtotal-row { font-weight: bold; background-color: #f9f9f9; }
+                        .grand-total { background-color: #2d5016; color: white; padding: 20px; margin: 30px 0; text-align: center; border-radius: 5px; }
+                        .grand-total h2 { margin: 0; font-size: 28px; }
+                        .bank-details { background-color: #f0f8ff; padding: 20px; border-radius: 5px; margin: 20px 0; border: 2px solid #2d5016; }
+                        @media print { button { display: none; } .patient-section { page-break-inside: avoid; } }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h1>SUD EMR - CONSOLIDATED HMO CLAIM STATEMENT</h1>
+                        <p><strong>HMO:</strong> ${hmoName}</p>
+                        <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
+                        <p><strong>Total Claims:</strong> ${data.length} patients</p>
+                    </div>
+                    ${data.map((claim, index) => `
+                        <div class="patient-section">
+                            <div class="patient-header">
+                                <h3>Patient ${index + 1}: ${claim.patient?.name || 'N/A'}</h3>
+                                <p style="margin: 5px 0 0 0;"><strong>MRN:</strong> ${claim.patient?.mrn || 'N/A'} | <strong>Claim #:</strong> ${claim.claimNumber}</p>
+                            </div>
+                            <table>
+                                <thead><tr><th>Service</th><th>Type</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead>
+                                <tbody>
+                                    ${claim.claimItems.map(item => `
+                                        <tr>
+                                            <td>${item.description}</td>
+                                            <td>${item.chargeType}</td>
+                                            <td>${item.quantity}</td>
+                                            <td>₦${item.unitPrice.toLocaleString()}</td>
+                                            <td>₦${item.totalAmount.toLocaleString()}</td>
+                                        </tr>
+                                    `).join('')}
+                                    <tr class="subtotal-row">
+                                        <td colspan="4" style="text-align: right;">Subtotal:</td>
+                                        <td>₦${claim.totalClaimAmount.toLocaleString()}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    `).join('')}
+                    <div class="grand-total">
+                        <h2>GRAND TOTAL: ₦${grandTotal.toLocaleString()}</h2>
+                        <p style="margin: 10px 0 0 0;">Total payable by ${hmoName}</p>
+                    </div>
+                    ${defaultBank ? `
+                    <div class="bank-details">
+                        <h3>PAYMENT INSTRUCTIONS</h3>
+                        <p><strong>Bank:</strong> ${defaultBank.bankName}</p>
+                        <p><strong>Account Name:</strong> ${defaultBank.accountName}</p>
+                        <p><strong>Account Number:</strong> ${defaultBank.accountNumber}</p>
+                        ${defaultBank.branchName ? `<p><strong>Branch:</strong> ${defaultBank.branchName}</p>` : ''}
+                    </div>
+                    ` : '<p style="color: red;">No bank details available.</p>'}
+                    <div style="text-align: center; margin: 30px;">
+                        <button onclick="window.print()" style="padding: 12px 30px; background: #2d5016; color: white; border: none; border-radius: 5px; cursor: pointer;">Print</button>
+                        <button onclick="window.close()" style="padding: 12px 30px; background: #666; color: white; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px;">Close</button>
+                    </div>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+        } catch (error) {
+            console.error(error);
+            toast.error('Error generating batch claim statement');
+        }
+    };
+
     const getStatusBadgeClass = (status) => {
         const classes = {
             pending: 'bg-yellow-100 text-yellow-800',
@@ -168,6 +365,7 @@ const ClaimsManagement = () => {
 
     return (
         <Layout>
+            {loading && <LoadingOverlay />}
             <div className="mb-6">
                 <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                     <FaFileInvoiceDollar className="text-green-600" /> HMO Claims Management
@@ -203,7 +401,7 @@ const ClaimsManagement = () => {
                     <FaFilter className="text-gray-600" />
                     <h3 className="font-semibold text-gray-800">Filters</h3>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">HMO</label>
                         <select
@@ -224,7 +422,7 @@ const ClaimsManagement = () => {
                             onChange={(e) => setSelectedStatus(e.target.value)}
                             className="w-full border p-2 rounded"
                         >
-                            <option value="">All Statuses</option>
+                            <option value="">All Status</option>
                             <option value="pending">Pending</option>
                             <option value="submitted">Submitted</option>
                             <option value="approved">Approved</option>
@@ -249,6 +447,19 @@ const ClaimsManagement = () => {
                             onChange={(e) => setEndDate(e.target.value)}
                             className="w-full border p-2 rounded"
                         />
+                    </div>
+                    <div className="flex items-end">
+                        <button
+                            onClick={handlePrintBatchClaims}
+                            disabled={!selectedHMO}
+                            className={`w-full px-4 py-2 rounded flex items-center justify-center gap-2 ${selectedHMO
+                                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                }`}
+                            title={!selectedHMO ? 'Select an HMO to print batch claims' : 'Print all claims for selected HMO'}
+                        >
+                            <FaPrint /> Print Batch
+                        </button>
                     </div>
                     <div className="flex items-end">
                         <button
@@ -290,11 +501,11 @@ const ClaimsManagement = () => {
                                     <tr key={claim._id} className="border-b hover:bg-gray-50">
                                         <td className="p-3 font-semibold text-blue-600">{claim.claimNumber}</td>
                                         <td className="p-3">
-                                            <p className="font-semibold">{claim.patient.firstName} {claim.patient.lastName}</p>
-                                            <p className="text-xs text-gray-600">{claim.patient.patientId}</p>
+                                            <p className="font-semibold">{claim.patient?.name || 'N/A'}</p>
+                                            <p className="text-xs text-gray-600">{claim.patient?.mrn || 'N/A'}</p>
                                         </td>
                                         <td className="p-3">{claim.hmo.name}</td>
-                                        <td className="p-3">{new Date(claim.encounter.encounterDate).toLocaleDateString()}</td>
+                                        <td className="p-3">{new Date(claim.encounter.createdAt).toLocaleDateString()}</td>
                                         <td className="p-3 font-semibold text-green-600">₦{claim.totalClaimAmount.toLocaleString()}</td>
                                         <td className="p-3">
                                             <span className={`px-2 py-1 rounded text-xs font-semibold ${getStatusBadgeClass(claim.status)}`}>
@@ -302,12 +513,21 @@ const ClaimsManagement = () => {
                                             </span>
                                         </td>
                                         <td className="p-3">
-                                            <button
-                                                onClick={() => handleViewDetails(claim._id)}
-                                                className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
-                                            >
-                                                <FaEye /> View
-                                            </button>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => handleViewDetails(claim._id)}
+                                                    className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
+                                                >
+                                                    <FaEye /> View
+                                                </button>
+                                                <button
+                                                    onClick={() => handlePrintClaim(claim._id)}
+                                                    className="text-green-600 hover:text-green-800 flex items-center gap-1 text-sm"
+                                                    title="Print Claim Statement"
+                                                >
+                                                    <FaPrint /> Print
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))
@@ -332,8 +552,8 @@ const ClaimsManagement = () => {
                         <div className="grid grid-cols-2 gap-4 mb-6 bg-gray-50 p-4 rounded">
                             <div>
                                 <p className="text-sm text-gray-600">Patient</p>
-                                <p className="font-semibold">{selectedClaim.patient.firstName} {selectedClaim.patient.lastName}</p>
-                                <p className="text-sm text-gray-600">{selectedClaim.patient.patientId}</p>
+                                <p className="font-semibold">{selectedClaim.patient?.name || 'N/A'}</p>
+                                <p className="text-sm text-gray-600">MRN: {selectedClaim.patient?.mrn || 'N/A'}</p>
                             </div>
                             <div>
                                 <p className="text-sm text-gray-600">HMO</p>

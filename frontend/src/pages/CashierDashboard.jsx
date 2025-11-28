@@ -38,7 +38,7 @@ const CashierDashboard = () => {
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const { data } = await axios.get('http://localhost:5000/api/receipts', config);
+            const { data } = await axios.get('http://localhost:5000/api/receipts/with-claim-status', config);
             setReceipts(data);
         } catch (error) {
             console.error(error);
@@ -199,7 +199,6 @@ const CashierDashboard = () => {
                         <p>123 Hospital Road, City</p>
                         <h3>PAYMENT RECEIPT</h3>
                     </div>
-                    
                     <div class="info-row"><span>Receipt #:</span> <strong>${receipt.receiptNumber}</strong></div>
                     <div class="info-row"><span>Date:</span> <span>${new Date(receipt.paymentDate).toLocaleString()}</span></div>
                     <div class="info-row"><span>Patient:</span> <strong>${receipt.patient?.name}</strong></div>
@@ -243,17 +242,28 @@ const CashierDashboard = () => {
         printWindow.print();
     };
 
-
-
-
     // --- Render Helpers ---
 
     const totalSelectedAmount = encounterCharges
         .filter(charge => selectedCharges.includes(charge._id))
         .reduce((sum, charge) => sum + (charge.patientPortion !== undefined ? charge.patientPortion : charge.totalAmount), 0);
 
-    const totalCollectedToday = receipts
+    const collectedReceipts = receipts.filter(r => {
+        if (r.paymentMethod === 'insurance') {
+            return r.claimStatus === 'paid';
+        }
+        return true;
+    });
+
+    const pendingHMOReceipts = receipts.filter(r => {
+        return r.paymentMethod === 'insurance' && r.claimStatus !== 'paid';
+    });
+
+    const totalCollectedToday = collectedReceipts
         .filter(r => new Date(r.createdAt).toDateString() === new Date().toDateString())
+        .reduce((sum, r) => sum + r.amountPaid, 0);
+
+    const totalPendingHMO = pendingHMOReceipts
         .reduce((sum, r) => sum + r.amountPaid, 0);
 
     const pendingCharges = encounterCharges.filter(charge => charge.status === 'pending');
@@ -270,10 +280,15 @@ const CashierDashboard = () => {
 
 
             {/* Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <div className="bg-green-50 p-6 rounded shadow">
                     <p className="text-green-700 text-sm font-semibold">Collected Today</p>
-                    <p className="text-3xl font-bold text-green-800">₦{totalCollectedToday.toFixed(2)}</p>
+                    <p className="text-3xl font-bold text-green-800">₦{totalCollectedToday.toLocaleString()}</p>
+                </div>
+                <div className="bg-yellow-50 p-6 rounded shadow">
+                    <p className="text-yellow-700 text-sm font-semibold">Pending to HMOs</p>
+                    <p className="text-3xl font-bold text-yellow-800">₦{totalPendingHMO.toLocaleString()}</p>
+                    <p className="text-xs text-yellow-600 mt-1">{pendingHMOReceipts.length} pending receipts</p>
                 </div>
                 <div className="bg-blue-50 p-6 rounded shadow">
                     <p className="text-blue-700 text-sm font-semibold">Total Receipts Today</p>
@@ -512,7 +527,14 @@ const CashierDashboard = () => {
                                         <td className="p-3 border-b font-mono text-sm">{receipt.receiptNumber}</td>
                                         <td className="p-3 border-b font-semibold">{receipt.patient?.name}</td>
                                         <td className="p-3 border-b text-green-600 font-bold">₦{receipt.amountPaid.toFixed(2)}</td>
-                                        <td className="p-3 border-b capitalize">{receipt.paymentMethod}</td>
+                                        <td className="p-3 border-b capitalize">
+                                            {receipt.paymentMethod}
+                                            {receipt.paymentMethod === 'insurance' && receipt.claimStatus !== 'paid' && (
+                                                <span className="ml-2 bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded">
+                                                    Pending HMO
+                                                </span>
+                                            )}
+                                        </td>
                                         <td className="p-3 border-b text-sm">{receipt.cashier?.name || 'N/A'}</td>
                                         <td className="p-3 border-b text-sm">{new Date(receipt.paymentDate).toLocaleTimeString()}</td>
                                         <td className="p-3 border-b">
@@ -540,7 +562,7 @@ const CashierDashboard = () => {
                 </div>
             </div>
 
-        </Layout >
+        </Layout>
     );
 };
 

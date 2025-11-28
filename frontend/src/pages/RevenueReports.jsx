@@ -221,7 +221,7 @@ const RevenueReports = () => {
                 ) : reportData ? (
                     <>
                         {/* Summary Cards */}
-                        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
                             <div className="bg-white p-6 rounded-lg shadow">
                                 <p className="text-gray-600 text-sm font-semibold mb-2">Total Revenue</p>
                                 <p className="text-3xl font-bold text-green-600">
@@ -230,11 +230,11 @@ const RevenueReports = () => {
                                 <p className="text-xs text-gray-500 mt-2">Paid transactions</p>
                             </div>
                             <div className="bg-white p-6 rounded-lg shadow">
-                                <p className="text-gray-600 text-sm font-semibold mb-2">Pending Insurance</p>
-                                <p className="text-3xl font-bold text-orange-600">
+                                <p className="text-gray-600 text-sm font-semibold mb-2">Pending Insurence</p>
+                                <p className="text-3xl font-bold text-yellow-600">
                                     ₦{reportData.summary?.pendingInsuranceRevenue?.toLocaleString() || 0}
                                 </p>
-                                <p className="text-xs text-gray-500 mt-2">Awaiting HMO payment</p>
+                                <p className="text-xs text-gray-500 mt-2">Patient portion not paid</p>
                             </div>
                             <div className="bg-white p-6 rounded-lg shadow">
                                 <p className="text-gray-600 text-sm font-semibold mb-2">Pending Patient</p>
@@ -242,6 +242,13 @@ const RevenueReports = () => {
                                     ₦{reportData.summary?.pendingPatientRevenue?.toLocaleString() || 0}
                                 </p>
                                 <p className="text-xs text-gray-500 mt-2">Awaiting patient payment</p>
+                            </div>
+                            <div className="bg-white p-6 rounded-lg shadow">
+                                <p className="text-gray-600 text-sm font-semibold mb-2">Pending HMO Payment</p>
+                                <p className="text-3xl font-bold text-orange-600">
+                                    ₦{reportData.summary?.pendingHMOAmount?.toLocaleString() || 0}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-2">Awaiting HMO payment</p>
                             </div>
                             <div className="bg-white p-6 rounded-lg shadow">
                                 <p className="text-gray-600 text-sm font-semibold mb-2">
@@ -301,117 +308,84 @@ const RevenueReports = () => {
                         {(department === 'lab' && reportData.byTestType) && (
                             <div className="bg-white p-6 rounded-lg shadow">
                                 <h3 className="text-xl font-bold mb-4">Revenue by Test Type</h3>
-                                <table className="w-full">
-                                    <thead className="bg-gray-100">
-                                        <tr>
-                                            <th className="p-3 text-left">Test Name</th>
-                                            <th className="p-3 text-left">Count</th>
-                                            <th className="p-3 text-left">Paid</th>
-                                            <th className="p-3 text-left">Pending</th>
-                                            <th className="p-3 text-left">Revenue</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {Object.entries(reportData.byTestType).map(([test, data]) => (
-                                            <tr key={test} className="border-b hover:bg-gray-50">
-                                                <td className="p-3 font-semibold">{test}</td>
-                                                <td className="p-3">{data.count}</td>
-                                                <td className="p-3 text-green-600">{data.paid}</td>
-                                                <td className="p-3 text-orange-600">{data.pending}</td>
-                                                <td className="p-3 font-bold text-green-600">
-                                                    ₦{data.revenue?.toLocaleString()}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                                    {Object.entries(reportData.byTestType).map(([test, data]) => (
+                                        <div key={test} className="border p-4 rounded hover:shadow-md transition-shadow">
+                                            <p className="text-gray-600 text-sm font-semibold mb-1 capitalize truncate" title={test}>{test}</p>
+                                            <p className="text-2xl font-bold text-green-600">
+                                                ₦{data.revenue?.toLocaleString() || 0}
+                                            </p>
+                                            <p className="text-xs text-gray-500 mt-1">{data.count} tests</p>
+                                            <div className="mt-2 text-xs flex justify-between text-gray-400">
+                                                <span>Paid: {data.paid}</span>
+                                                <span>Pending: {data.pending}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         )}
 
                         {(department === 'radiology' && reportData.byScanType) && (
                             <div className="bg-white p-6 rounded-lg shadow">
                                 <h3 className="text-xl font-bold mb-4">Revenue by Scan Type</h3>
-                                <table className="w-full">
-                                    <thead className="bg-gray-100">
-                                        <tr>
-                                            <th className="p-3 text-left">Scan Type</th>
-                                            <th className="p-3 text-left">Count</th>
-                                            <th className="p-3 text-left">Paid</th>
-                                            <th className="p-3 text-left">Pending</th>
-                                            <th className="p-3 text-left">Revenue</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {Object.entries(reportData.byScanType).map(([scan, data]) => (
-                                            <tr key={scan} className="border-b hover:bg-gray-50">
-                                                <td className="p-3 font-semibold">{scan}</td>
-                                                <td className="p-3">{data.count}</td>
-                                                <td className="p-3 text-green-600">{data.paid}</td>
-                                                <td className="p-3 text-orange-600">{data.pending}</td>
-                                                <td className="p-3 font-bold text-green-600">
-                                                    ₦{data.revenue?.toLocaleString()}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                                    {Object.entries(reportData.byScanType).map(([scan, data]) => (
+                                        <div key={scan} className="border p-4 rounded hover:shadow-md transition-shadow">
+                                            <p className="text-gray-600 text-sm font-semibold mb-1 capitalize truncate" title={scan}>{scan}</p>
+                                            <p className="text-2xl font-bold text-green-600">
+                                                ₦{data.revenue?.toLocaleString() || 0}
+                                            </p>
+                                            <p className="text-xs text-gray-500 mt-1">{data.count} scans</p>
+                                            <div className="mt-2 text-xs flex justify-between text-gray-400">
+                                                <span>Paid: {data.paid}</span>
+                                                <span>Pending: {data.pending}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         )}
 
                         {(department === 'pharmacy' && reportData.byDrug) && (
                             <div className="bg-white p-6 rounded-lg shadow">
                                 <h3 className="text-xl font-bold mb-4">Top Dispensed Drugs</h3>
-                                <table className="w-full">
-                                    <thead className="bg-gray-100">
-                                        <tr>
-                                            <th className="p-3 text-left">Drug Name</th>
-                                            <th className="p-3 text-left">Prescriptions</th>
-                                            <th className="p-3 text-left">Total Quantity</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {Object.entries(reportData.byDrug)
-                                            .sort((a, b) => b[1].count - a[1].count)
-                                            .slice(0, 10)
-                                            .map(([drug, data]) => (
-                                                <tr key={drug} className="border-b hover:bg-gray-50">
-                                                    <td className="p-3 font-semibold">{drug}</td>
-                                                    <td className="p-3">{data.count}</td>
-                                                    <td className="p-3 text-blue-600">{data.totalQuantity}</td>
-                                                </tr>
-                                            ))}
-                                    </tbody>
-                                </table>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                                    {Object.entries(reportData.byDrug)
+                                        .sort((a, b) => b[1].count - a[1].count)
+                                        .slice(0, 10)
+                                        .map(([drug, data]) => (
+                                            <div key={drug} className="border p-4 rounded hover:shadow-md transition-shadow">
+                                                <p className="text-gray-600 text-sm font-semibold mb-1 capitalize truncate" title={drug}>{drug}</p>
+                                                <p className="text-2xl font-bold text-blue-600">
+                                                    {data.totalQuantity}
+                                                </p>
+                                                <p className="text-xs text-gray-500 mt-1">Total Quantity</p>
+                                                <p className="text-xs text-gray-400 mt-2">{data.count} prescriptions</p>
+                                            </div>
+                                        ))}
+                                </div>
                             </div>
                         )}
 
                         {(department === 'consultation' && reportData.byService) && (
                             <div className="bg-white p-6 rounded-lg shadow">
                                 <h3 className="text-xl font-bold mb-4">Revenue by Service</h3>
-                                <table className="w-full">
-                                    <thead className="bg-gray-100">
-                                        <tr>
-                                            <th className="p-3 text-left">Service Name</th>
-                                            <th className="p-3 text-left">Count</th>
-                                            <th className="p-3 text-left">Paid</th>
-                                            <th className="p-3 text-left">Pending</th>
-                                            <th className="p-3 text-left">Revenue</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {Object.entries(reportData.byService).map(([service, data]) => (
-                                            <tr key={service} className="border-b hover:bg-gray-50">
-                                                <td className="p-3 font-semibold">{service}</td>
-                                                <td className="p-3">{data.count}</td>
-                                                <td className="p-3 text-green-600">{data.paid}</td>
-                                                <td className="p-3 text-orange-600">{data.pending}</td>
-                                                <td className="p-3 font-bold text-green-600">
-                                                    ₦{data.revenue?.toLocaleString()}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                                    {Object.entries(reportData.byService).map(([service, data]) => (
+                                        <div key={service} className="border p-4 rounded hover:shadow-md transition-shadow">
+                                            <p className="text-gray-600 text-sm font-semibold mb-1 capitalize truncate" title={service}>{service}</p>
+                                            <p className="text-2xl font-bold text-green-600">
+                                                ₦{data.revenue?.toLocaleString() || 0}
+                                            </p>
+                                            <p className="text-xs text-gray-500 mt-1">{data.count} consultations</p>
+                                            <div className="mt-2 text-xs flex justify-between text-gray-400">
+                                                <span>Paid: {data.paid}</span>
+                                                <span>Pending: {data.pending}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         )}
                     </>

@@ -40,6 +40,7 @@ import DrugTransfer from './pages/DrugTransfer';
 import DrugDisposal from './pages/DrugDisposal';
 import HMOManagement from './pages/HMOManagement';
 import ClaimsManagement from './pages/ClaimsManagement';
+import BankManagement from './pages/BankManagement';
 
 function App() {
   return (
@@ -82,6 +83,7 @@ function App() {
           <Route path="/pharmacy/disposal" element={<DrugDisposal />} />
           <Route path="/admin/hmo-management" element={<HMOManagement />} />
           <Route path="/admin/claims-management" element={<ClaimsManagement />} />
+          <Route path="/admin/bank-management" element={<BankManagement />} />
 
           <Route path="/" element={<Navigate to="/dashboard" />} />
           {/* Add other routes here */}

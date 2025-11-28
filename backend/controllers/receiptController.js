@@ -90,6 +90,51 @@ const getReceiptById = async (req, res) => {
     }
 };
 
+// @desc    Get receipts with claim status (for cashier dashboard)
+// @route   GET /api/receipts/with-claim-status
+// @access  Private
+const getReceiptsWithClaimStatus = async (req, res) => {
+    try {
+        const Claim = require('../models/claimModel');
+
+        // Get all receipts
+        const receipts = await Receipt.find({})
+            .populate('patient', 'name mrn provider')
+            .populate('cashier', 'name')
+            .populate('encounter')
+            .populate({
+                path: 'charges',
+                populate: { path: 'charge' }
+            })
+            .sort({ createdAt: -1 });
+
+        // For each receipt, find associated claim if it exists
+        const receiptsWithClaimStatus = await Promise.all(
+            receipts.map(async (receipt) => {
+                const receiptObj = receipt.toObject();
+
+                // If receipt has an encounter, check for claim
+                if (receipt.encounter) {
+                    const claim = await Claim.findOne({ encounter: receipt.encounter._id })
+                        .select('claimNumber status totalClaimAmount');
+
+                    if (claim) {
+                        receiptObj.claim = claim;
+                        receiptObj.claimStatus = claim.status;
+                    }
+                }
+
+                return receiptObj;
+            })
+        );
+
+        res.json(receiptsWithClaimStatus);
+    } catch (error) {
+        console.error('Error fetching receipts with claim status:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // V5: @desc    Create receipt for encounter charges
 // @route   POST /api/receipts/encounter
 // @access  Private (cashier)
@@ -256,6 +301,103 @@ const createReceiptForCharges = async (req, res) => {
                 populate: { path: 'charge' }
             });
 
+        // Auto-generate HMO claim for NHIA/KSCHMA patients
+        const patient = await Patient.findById(patientId);
+        console.log('=== AUTO CLAIM GENERATION DEBUG ===');
+        console.log('Patient provider:', patient?.provider);
+        console.log('Patient HMO:', patient?.hmo);
+
+        if (patient && (patient.provider === 'NHIA' || patient.provider === 'KSCHMA')) {
+            console.log('Patient is NHIA/KSCHMA, proceeding with claim generation...');
+            try {
+                const Claim = require('../models/claimModel');
+                const HMO = require('../models/hmoModel');
+
+                // Check if claim already exists for this encounter
+                const existingClaim = await Claim.findOne({ encounter: encounterId });
+                console.log('Existing claim:', existingClaim ? 'Found' : 'Not found');
+
+                if (patient.hmo) {
+                    // Find the HMO
+                    const hmo = await HMO.findOne({ name: patient.hmo });
+                    console.log('HMO found:', hmo ? hmo.name : 'Not found');
+
+                    if (hmo) {
+                        const claimItems = [];
+                        let totalClaimAmount = 0;
+
+                        console.log('Processing charges:', charges.length);
+                        for (const charge of charges) {
+                            const chargeName = charge.itemName || charge.charge?.name || 'Service';
+                            const chargeType = charge.itemType || charge.charge?.type || 'service';
+                            const hmoPortion = charge.hmoPortion || 0;
+
+                            console.log(`Charge: ${chargeName}, HMO Portion: ${hmoPortion}, Patient Portion: ${charge.patientPortion}`);
+
+                            if (hmoPortion > 0) {
+                                claimItems.push({
+                                    charge: charge.charge?._id || null,
+                                    chargeType: chargeType,
+                                    description: chargeName,
+                                    quantity: charge.quantity || 1,
+                                    unitPrice: charge.unitPrice || charge.totalAmount,
+                                    totalAmount: charge.totalAmount,
+                                    patientPortion: charge.patientPortion || 0,
+                                    hmoPortion: hmoPortion
+                                });
+
+                                totalClaimAmount += hmoPortion;
+                            }
+                        }
+
+                        console.log('Total new claim items:', claimItems.length);
+                        console.log('Total new claim amount:', totalClaimAmount);
+
+                        // Only process if there's an HMO portion
+                        if (totalClaimAmount > 0) {
+                            if (existingClaim) {
+                                // Update existing claim - add new items and update total
+                                existingClaim.claimItems.push(...claimItems);
+                                existingClaim.totalClaimAmount += totalClaimAmount;
+                                await existingClaim.save();
+
+                                console.log(`✅ Updated existing claim ${existingClaim.claimNumber} with ${claimItems.length} new items, new total: ₦${existingClaim.totalClaimAmount}`);
+                            } else {
+                                // Create new claim
+                                const year = new Date().getFullYear();
+                                const claimCount = await Claim.countDocuments();
+                                const claimNumber = `CLM-${year}-${String(claimCount + 1).padStart(4, '0')}`;
+
+                                const newClaim = await Claim.create({
+                                    claimNumber: claimNumber,
+                                    patient: patient._id,
+                                    hmo: hmo._id,
+                                    encounter: encounterId,
+                                    claimItems: claimItems,
+                                    totalClaimAmount: totalClaimAmount,
+                                    status: 'pending'
+                                });
+
+                                console.log(`✅ Auto-generated new claim ${newClaim.claimNumber} for encounter ${encounterId}, amount: ₦${totalClaimAmount}`);
+                            }
+                        } else {
+                            console.log('❌ No HMO portion found in charges, claim not created/updated');
+                        }
+                    } else {
+                        console.log('❌ HMO not found in database');
+                    }
+                } else {
+                    console.log('❌ Patient has no HMO assigned');
+                }
+            } catch (claimError) {
+                // Log error but don't fail the payment
+                console.error('❌ Error auto-generating claim:', claimError);
+            }
+        } else {
+            console.log('Patient is not NHIA/KSCHMA, skipping claim generation');
+        }
+        console.log('=== END AUTO CLAIM GENERATION DEBUG ===');
+
         res.status(201).json(populatedReceipt);
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -331,6 +473,7 @@ const getReceiptByNumber = async (req, res) => {
     }
 };
 
+
 // @desc    Reverse a receipt (refund payment)
 // @route   POST /api/receipts/:id/reverse
 // @access  Private (admin/cashier)
@@ -373,6 +516,7 @@ module.exports = {
     createReceipt,
     getReceipts,
     getReceiptById,
+    getReceiptsWithClaimStatus,
     createReceiptForCharges,
     validateReceipt,
     getReceiptByNumber,

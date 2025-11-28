@@ -38,6 +38,7 @@ app.use('/api/referrals', require('./routes/referralRoutes'));
 app.use('/api/hmos', require('./routes/hmoRoutes'));
 app.use('/api/claims', require('./routes/claimRoutes'));
 app.use('/api/hmo-transactions', require('./routes/hmoTransactionRoutes'));
+app.use('/api/banks', require('./routes/bankRoutes'));
 
 
 

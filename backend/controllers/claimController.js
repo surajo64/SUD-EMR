@@ -43,13 +43,24 @@ const generateClaimFromEncounter = async (req, res) => {
         let totalClaimAmount = 0;
 
         for (const ec of encounterCharges) {
-            // Skip if charge reference is missing
-            if (!ec.charge) continue;
-
-            const charge = ec.charge;
             const totalAmount = ec.totalAmount;
             let patientPortion = 0;
             let hmoPortion = 0;
+            let chargeName = '';
+            let chargeType = '';
+            let chargeId = null;
+
+            // Get charge details from reference or from stored snapshot
+            if (ec.charge) {
+                chargeName = ec.charge.name;
+                chargeType = ec.charge.type;
+                chargeId = ec.charge._id;
+            } else {
+                // Use snapshot data if charge reference is missing
+                chargeName = ec.itemName || 'Service';
+                chargeType = ec.itemType || 'service';
+                chargeId = null; // No charge reference
+            }
 
             // Use stored portions if available (preferred), otherwise calculate
             if (ec.hmoPortion !== undefined && ec.patientPortion !== undefined) {
@@ -64,7 +75,7 @@ const generateClaimFromEncounter = async (req, res) => {
                 } else if (patient.provider === 'NHIA' || patient.provider === 'KSCHMA') {
                     // NHIA/KSCHMA: Patient pays 10% for drugs, HMO covers 90% for drugs
                     // HMO covers 100% for other services
-                    if (charge.type === 'drugs') {
+                    if (chargeType === 'drugs' || chargeType === 'drug') {
                         patientPortion = totalAmount * 0.1;
                         hmoPortion = totalAmount * 0.9;
                     } else {
@@ -75,9 +86,9 @@ const generateClaimFromEncounter = async (req, res) => {
             }
 
             claimItems.push({
-                charge: charge._id,
-                chargeType: charge.type,
-                description: charge.name,
+                charge: chargeId,
+                chargeType: chargeType,
+                description: chargeName,
                 quantity: ec.quantity || 1,
                 unitPrice: ec.unitPrice || totalAmount,
                 totalAmount: totalAmount,
@@ -136,9 +147,9 @@ const getClaims = async (req, res) => {
         }
 
         const claims = await Claim.find(filter)
-            .populate('patient', 'firstName lastName patientId')
+            .populate('patient', 'name mrn')
             .populate('hmo', 'name code')
-            .populate('encounter', 'encounterDate')
+            .populate('encounter', 'createdAt type')
             .sort({ createdAt: -1 });
 
         res.json(claims);

@@ -4,7 +4,7 @@ const claimItemSchema = mongoose.Schema({
     charge: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Charge',
-        required: true
+        required: false
     },
     chargeType: {
         type: String,
@@ -57,7 +57,7 @@ const claimSchema = mongoose.Schema({
     },
     encounter: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Encounter',
+        ref: 'Visit',
         required: true
     },
     claimItems: [claimItemSchema],

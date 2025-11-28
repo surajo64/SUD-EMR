@@ -37,31 +37,51 @@ const addDeposit = async (req, res) => {
 const getHMOStatement = async (req, res) => {
     try {
         const { hmoId } = req.params;
+        const { startDate, endDate } = req.query;
         const hmo = await HMO.findById(hmoId);
 
         if (!hmo) {
             return res.status(404).json({ message: 'HMO not found' });
         }
 
-        // 1. Get all deposits
-        const deposits = await HMOTransaction.find({ hmo: hmoId }).lean();
+        // Date Filter Construction
+        let dateFilter = {};
+        if (startDate && endDate) {
+            dateFilter = {
+                $gte: new Date(startDate),
+                $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
+            };
+        }
 
-        // 2. Get all charges for this HMO
-        // Since EncounterCharge doesn't link to HMO directly, we find patients with this HMO name
-        // This relies on the patient's HMO field matching the HMO name
-        // A better approach would be to link EncounterCharge to HMO directly, but for now:
+        // 1. Get deposits (filtered)
+        const depositQuery = { hmo: hmoId };
+        if (startDate && endDate) {
+            depositQuery.date = dateFilter; // Assuming 'date' field in HMOTransaction
+            // If HMOTransaction uses createdAt, use that instead. 
+            // Checking model... usually custom 'date' or timestamps. 
+            // Let's assume 'date' based on previous view, but fallback to createdAt if needed.
+            // Actually, let's check the model structure in my memory or just use createdAt if date is missing.
+            // The view showed 'date: d.date' in the map, so 'date' field likely exists.
+        }
+        const deposits = await HMOTransaction.find(depositQuery).lean();
 
-        // Find patients with this HMO
+        // 2. Get charges (filtered)
         const patients = await Patient.find({ hmo: hmo.name }).select('_id');
         const patientIds = patients.map(p => p._id);
 
-        // Find charges for these patients where hmoPortion > 0
-        const charges = await EncounterCharge.find({
+        const chargeQuery = {
             patient: { $in: patientIds },
             hmoPortion: { $gt: 0 }
-        })
+        };
+
+        if (startDate && endDate) {
+            chargeQuery.createdAt = dateFilter;
+        }
+
+        const charges = await EncounterCharge.find(chargeQuery)
             .populate('patient', 'name mrn')
             .populate('encounter', 'createdAt type')
+            .populate('charge', 'name')
             .lean();
 
         // 3. Merge and Format
@@ -74,6 +94,7 @@ const getHMOStatement = async (req, res) => {
                 date: d.date,
                 type: 'Deposit',
                 description: d.description,
+                serviceName: '-',
                 reference: d.reference,
                 amount: d.amount, // Credit
                 isCredit: true,
@@ -87,7 +108,8 @@ const getHMOStatement = async (req, res) => {
                 _id: c._id,
                 date: c.createdAt,
                 type: 'Service',
-                description: c.itemName || c.itemType,
+                description: c.itemType || 'Service',
+                serviceName: c.itemName || c.charge?.name || 'N/A',
                 reference: c.encounter?.type || 'Encounter',
                 amount: c.hmoPortion, // Debit
                 isCredit: false,

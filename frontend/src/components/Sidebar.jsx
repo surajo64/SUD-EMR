@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { FaUserMd, FaPills, FaFlask, FaXRay, FaUserInjured, FaCalendarAlt, FaNotesMedical, FaSignOutAlt, FaTachometerAlt, FaDollarSign, FaFileInvoiceDollar, FaHeart, FaHospital, FaBed, FaChevronDown, FaChevronRight, FaCogs, FaMoneyBillWave, FaExchangeAlt, FaTrash } from 'react-icons/fa';
+import { FaUserMd, FaPills, FaFlask, FaXRay, FaUserInjured, FaCalendarAlt, FaNotesMedical, FaSignOutAlt, FaTachometerAlt, FaDollarSign, FaFileInvoiceDollar, FaHeart, FaHospital, FaBed, FaChevronDown, FaChevronRight, FaCogs, FaMoneyBillWave, FaExchangeAlt, FaTrash, FaUniversity } from 'react-icons/fa';
 import { useContext, useState } from 'react';
 import AuthContext from '../context/AuthContext';
 
@@ -199,6 +199,9 @@ const Sidebar = () => {
                             </Link>
                             <Link to="/admin/hmo-management" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/hmo-management')}`}>
                                 <FaHospital size={14} /> HMO Management
+                            </Link>
+                            <Link to="/admin/bank-management" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/bank-management')}`}>
+                                <FaUniversity size={14} /> Bank Management
                             </Link>
                         </SidebarDropdown>
 
