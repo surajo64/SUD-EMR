@@ -229,7 +229,7 @@ const PatientDetails = () => {
     };
 
     // Determine if user can edit (read-only for receptionists, viewing past encounters, or inactive encounters)
-    const canEdit = user?.role !== 'receptionist' && user?.role === 'admin' && !viewingPastEncounter && isEncounterActive();
+    const canEdit = ['doctor', 'nurse', 'admin'].includes(user?.role) && !viewingPastEncounter && isEncounterActive();
 
     const fetchCharges = async () => {
         try {

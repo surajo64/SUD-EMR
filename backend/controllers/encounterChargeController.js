@@ -43,8 +43,14 @@ const addChargeToEncounter = async (req, res) => {
 
         // Check if fee is 0 (not covered) for insurance/retainership patients
         if (fee === 0 && patient.provider !== 'Standard') {
-            isCovered = false;
-            fee = charge.standardFee || charge.basePrice; // Fallback to standard fee
+            // If it's a drug, we assume it's covered and use the standard fee/base price
+            if (charge.type === 'drugs') {
+                fee = charge.standardFee || charge.basePrice;
+                // isCovered remains true
+            } else {
+                isCovered = false;
+                fee = charge.standardFee || charge.basePrice; // Fallback to standard fee
+            }
         }
 
         // Fallback to basePrice if fee is still 0 (shouldn't happen if standardFee is set)

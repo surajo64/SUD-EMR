@@ -5,6 +5,7 @@ const EncounterCharge = require('../models/encounterChargeModel');
 const Visit = require('../models/visitModel');
 const Patient = require('../models/patientModel');
 const Receipt = require('../models/receiptModel');
+const User = require('../models/userModel');
 
 // @desc    Get lab revenue report by date range
 // @route   GET /api/reports/lab-revenue?startDate=&endDate=
@@ -856,7 +857,7 @@ const getDashboardStats = async (req, res) => {
             activeEncounters,
             activeEncounters,
             pendingPayments: pendingStats[0]?.total || 0,
-            pendingInsurance: pendingStats[0]?.pendingInsurance || 0,
+            pendingHMOAmount: pendingStats[0]?.pendingInsurance || 0,
             pendingPatient: pendingStats[0]?.pendingPatient || 0,
             revenueByDepartment: revenueByDepartmentArray
         });
