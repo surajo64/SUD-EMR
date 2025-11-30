@@ -836,6 +836,54 @@ const getDashboardStats = async (req, res) => {
             revenue: value
         }));
 
+        // Calculate Pending HMO Amount correctly
+        // 1. Pending charges (not yet paid by patient or HMO)
+        const pendingChargesHMO = pendingStats[0]?.pendingInsurance || 0;
+
+        // 2. Paid charges (patient paid their portion) but HMO claim is pending
+        // Find receipts with paymentMethod 'insurance' and claimStatus != 'paid'
+        // Receipt model is already imported at the top
+        const pendingHMOReceipts = await Receipt.aggregate([
+            { $match: { paymentMethod: 'insurance' } },
+            {
+                $lookup: {
+                    from: 'claims',
+                    localField: 'encounter',
+                    foreignField: 'encounter',
+                    as: 'claim'
+                }
+            },
+            { $unwind: { path: '$claim', preserveNullAndEmptyArrays: true } },
+            // Filter where claim exists and is NOT paid
+            {
+                $match: {
+                    $or: [
+                        { 'claim.status': { $ne: 'paid' } },
+                        { 'claim': { $exists: false } } // Or if claim doesn't exist yet but it's insurance
+                    ]
+                }
+            },
+            // Lookup charges for these receipts to sum hmoPortion
+            {
+                $lookup: {
+                    from: 'encountercharges',
+                    localField: 'charges',
+                    foreignField: '_id',
+                    as: 'chargeDocs'
+                }
+            },
+            { $unwind: '$chargeDocs' },
+            {
+                $group: {
+                    _id: null,
+                    totalHMO: { $sum: '$chargeDocs.hmoPortion' }
+                }
+            }
+        ]);
+
+        const pendingClaimHMO = pendingHMOReceipts[0]?.totalHMO || 0;
+        const totalPendingHMO = pendingChargesHMO + pendingClaimHMO;
+
         res.json({
             patients: {
                 total: totalPatients,
@@ -855,9 +903,8 @@ const getDashboardStats = async (req, res) => {
                 charges: totalCharges
             },
             activeEncounters,
-            activeEncounters,
             pendingPayments: pendingStats[0]?.total || 0,
-            pendingHMOAmount: pendingStats[0]?.pendingInsurance || 0,
+            pendingHMOAmount: totalPendingHMO,
             pendingPatient: pendingStats[0]?.pendingPatient || 0,
             revenueByDepartment: revenueByDepartmentArray
         });

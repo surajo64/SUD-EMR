@@ -399,7 +399,11 @@ const BillingDashboard = () => {
         .reduce((sum, r) => sum + r.amountPaid, 0);
 
     const totalPendingHMO = pendingHMOReceipts
-        .reduce((sum, r) => sum + r.amountPaid, 0);
+        .reduce((sum, r) => {
+            // Calculate from charges to avoid double counting if multiple receipts link to same claim
+            const chargesHmoTotal = r.charges?.reduce((cSum, c) => cSum + (c.hmoPortion || 0), 0) || 0;
+            return sum + chargesHmoTotal;
+        }, 0);
 
     const totalReceiptsToday = receipts.filter(r => new Date(r.createdAt).toDateString() === new Date().toDateString()).length;
 
