@@ -43,19 +43,30 @@ const createDisposal = async (req, res) => {
         const User = require('../models/userModel');
         const currentUser = await User.findById(req.user._id).populate('assignedPharmacy');
 
-        if (!currentUser.assignedPharmacy) {
+        let userPharmacy;
+
+        // Admin users can access main pharmacy even without assignedPharmacy
+        if (currentUser.role === 'admin' && !currentUser.assignedPharmacy) {
+            const mainPharmacy = await Pharmacy.findOne({ isMainPharmacy: true });
+            if (!mainPharmacy) {
+                return res.status(404).json({ message: 'Main pharmacy not found' });
+            }
+            userPharmacy = mainPharmacy;
+        } else if (currentUser.assignedPharmacy) {
+            userPharmacy = currentUser.assignedPharmacy;
+        } else {
             return res.status(400).json({ message: 'User not assigned to any pharmacy' });
         }
 
         // Verify pharmacy is main pharmacy for disposals
-        if (!currentUser.assignedPharmacy.isMainPharmacy) {
+        if (!userPharmacy.isMainPharmacy) {
             return res.status(400).json({ message: 'Drug disposal can only be done from Main Pharmacy' });
         }
 
         // Find inventory item
         const inventoryItem = await Inventory.findOne({
             _id: drug,
-            pharmacy: currentUser.assignedPharmacy._id
+            pharmacy: userPharmacy._id
         });
 
         if (!inventoryItem) {
@@ -74,7 +85,7 @@ const createDisposal = async (req, res) => {
         // Create disposal record
         const disposal = await DrugDisposal.create({
             drug,
-            pharmacy: currentUser.assignedPharmacy._id,
+            pharmacy: userPharmacy._id,
             quantity,
             reason,
             processedBy: req.user._id,
