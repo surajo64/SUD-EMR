@@ -8,7 +8,7 @@ import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
 const DrugDisposal = () => {
-    const { user } = useContext(AuthContext);
+    const { user, loading } = useContext(AuthContext);
     const [disposals, setDisposals] = useState([]);
     const [inventory, setInventory] = useState([]);
     const [showModal, setShowModal] = useState(false);
@@ -17,8 +17,16 @@ const DrugDisposal = () => {
         startDate: '',
         endDate: ''
     });
-    const [formData, setFormData] = useState({
-        drug: '',
+
+    // Search and select states
+    const [drugSearchTerm, setDrugSearchTerm] = useState('');
+    const [filteredDrugs, setFilteredDrugs] = useState([]);
+    const [showDrugDropdown, setShowDrugDropdown] = useState(false);
+    const [selectedDrug, setSelectedDrug] = useState('');
+    const [tempDisposals, setTempDisposals] = useState([]); // List of drugs to dispose
+
+    // Individual disposal form data
+    const [disposalForm, setDisposalForm] = useState({
         quantity: '',
         reason: '',
         notes: ''
@@ -37,9 +45,28 @@ const DrugDisposal = () => {
 
     const paginate = (pageNumber) => setCurrentPage(pageNumber);
 
+    // Prevent crash if user is not loaded yet
+    if (loading) {
+        return (
+            <Layout>
+                <div className="p-8 text-center">Loading user profile...</div>
+            </Layout>
+        );
+    }
+
+    if (!user) {
+        return (
+            <Layout>
+                <div className="p-8 text-center text-red-600">Please log in to access this page.</div>
+            </Layout>
+        );
+    }
+
     const isMainPharmacy = user.assignedPharmacy?.isMainPharmacy;
     const isBranchPharmacy = user.role === 'pharmacist' && !isMainPharmacy;
-    const isAdminOrMainPharmacy = user.role === 'admin' || isMainPharmacy;
+    // Make admin check case-insensitive
+    const isAdmin = user.role?.toLowerCase() === 'admin';
+    const isAdminOrMainPharmacy = isAdmin || isMainPharmacy;
 
     // Print drug details for supplier return from table
     const printDisposalEvidence = (disposal) => {
@@ -129,9 +156,11 @@ const DrugDisposal = () => {
     };
 
     useEffect(() => {
-        fetchDisposals();
-        fetchInventory();
-    }, []);
+        if (user) {
+            fetchDisposals();
+            fetchInventory();
+        }
+    }, [user]);
 
     const fetchDisposals = async () => {
         try {
@@ -150,38 +179,145 @@ const DrugDisposal = () => {
     const fetchInventory = async () => {
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const pharmacyParam = user.assignedPharmacy
-                ? `?pharmacy=${user.assignedPharmacy._id || user.assignedPharmacy}`
-                : '';
+
+            let pharmacyParam = '';
+
+            // For admin or main pharmacy: fetch ONLY main pharmacy drugs
+            // DEBUG: Check user role
+            // toast.info(`Role: ${user.role}, Assigned: ${JSON.stringify(user.assignedPharmacy)}`);
+
+            if (isAdminOrMainPharmacy) {
+                try {
+                    const pharmaciesRes = await axios.get('http://localhost:5000/api/pharmacies', config);
+                    const mainPharmacy = pharmaciesRes.data.find(p => p.isMainPharmacy);
+                    if (mainPharmacy) {
+                        pharmacyParam = `?pharmacy=${mainPharmacy._id}`;
+                    } else {
+                        console.warn('No main pharmacy found');
+                        toast.warning('No main pharmacy configured in the system');
+                    }
+                } catch (error) {
+                    console.error('Error fetching pharmacies:', error);
+                    toast.error('Error loading pharmacy information');
+                    return;
+                }
+            } else if (user.assignedPharmacy) {
+                // For branch pharmacy: fetch only their branch drugs
+                pharmacyParam = `?pharmacy=${user.assignedPharmacy._id || user.assignedPharmacy}`;
+            } else {
+                toast.error(`User not assigned to any pharmacy (Role: ${user.role})`);
+                return;
+            }
+
             const { data } = await axios.get(`http://localhost:5000/api/inventory${pharmacyParam}`, config);
             setInventory(data);
         } catch (error) {
             console.error(error);
+            toast.error('Error fetching inventory');
         }
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    // Filter drugs based on search term
+    useEffect(() => {
+        if (drugSearchTerm) {
+            const filtered = inventory.filter(d =>
+                d.name.toLowerCase().includes(drugSearchTerm.toLowerCase())
+            );
+            setFilteredDrugs(filtered);
+            setShowDrugDropdown(true);
+        } else {
+            setFilteredDrugs([]);
+            setShowDrugDropdown(false);
+        }
+    }, [drugSearchTerm, inventory]);
+
+    // Select drug from search dropdown
+    const handleSelectDrugFromSearch = (drug) => {
+        setSelectedDrug(drug._id);
+        setDrugSearchTerm(drug.name);
+        setShowDrugDropdown(false);
+        setSelectedDrugDetails(drug);
+    };
+
+    // Add drug to disposal list
+    const handleAddToDisposalList = () => {
+        if (!selectedDrug || !disposalForm.quantity || !disposalForm.reason) {
+            toast.error('Please select a drug, enter quantity, and select a reason');
+            return;
+        }
+
+        const drugData = inventory.find(d => d._id === selectedDrug);
+        if (!drugData) return;
+
+        // Check if quantity exceeds available stock
+        if (parseInt(disposalForm.quantity) > drugData.quantity) {
+            toast.error(`Quantity exceeds available stock (${drugData.quantity})`);
+            return;
+        }
+
+        const newDisposal = {
+            id: Date.now(), // Temp ID for UI
+            drug: selectedDrug,
+            drugName: drugData.name,
+            drugDetails: drugData,
+            quantity: parseInt(disposalForm.quantity),
+            reason: disposalForm.reason,
+            notes: disposalForm.notes
+        };
+
+        setTempDisposals([...tempDisposals, newDisposal]);
+
+        // Reset form
+        setSelectedDrug('');
+        setDrugSearchTerm('');
+        setSelectedDrugDetails(null);
+        setDisposalForm({ quantity: '', reason: '', notes: '' });
+        toast.success('Drug added to disposal list');
+    };
+
+    // Remove drug from disposal list
+    const handleRemoveFromDisposalList = (id) => {
+        setTempDisposals(tempDisposals.filter(d => d.id !== id));
+    };
+
+    // Submit all disposals
+    const handleSubmitAll = async () => {
+        if (tempDisposals.length === 0) {
+            toast.error('No drugs in the disposal list');
+            return;
+        }
+
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
 
-            if (isBranchPharmacy) {
-                // For branch pharmacy - this is a return to main pharmacy
-                await axios.post('http://localhost:5000/api/drug-disposals/return', formData, config);
-                toast.success('Drug return to main pharmacy submitted successfully');
-            } else {
-                // For main pharmacy - this is disposal
-                await axios.post('http://localhost:5000/api/drug-disposals', formData, config);
-                toast.success('Drug disposal recorded successfully');
+            for (const disposal of tempDisposals) {
+                const payload = {
+                    drug: disposal.drug,
+                    quantity: disposal.quantity,
+                    reason: disposal.reason,
+                    notes: disposal.notes
+                };
+
+                if (isBranchPharmacy) {
+                    // For branch pharmacy - this is a return to main pharmacy
+                    await axios.post('http://localhost:5000/api/drug-disposals/return', payload, config);
+                } else {
+                    // For main pharmacy - this is disposal
+                    await axios.post('http://localhost:5000/api/drug-disposals', payload, config);
+                }
             }
 
+            toast.success(`${tempDisposals.length} disposal(s) processed successfully`);
             setShowModal(false);
-            setFormData({ drug: '', quantity: '', reason: '', notes: '' });
+            setTempDisposals([]);
+            setSelectedDrug('');
+            setDrugSearchTerm('');
+            setDisposalForm({ quantity: '', reason: '', notes: '' });
             fetchDisposals();
             fetchInventory();
         } catch (error) {
             console.error(error);
-            toast.error(error.response?.data?.message || 'Error processing request');
+            toast.error(error.response?.data?.message || 'Error processing disposals');
         }
     };
 
@@ -222,7 +358,7 @@ const DrugDisposal = () => {
                             onClick={() => setShowModal(true)}
                             className={`${isBranchPharmacy ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'} text-white px-4 py-2 rounded flex items-center gap-2`}
                         >
-                            <FaPlus /> {isBranchPharmacy ? 'Return Drug' : 'Record Disposal'}
+                            <FaPlus /> {isBranchPharmacy ? 'Return Drug' : 'Return/Disposal'}
                         </button>
                     </div>
                 </div>
@@ -327,139 +463,222 @@ const DrugDisposal = () => {
             {/* Modal */}
             {showModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white p-6 rounded-lg w-full max-w-md shadow-xl">
+                    <div className="bg-white p-6 rounded-lg w-full max-w-4xl shadow-xl max-h-[90vh] overflow-y-auto">
                         <h3 className="text-xl font-bold mb-4">
-                            {isBranchPharmacy ? 'Return Drug to Main Pharmacy' : 'Record Drug Disposal'}
+                            {isBranchPharmacy ? 'Return Drugs to Main Pharmacy' : 'Record Drug Disposal'}
                         </h3>
-                        <form onSubmit={handleSubmit}>
-                            <div className="mb-4">
-                                <label className="block text-gray-700 mb-2 font-semibold">Select Drug</label>
-                                <select
-                                    className="w-full border p-2 rounded"
-                                    value={formData.drug}
-                                    onChange={(e) => {
-                                        const selectedItem = inventory.find(item => item._id === e.target.value);
-                                        setFormData({ ...formData, drug: e.target.value });
-                                        setSelectedDrugDetails(selectedItem || null);
-                                    }}
-                                    required
-                                >
-                                    <option value="">-- Select Drug --</option>
-                                    {inventory.map(item => (
-                                        <option key={item._id} value={item._id}>
-                                            {item.name} (Available: {item.quantity})
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
 
-                            <div className="mb-4">
-                                <label className="block text-gray-700 mb-2 font-semibold">Quantity</label>
-                                <input
-                                    type="number"
-                                    className="w-full border p-2 rounded"
-                                    value={formData.quantity}
-                                    onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                                    min="1"
-                                    required
-                                />
-                            </div>
+                        <div className="space-y-4">
+                            {/* Drug Search & Add Form */}
+                            <div className="bg-gray-50 p-4 rounded border">
+                                <h4 className="font-semibold text-sm text-gray-700 mb-3">Add Drug to Disposal List</h4>
 
-                            <div className="mb-4">
-                                <label className="block text-gray-700 mb-2 font-semibold">Reason</label>
-                                <select
-                                    className="w-full border p-2 rounded"
-                                    value={formData.reason}
-                                    onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                                    required
-                                >
-                                    <option value="">-- Select Reason --</option>
-                                    {isBranchPharmacy ? (
-                                        <>
-                                            <option value="return_to_main">Return to Main Pharmacy</option>
-                                            <option value="excess_stock">Excess Stock</option>
-                                            <option value="near_expiry">Near Expiry</option>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <option value="expired">Expired</option>
-                                            <option value="damaged">Damaged</option>
-                                            <option value="return_to_supplier">Return to Supplier</option>
-                                            <option value="other">Other</option>
-                                        </>
+                                {/* Search Drug */}
+                                <div className="mb-3 relative">
+                                    <label className="block text-xs text-gray-600 mb-1">Search Drug</label>
+                                    <input
+                                        type="text"
+                                        className="w-full border p-2 rounded"
+                                        placeholder="Type to search..."
+                                        value={drugSearchTerm}
+                                        onChange={(e) => setDrugSearchTerm(e.target.value)}
+                                        onFocus={() => drugSearchTerm && setShowDrugDropdown(true)}
+                                    />
+                                    {showDrugDropdown && filteredDrugs.length > 0 && (
+                                        <div className="absolute z-10 w-full bg-white border rounded shadow-lg max-h-40 overflow-y-auto mt-1">
+                                            {filteredDrugs.map(drug => (
+                                                <div
+                                                    key={drug._id}
+                                                    className="p-2 hover:bg-blue-50 cursor-pointer text-sm"
+                                                    onClick={() => handleSelectDrugFromSearch(drug)}
+                                                >
+                                                    <div className="font-semibold">{drug.name}</div>
+                                                    <div className="text-xs text-gray-500">Available: {drug.quantity}</div>
+                                                </div>
+                                            ))}
+                                        </div>
                                     )}
-                                </select>
-                            </div>
+                                </div>
 
-                            {/* Drug Details - Show when Return to Supplier is selected */}
-                            {formData.reason === 'return_to_supplier' && selectedDrugDetails && (
-                                <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded">
-                                    <div className="flex justify-between items-center mb-3">
-                                        <h4 className="font-semibold text-blue-900 flex items-center gap-2">
+                                {selectedDrug && (
+                                    <div className="grid grid-cols-4 gap-2 items-end">
+                                        <div>
+                                            <label className="block text-xs text-gray-600 mb-1">Quantity</label>
+                                            <input
+                                                type="number"
+                                                className="w-full border p-2 rounded text-sm"
+                                                value={disposalForm.quantity}
+                                                onChange={(e) => setDisposalForm({ ...disposalForm, quantity: e.target.value })}
+                                                min="1"
+                                                placeholder="Qty"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs text-gray-600 mb-1">Reason</label>
+                                            <select
+                                                className="w-full border p-2 rounded text-sm"
+                                                value={disposalForm.reason}
+                                                onChange={(e) => setDisposalForm({ ...disposalForm, reason: e.target.value })}
+                                            >
+                                                <option value="">-- Select --</option>
+                                                {isBranchPharmacy ? (
+                                                    <>
+                                                        <option value="return_to_main">Return to Main</option>
+                                                        <option value="excess_stock">Excess Stock</option>
+                                                        <option value="near_expiry">Near Expiry</option>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <option value="expired">Expired</option>
+                                                        <option value="damaged">Damaged</option>
+                                                        <option value="return_to_supplier">Return to Supplier</option>
+                                                        <option value="other">Other</option>
+                                                    </>
+                                                )}
+                                            </select>
+                                        </div>
+                                        <div className="col-span-2">
+                                            <label className="block text-xs text-gray-600 mb-1">Notes (Optional)</label>
+                                            <input
+                                                type="text"
+                                                className="w-full border p-2 rounded text-sm"
+                                                value={disposalForm.notes}
+                                                onChange={(e) => setDisposalForm({ ...disposalForm, notes: e.target.value })}
+                                                placeholder="Additional details..."
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {selectedDrug && (
+                                    <div className="mt-3">
+                                        <button
+                                            onClick={handleAddToDisposalList}
+                                            className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 text-sm font-semibold"
+                                        >
+                                            Add to List
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Drug Details - Show when Return to Supplier is selected */}
+                                {disposalForm.reason === 'return_to_supplier' && selectedDrugDetails && (
+                                    <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded">
+                                        <h4 className="font-semibold text-blue-900 flex items-center gap-2 mb-3">
                                             <span>📦</span> Drug Details for Return
                                         </h4>
-
+                                        <div className="grid grid-cols-2 gap-3 text-sm">
+                                            <div>
+                                                <p className="text-gray-600 font-medium">Batch Number:</p>
+                                                <p className="text-gray-900">{selectedDrugDetails.batchNumber || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-gray-600 font-medium">Supplier:</p>
+                                                <p className="text-gray-900">{selectedDrugDetails.supplier || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-gray-600 font-medium">Barcode:</p>
+                                                <p className="text-gray-900">{selectedDrugDetails.barcode || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-gray-600 font-medium">Expiry Date:</p>
+                                                <p className="text-gray-900">
+                                                    {selectedDrugDetails.expiryDate
+                                                        ? new Date(selectedDrugDetails.expiryDate).toLocaleDateString()
+                                                        : 'N/A'}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-gray-600 font-medium">Purchased Price:</p>
+                                                <p className="text-gray-900">₦{selectedDrugDetails.purchasingPrice || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-gray-600 font-medium">Drug Form:</p>
+                                                <p className="text-gray-900 capitalize">{selectedDrugDetails.form || 'N/A'}</p>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-3 text-sm">
-                                        <div>
-                                            <p className="text-gray-600 font-medium">Batch Number:</p>
-                                            <p className="text-gray-900">{selectedDrugDetails.batchNumber || 'N/A'}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-gray-600 font-medium">Supplier:</p>
-                                            <p className="text-gray-900">{selectedDrugDetails.supplier || 'N/A'}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-gray-600 font-medium">Barcode:</p>
-                                            <p className="text-gray-900">{selectedDrugDetails.barcode || 'N/A'}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-gray-600 font-medium">Expiry Date:</p>
-                                            <p className="text-gray-900">
-                                                {selectedDrugDetails.expiryDate
-                                                    ? new Date(selectedDrugDetails.expiryDate).toLocaleDateString()
-                                                    : 'N/A'}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <p className="text-gray-600 font-medium">Purchased Price:</p>
-                                            <p className="text-gray-900">₦{selectedDrugDetails.purchasingPrice || 'N/A'}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-gray-600 font-medium">Drug Form:</p>
-                                            <p className="text-gray-900 capitalize">{selectedDrugDetails.form || 'N/A'}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="mb-4">
-                                <label className="block text-gray-700 mb-2 font-semibold">Notes (Optional)</label>
-                                <textarea
-                                    className="w-full border p-2 rounded"
-                                    value={formData.notes}
-                                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                    rows="2"
-                                    placeholder="Additional details..."
-                                ></textarea>
+                                )}
                             </div>
 
-                            <div className="flex justify-end gap-2">
+                            {/* Temporary Disposal List */}
+                            <div className="border rounded overflow-hidden">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-gray-100">
+                                        <tr>
+                                            <th className="p-2">Drug</th>
+                                            <th className="p-2">Quantity</th>
+                                            <th className="p-2">Reason</th>
+                                            <th className="p-2">Notes</th>
+                                            <th className="p-2">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {tempDisposals.length === 0 ? (
+                                            <tr>
+                                                <td colSpan="5" className="p-4 text-center text-gray-500">
+                                                    No drugs added yet. Search and add drugs above.
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            tempDisposals.map(disposal => (
+                                                <tr key={disposal.id} className="border-b">
+                                                    <td className="p-2 font-semibold">{disposal.drugName}</td>
+                                                    <td className="p-2">{disposal.quantity}</td>
+                                                    <td className="p-2">
+                                                        <span className={`px-2 py-1 rounded text-xs ${disposal.reason === 'expired' ? 'bg-red-100 text-red-800' :
+                                                                disposal.reason === 'damaged' ? 'bg-orange-100 text-orange-800' :
+                                                                    disposal.reason === 'return_to_supplier' ? 'bg-blue-100 text-blue-800' :
+                                                                        disposal.reason === 'return_to_main' ? 'bg-green-100 text-green-800' :
+                                                                            'bg-gray-100 text-gray-800'
+                                                            }`}>
+                                                            {disposal.reason.replace(/_/g, ' ').toUpperCase()}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-2 text-xs">{disposal.notes || '-'}</td>
+                                                    <td className="p-2">
+                                                        <button
+                                                            onClick={() => handleRemoveFromDisposalList(disposal.id)}
+                                                            className="text-red-600 hover:text-red-800"
+                                                        >
+                                                            <FaTrash />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div className="flex gap-2 justify-end mt-4">
                                 <button
                                     type="button"
-                                    onClick={() => setShowModal(false)}
+                                    onClick={() => {
+                                        setShowModal(false);
+                                        setTempDisposals([]);
+                                        setSelectedDrug('');
+                                        setDrugSearchTerm('');
+                                        setDisposalForm({ quantity: '', reason: '', notes: '' });
+                                    }}
                                     className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
                                 >
                                     Cancel
                                 </button>
                                 <button
-                                    type="submit"
-                                    className={`px-4 py-2 text-white rounded ${isBranchPharmacy ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'}`}
+                                    onClick={handleSubmitAll}
+                                    disabled={tempDisposals.length === 0}
+                                    className={`px-4 py-2 text-white rounded flex items-center gap-2 ${tempDisposals.length === 0
+                                            ? 'bg-gray-400 cursor-not-allowed'
+                                            : isBranchPharmacy
+                                                ? 'bg-blue-600 hover:bg-blue-700'
+                                                : 'bg-red-600 hover:bg-red-700'
+                                        }`}
                                 >
-                                    {isBranchPharmacy ? 'Submit Return' : 'Record Disposal'}
+                                    <FaTrash /> {isBranchPharmacy ? 'Submit All Returns' : 'Process All Disposals'} ({tempDisposals.length})
                                 </button>
                             </div>
-                        </form>
+                        </div>
                     </div>
                 </div>
             )}

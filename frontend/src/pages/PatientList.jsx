@@ -40,10 +40,8 @@ const PatientList = () => {
     return (
         <Layout>
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-800">Patient Registry</h2>
-                <Link to="/register-patient" className="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-green-700">
-                    <FaUserPlus /> Register New Patient
-                </Link>
+                <h2 className="text-2xl font-bold text-gray-800">Patient Registry List</h2>
+
             </div>
 
             <div className="mb-6 relative">

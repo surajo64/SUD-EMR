@@ -30,7 +30,14 @@ const PatientDetails = () => {
 
     // Orders
     const [selectedLabTest, setSelectedLabTest] = useState('');
+    const [tempLabOrders, setTempLabOrders] = useState([]); // Multi-select for Lab
+    const [labSearchTerm, setLabSearchTerm] = useState('');
+    const [showLabDropdown, setShowLabDropdown] = useState(false);
+
     const [selectedRadTest, setSelectedRadTest] = useState('');
+    const [tempRadOrders, setTempRadOrders] = useState([]); // Multi-select for Radiology
+    const [radSearchTerm, setRadSearchTerm] = useState('');
+    const [showRadDropdown, setShowRadDropdown] = useState(false);
     const [selectedDrug, setSelectedDrug] = useState('');
     const [drugQuantity, setDrugQuantity] = useState(1);
     const [drugDosage, setDrugDosage] = useState('');
@@ -287,40 +294,69 @@ const PatientDetails = () => {
         }
     };
 
+    const handleAddLabToQueue = () => {
+        if (!selectedLabTest) return;
+        const test = labCharges.find(c => c._id === selectedLabTest);
+        if (test && !tempLabOrders.find(t => t._id === test._id)) {
+            setTempLabOrders([...tempLabOrders, test]);
+            setSelectedLabTest(''); // Reset selection
+            setLabSearchTerm(''); // Reset search
+            toast.success('Test added to list');
+        }
+    };
+
+    const handleRemoveLabFromQueue = (id) => {
+        setTempLabOrders(tempLabOrders.filter(t => t._id !== id));
+    };
+
     const handlePlaceLabOrder = async () => {
-        if (!selectedLabTest || !encounter) return;
+        if (tempLabOrders.length === 0 && !selectedLabTest) return;
+
+        // If user has a selected test but didn't add to queue, add it now
+        let ordersToPlace = [...tempLabOrders];
+        if (selectedLabTest) {
+            const test = labCharges.find(c => c._id === selectedLabTest);
+            if (test && !ordersToPlace.find(t => t._id === test._id)) {
+                ordersToPlace.push(test);
+            }
+        }
+
+        if (ordersToPlace.length === 0) return;
 
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
 
-            // 1. Add charge to encounter FIRST
-            const chargeRes = await axios.post(
-                'http://localhost:5000/api/encounter-charges',
-                {
-                    encounterId: encounter._id,
-                    patientId: patient._id,
-                    chargeId: selectedLabTest,
-                    quantity: 1
-                },
-                config
-            );
+            for (const test of ordersToPlace) {
+                // 1. Add charge to encounter FIRST
+                const chargeRes = await axios.post(
+                    'http://localhost:5000/api/encounter-charges',
+                    {
+                        encounterId: encounter._id,
+                        patientId: patient._id,
+                        chargeId: test._id,
+                        quantity: 1
+                    },
+                    config
+                );
 
-            // 2. Create lab order with charge ID
-            await axios.post(
-                'http://localhost:5000/api/lab',
-                {
-                    patientId: patient._id,
-                    visitId: encounter._id,
-                    chargeId: chargeRes.data._id, // Link to charge
-                    testName: labCharges.find(c => c._id === selectedLabTest)?.name,
-                    notes: 'Doctor ordered'
-                },
-                config
-            );
+                // 2. Create lab order with charge ID
+                await axios.post(
+                    'http://localhost:5000/api/lab',
+                    {
+                        patientId: patient._id,
+                        visitId: encounter._id,
+                        chargeId: chargeRes.data._id, // Link to charge
+                        testName: test.name,
+                        notes: 'Doctor ordered'
+                    },
+                    config
+                );
+            }
 
-            toast.success('Lab order placed! Charge generated. Patient must pay before lab test.');
+            toast.success(`${ordersToPlace.length} Lab order(s) placed!`);
             setSelectedLabTest('');
+            setTempLabOrders([]);
             setShowLabModal(false);
             // Refresh list
             const labRes = await axios.get(`http://localhost:5000/api/lab/visit/${encounter._id}`, config);
@@ -333,40 +369,69 @@ const PatientDetails = () => {
         }
     };
 
+    const handleAddRadToQueue = () => {
+        if (!selectedRadTest) return;
+        const scan = radiologyCharges.find(c => c._id === selectedRadTest);
+        if (scan && !tempRadOrders.find(s => s._id === scan._id)) {
+            setTempRadOrders([...tempRadOrders, scan]);
+            setSelectedRadTest(''); // Reset selection
+            setRadSearchTerm(''); // Reset search
+            toast.success('Scan added to list');
+        }
+    };
+
+    const handleRemoveRadFromQueue = (id) => {
+        setTempRadOrders(tempRadOrders.filter(s => s._id !== id));
+    };
+
     const handlePlaceRadiologyOrder = async () => {
-        if (!selectedRadTest || !encounter) return;
+        if (tempRadOrders.length === 0 && !selectedRadTest) return;
+
+        // If user has a selected test but didn't add to queue, add it now
+        let ordersToPlace = [...tempRadOrders];
+        if (selectedRadTest) {
+            const scan = radiologyCharges.find(c => c._id === selectedRadTest);
+            if (scan && !ordersToPlace.find(s => s._id === scan._id)) {
+                ordersToPlace.push(scan);
+            }
+        }
+
+        if (ordersToPlace.length === 0) return;
 
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
 
-            // 1. Add charge to encounter FIRST
-            const chargeRes = await axios.post(
-                'http://localhost:5000/api/encounter-charges',
-                {
-                    encounterId: encounter._id,
-                    patientId: patient._id,
-                    chargeId: selectedRadTest,
-                    quantity: 1
-                },
-                config
-            );
+            for (const scan of ordersToPlace) {
+                // 1. Add charge to encounter FIRST
+                const chargeRes = await axios.post(
+                    'http://localhost:5000/api/encounter-charges',
+                    {
+                        encounterId: encounter._id,
+                        patientId: patient._id,
+                        chargeId: scan._id,
+                        quantity: 1
+                    },
+                    config
+                );
 
-            // 2. Create radiology order with charge ID
-            await axios.post(
-                'http://localhost:5000/api/radiology',
-                {
-                    patientId: patient._id,
-                    visitId: encounter._id,
-                    chargeId: chargeRes.data._id, // Link to charge
-                    scanType: radiologyCharges.find(c => c._id === selectedRadTest)?.name,
-                    notes: 'Doctor ordered'
-                },
-                config
-            );
+                // 2. Create radiology order with charge ID
+                await axios.post(
+                    'http://localhost:5000/api/radiology',
+                    {
+                        patientId: patient._id,
+                        visitId: encounter._id,
+                        chargeId: chargeRes.data._id, // Link to charge
+                        scanType: scan.name,
+                        notes: 'Doctor ordered'
+                    },
+                    config
+                );
+            }
 
-            toast.success('Radiology order placed! Charge generated. Patient must pay before imaging.');
+            toast.success(`${ordersToPlace.length} Radiology order(s) placed!`);
             setSelectedRadTest('');
+            setTempRadOrders([]);
             setShowRadModal(false);
             // Refresh list
             const radRes = await axios.get(`http://localhost:5000/api/radiology/visit/${encounter._id}`, config);
@@ -1280,7 +1345,7 @@ const PatientDetails = () => {
                                                 {/* Group prescriptions by date and sort by latest first */}
                                                 {Object.entries(
                                                     currentPrescriptions.reduce((acc, rx) => {
-                                                        const date = new Date(rx.createdAt).toLocaleDateString();
+                                                        const date = new Date(rx.createdAt).toLocaleDateString('en-CA'); // Use ISO-like format YYYY-MM-DD for sorting
                                                         if (!acc[date]) acc[date] = [];
                                                         acc[date].push(rx);
                                                         return acc;
@@ -1662,34 +1727,98 @@ const PatientDetails = () => {
                                 </button>
                             </div>
                             <div className="space-y-4">
-                                <div>
-                                    <label className="block text-gray-700 mb-2 font-semibold">Select Test</label>
-                                    <select
-                                        className="w-full border p-2 rounded"
-                                        value={selectedLabTest}
-                                        onChange={(e) => setSelectedLabTest(e.target.value)}
-                                    >
-                                        <option value="">-- Select Test --</option>
-                                        {labCharges.map(charge => (
-                                            <option key={charge._id} value={charge._id}>
-                                                {charge.name} - ${charge.basePrice}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="flex gap-2">
+
+                                <div className="flex gap-2 items-end">
+                                    <div className="flex-1 relative">
+                                        <label className="block text-gray-700 mb-2 font-semibold">Search Test</label>
+                                        <input
+                                            type="text"
+                                            className="w-full border p-2 rounded"
+                                            placeholder="Type to search test..."
+                                            value={labSearchTerm}
+                                            onChange={(e) => {
+                                                setLabSearchTerm(e.target.value);
+                                                setShowLabDropdown(true);
+                                                setSelectedLabTest('');
+                                            }}
+                                            onFocus={() => setShowLabDropdown(true)}
+                                        />
+                                        {showLabDropdown && labSearchTerm && (
+                                            <div className="absolute z-10 w-full bg-white border rounded shadow-lg max-h-40 overflow-y-auto mt-1">
+                                                {labCharges.filter(c => c.name.toLowerCase().includes(labSearchTerm.toLowerCase())).length > 0 ? (
+                                                    labCharges.filter(c => c.name.toLowerCase().includes(labSearchTerm.toLowerCase())).map(charge => (
+                                                        <div
+                                                            key={charge._id}
+                                                            className="p-2 hover:bg-purple-50 cursor-pointer text-sm"
+                                                            onClick={() => {
+                                                                setSelectedLabTest(charge._id);
+                                                                setLabSearchTerm(charge.name);
+                                                                setShowLabDropdown(false);
+                                                            }}
+                                                        >
+                                                            <div className="font-semibold">{charge.name}</div>
+                                                            <div className="text-xs text-gray-500">₦{charge.basePrice}</div>
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <div className="p-2 text-gray-500 text-sm">No matches found</div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                     <button
-                                        onClick={handlePlaceLabOrder}
+                                        onClick={handleAddLabToQueue}
                                         disabled={!selectedLabTest}
-                                        className="bg-purple-600 text-white px-6 py-2 rounded hover:bg-purple-700 disabled:bg-gray-400 font-semibold"
+                                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-300 h-[42px]"
                                     >
-                                        Place Order
+                                        Add
                                     </button>
+                                </div>
+
+                                {/* List of selected tests */}
+                                {tempLabOrders.length > 0 && (
+                                    <div className="border rounded max-h-40 overflow-y-auto">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-gray-100">
+                                                <tr>
+                                                    <th className="p-2">Test Name</th>
+                                                    <th className="p-2">Price</th>
+                                                    <th className="p-2">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {tempLabOrders.map(test => (
+                                                    <tr key={test._id} className="border-b">
+                                                        <td className="p-2">{test.name}</td>
+                                                        <td className="p-2">₦{test.basePrice}</td>
+                                                        <td className="p-2">
+                                                            <button
+                                                                onClick={() => handleRemoveLabFromQueue(test._id)}
+                                                                className="text-red-600 hover:text-red-800"
+                                                            >
+                                                                <FaTrash />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+
+                                <div className="flex gap-2 justify-end mt-4">
                                     <button
                                         onClick={() => setShowLabModal(false)}
                                         className="bg-gray-400 text-white px-6 py-2 rounded hover:bg-gray-500"
                                     >
                                         Cancel
+                                    </button>
+                                    <button
+                                        onClick={handlePlaceLabOrder}
+                                        disabled={tempLabOrders.length === 0 && !selectedLabTest}
+                                        className="bg-purple-600 text-white px-6 py-2 rounded hover:bg-purple-700 disabled:bg-gray-400 font-semibold"
+                                    >
+                                        Place Order(s)
                                     </button>
                                 </div>
                             </div>
@@ -1710,34 +1839,98 @@ const PatientDetails = () => {
                                 </button>
                             </div>
                             <div className="space-y-4">
-                                <div>
-                                    <label className="block text-gray-700 mb-2 font-semibold">Select Study</label>
-                                    <select
-                                        className="w-full border p-2 rounded"
-                                        value={selectedRadTest}
-                                        onChange={(e) => setSelectedRadTest(e.target.value)}
-                                    >
-                                        <option value="">-- Select Study --</option>
-                                        {radiologyCharges.map(charge => (
-                                            <option key={charge._id} value={charge._id}>
-                                                {charge.name} - ${charge.basePrice}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="flex gap-2">
+
+                                <div className="flex gap-2 items-end">
+                                    <div className="flex-1 relative">
+                                        <label className="block text-gray-700 mb-2 font-semibold">Search Study</label>
+                                        <input
+                                            type="text"
+                                            className="w-full border p-2 rounded"
+                                            placeholder="Type to search study..."
+                                            value={radSearchTerm}
+                                            onChange={(e) => {
+                                                setRadSearchTerm(e.target.value);
+                                                setShowRadDropdown(true);
+                                                setSelectedRadTest('');
+                                            }}
+                                            onFocus={() => setShowRadDropdown(true)}
+                                        />
+                                        {showRadDropdown && radSearchTerm && (
+                                            <div className="absolute z-10 w-full bg-white border rounded shadow-lg max-h-40 overflow-y-auto mt-1">
+                                                {radiologyCharges.filter(c => c.name.toLowerCase().includes(radSearchTerm.toLowerCase())).length > 0 ? (
+                                                    radiologyCharges.filter(c => c.name.toLowerCase().includes(radSearchTerm.toLowerCase())).map(charge => (
+                                                        <div
+                                                            key={charge._id}
+                                                            className="p-2 hover:bg-indigo-50 cursor-pointer text-sm"
+                                                            onClick={() => {
+                                                                setSelectedRadTest(charge._id);
+                                                                setRadSearchTerm(charge.name);
+                                                                setShowRadDropdown(false);
+                                                            }}
+                                                        >
+                                                            <div className="font-semibold">{charge.name}</div>
+                                                            <div className="text-xs text-gray-500">₦{charge.basePrice}</div>
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <div className="p-2 text-gray-500 text-sm">No matches found</div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                     <button
-                                        onClick={handlePlaceRadiologyOrder}
+                                        onClick={handleAddRadToQueue}
                                         disabled={!selectedRadTest}
-                                        className="bg-indigo-600 text-white px-6 py-2 rounded hover:bg-indigo-700 disabled:bg-gray-400 font-semibold"
+                                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-300 h-[42px]"
                                     >
-                                        Place Order
+                                        Add
                                     </button>
+                                </div>
+
+                                {/* List of selected scans */}
+                                {tempRadOrders.length > 0 && (
+                                    <div className="border rounded max-h-40 overflow-y-auto">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-gray-100">
+                                                <tr>
+                                                    <th className="p-2">Scan Name</th>
+                                                    <th className="p-2">Price</th>
+                                                    <th className="p-2">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {tempRadOrders.map(scan => (
+                                                    <tr key={scan._id} className="border-b">
+                                                        <td className="p-2">{scan.name}</td>
+                                                        <td className="p-2">₦{scan.basePrice}</td>
+                                                        <td className="p-2">
+                                                            <button
+                                                                onClick={() => handleRemoveRadFromQueue(scan._id)}
+                                                                className="text-red-600 hover:text-red-800"
+                                                            >
+                                                                <FaTrash />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+
+                                <div className="flex gap-2 justify-end mt-4">
                                     <button
                                         onClick={() => setShowRadModal(false)}
                                         className="bg-gray-400 text-white px-6 py-2 rounded hover:bg-gray-500"
                                     >
                                         Cancel
+                                    </button>
+                                    <button
+                                        onClick={handlePlaceRadiologyOrder}
+                                        disabled={tempRadOrders.length === 0 && !selectedRadTest}
+                                        className="bg-indigo-600 text-white px-6 py-2 rounded hover:bg-indigo-700 disabled:bg-gray-400 font-semibold"
+                                    >
+                                        Place Order(s)
                                     </button>
                                 </div>
                             </div>
@@ -1819,101 +2012,9 @@ const PatientDetails = () => {
                 )
             }
 
-            {/* Lab Order Modal */}
-            {
-                showLabModal && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                        <div className="bg-white rounded-lg p-6 w-full max-w-md">
-                            <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-xl font-bold">Add Lab Order</h3>
-                                <button onClick={() => setShowLabModal(false)} className="text-gray-500 hover:text-gray-700">
-                                    <FaTimes size={24} />
-                                </button>
-                            </div>
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-gray-700 mb-2 font-semibold">Select Test</label>
-                                    <select
-                                        className="w-full border p-2 rounded"
-                                        value={selectedLabTest}
-                                        onChange={(e) => setSelectedLabTest(e.target.value)}
-                                    >
-                                        <option value="">-- Select Test --</option>
-                                        {labCharges.map(charge => (
-                                            <option key={charge._id} value={charge._id}>
-                                                {charge.name} - ${charge.basePrice}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={handlePlaceLabOrder}
-                                        disabled={!selectedLabTest}
-                                        className="bg-purple-600 text-white px-6 py-2 rounded hover:bg-purple-700 disabled:bg-gray-400 font-semibold"
-                                    >
-                                        Place Order
-                                    </button>
-                                    <button
-                                        onClick={() => setShowLabModal(false)}
-                                        className="bg-gray-400 text-white px-6 py-2 rounded hover:bg-gray-500"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
 
-            {/* Radiology Order Modal */}
-            {
-                showRadModal && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                        <div className="bg-white rounded-lg p-6 w-full max-w-md">
-                            <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-xl font-bold">Add Radiology Order</h3>
-                                <button onClick={() => setShowRadModal(false)} className="text-gray-500 hover:text-gray-700">
-                                    <FaTimes size={24} />
-                                </button>
-                            </div>
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-gray-700 mb-2 font-semibold">Select Study</label>
-                                    <select
-                                        className="w-full border p-2 rounded"
-                                        value={selectedRadTest}
-                                        onChange={(e) => setSelectedRadTest(e.target.value)}
-                                    >
-                                        <option value="">-- Select Study --</option>
-                                        {radiologyCharges.map(charge => (
-                                            <option key={charge._id} value={charge._id}>
-                                                {charge.name} - ${charge.basePrice}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={handlePlaceRadiologyOrder}
-                                        disabled={!selectedRadTest}
-                                        className="bg-indigo-600 text-white px-6 py-2 rounded hover:bg-indigo-700 disabled:bg-gray-400 font-semibold"
-                                    >
-                                        Place Order
-                                    </button>
-                                    <button
-                                        onClick={() => setShowRadModal(false)}
-                                        className="bg-gray-400 text-white px-6 py-2 rounded hover:bg-gray-500"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
+
+
 
             {/* Prescription Modal */}
             {
