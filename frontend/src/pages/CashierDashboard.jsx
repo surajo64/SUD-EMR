@@ -26,9 +26,20 @@ const CashierDashboard = () => {
 
 
 
+    const [systemSettings, setSystemSettings] = useState(null);
+
     const { user } = useContext(AuthContext);
 
     useEffect(() => {
+        const fetchSystemSettings = async () => {
+            try {
+                const { data } = await axios.get('http://localhost:5000/api/settings');
+                setSystemSettings(data);
+            } catch (error) {
+                console.error('Error fetching system settings:', error);
+            }
+        };
+        fetchSystemSettings();
         fetchReceipts();
     }, []);
 
@@ -195,8 +206,14 @@ const CashierDashboard = () => {
                 </head>
                 <body>
                     <div class="header">
-                        <h2>SUD EMR HOSPITAL</h2>
-                        <p>123 Hospital Road, City</p>
+                        ${systemSettings?.hospitalLogo ? `<img src="${systemSettings.hospitalLogo}" style="height: 150px; max-width: 250px; object-fit: contain; margin-bottom: 0;" />` : ''}
+                        <h2 style="margin: 0 0 5px 0;">${systemSettings?.reportHeader || 'SUD EMR'}</h2>
+                        <p style="margin: 5px 0; font-size: 12px;">${systemSettings?.address || ''}</p>
+                        <p style="margin: 2px 0; font-size: 12px;">
+                            ${systemSettings?.phone ? `Phone: ${systemSettings.phone}` : ''}
+                            ${systemSettings?.phone && systemSettings?.email ? ' | ' : ''}
+                            ${systemSettings?.email ? `Email: ${systemSettings.email}` : ''}
+                        </p>
                         <h3>PAYMENT RECEIPT</h3>
                     </div>
                     <div class="info-row"><span>Receipt #:</span> <strong>${receipt.receiptNumber}</strong></div>

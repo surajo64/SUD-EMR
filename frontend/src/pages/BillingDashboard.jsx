@@ -37,19 +37,30 @@ const BillingDashboard = () => {
     const [statementStartDate, setStatementStartDate] = useState('');
     const [statementEndDate, setStatementEndDate] = useState('');
 
+    const [systemSettings, setSystemSettings] = useState(null);
+
     const { user } = useContext(AuthContext);
+
+    useEffect(() => {
+        const fetchSystemSettings = async () => {
+            try {
+                const { data } = await axios.get('http://localhost:5000/api/settings');
+                setSystemSettings(data);
+            } catch (error) {
+                console.error('Error fetching system settings:', error);
+            }
+        };
+        fetchSystemSettings();
+        fetchInvoices();
+        fetchPatients();
+        fetchReceipts();
+    }, []);
 
     const [newInvoice, setNewInvoice] = useState({
         patientId: '',
         items: [{ description: '', cost: '' }],
         paymentMethod: 'cash'
     });
-
-    useEffect(() => {
-        fetchInvoices();
-        fetchPatients();
-        fetchReceipts();
-    }, []);
 
     const fetchInvoices = async () => {
         try {
@@ -236,7 +247,10 @@ const BillingDashboard = () => {
                 </head>
                 <body>
                     <div class="header">
-                        <div class="logo">SUD EMR HOSPITAL</div>
+                        <div class="logo">
+                            ${systemSettings?.hospitalLogo ? `<img src="${systemSettings.hospitalLogo}" style="height: 150px; max-width: 250px; object-fit: contain; margin-bottom: 0;" />` : ''}
+                            <div style="font-size: 24px; font-weight: bold; margin-top: 0;">${systemSettings?.reportHeader || 'SUD EMR'}</div>
+                        </div>
                         <div>
                             <h1 class="statement-title">PATIENT STATEMENT</h1>
                             <p>Date: ${new Date().toLocaleDateString()}</p>
@@ -284,7 +298,10 @@ const BillingDashboard = () => {
                     </div>
 
                     <div class="footer">
-                        <p>SUD EMR Hospital | 123 Hospital Road | Contact: +234 123 456 7890</p>
+                        <p>${systemSettings?.hospitalName || 'SUD EMR Hospital'} | ${systemSettings?.address || ''} 
+                           ${systemSettings?.phone ? ` | Phone: ${systemSettings.phone}` : ''}
+                           ${systemSettings?.email ? ` | Email: ${systemSettings.email}` : ''}</p>
+                        ${systemSettings?.reportFooter ? `<p style="font-size: 10px;">${systemSettings.reportFooter}</p>` : ''}
                         <p>This is a computer-generated statement</p>
                     </div>
                 </body>
@@ -331,8 +348,14 @@ const BillingDashboard = () => {
                 </head>
                 <body>
                     <div class="header">
-                        <h2>SUD EMR HOSPITAL</h2>
-                        <p>123 Hospital Road, City</p>
+                        ${systemSettings?.hospitalLogo ? `<img src="${systemSettings.hospitalLogo}" style="height: 150px; max-width: 250px; object-fit: contain; margin-bottom: 0;" />` : ''}
+                        <h2 style="margin: 0 0 5px 0;">${systemSettings?.reportHeader || 'SUD EMR'}</h2>
+                        <p style="margin: 5px 0; font-size: 12px;">${systemSettings?.address || ''}</p>
+                        <p style="margin: 2px 0; font-size: 12px;">
+                            ${systemSettings?.phone ? `Phone: ${systemSettings.phone}` : ''}
+                            ${systemSettings?.phone && systemSettings?.email ? ' | ' : ''}
+                            ${systemSettings?.email ? `Email: ${systemSettings.email}` : ''}
+                        </p>
                         <h3>PAYMENT RECEIPT</h3>
                     </div>
                     
@@ -967,8 +990,15 @@ const BillingDashboard = () => {
                                                             </style>
                                                         </head>
                                                         <body>
-                                                            <div class="header">
-                                                                <h1>SUD EMR HOSPITAL</h1>
+                                                              <div class="header">
+                                                                ${systemSettings?.hospitalLogo ? `<img src="${systemSettings.hospitalLogo}" style="height: 150px; max-width: 250px; object-fit: contain; margin-bottom: 0;" />` : ''}
+                                                                <h1 style="margin: 0 0 5px 0;">${systemSettings?.reportHeader || 'SUD EMR'}</h1>
+                                                                <p style="margin: 5px 0; font-size: 14px;">${systemSettings?.address || ''}</p>
+                                                                <p style="margin: 2px 0; font-size: 12px;">
+                                                                    ${systemSettings?.phone ? `Phone: ${systemSettings.phone}` : ''}
+                                                                    ${systemSettings?.phone && systemSettings?.email ? ' | ' : ''}
+                                                                    ${systemSettings?.email ? `Email: ${systemSettings.email}` : ''}
+                                                                </p>
                                                                 <h2>Retainership Account Statement</h2>
                                                                 ${statementStartDate && statementEndDate ? `<p>Period: ${new Date(statementStartDate).toLocaleDateString()} to ${new Date(statementEndDate).toLocaleDateString()}</p>` : ''}
                                                             </div>

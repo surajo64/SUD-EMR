@@ -97,6 +97,20 @@ const PatientDetails = () => {
     });
 
 
+    const [systemSettings, setSystemSettings] = useState(null);
+
+    useEffect(() => {
+        const fetchSystemSettings = async () => {
+            try {
+                const { data } = await axios.get('http://localhost:5000/api/settings');
+                setSystemSettings(data);
+            } catch (error) {
+                console.error('Error fetching system settings:', error);
+            }
+        };
+        fetchSystemSettings();
+    }, []);
+
     // Tab State - default based on user role
     const getDefaultTab = () => {
         if (user?.role === 'lab_technician') return 'lab';
@@ -782,14 +796,15 @@ const PatientDetails = () => {
                 </head>
                 <body>
                     <div class="header">
-                        <!-- Logo Placeholder -->
-                        <div style="margin-bottom: 10px;">
-                             <!-- <img src="/logo.png" style="height: 60px;" /> -->
+                        ${systemSettings?.hospitalLogo ? `<img src="${systemSettings.hospitalLogo}" style="height: 150px; max-width: 250px; object-contain: contain; margin-bottom: 0;" />` : ''}
+                        <div class="hospital-name" style="margin-top: 0;">${systemSettings?.reportHeader || 'SUD EMR'}</div>
+                        <div class="hospital-info">${systemSettings?.address || ''}</div>
+                        <div class="hospital-info">
+                            ${systemSettings?.phone ? `Phone: ${systemSettings.phone}` : ''}
+                            ${systemSettings?.phone && systemSettings?.email ? ' | ' : ''}
+                            ${systemSettings?.email ? `Email: ${systemSettings.email}` : ''}
                         </div>
-                        <div class="hospital-name">KIRCT KILIMANJARO HOSPITAL</div>
-                        <div class="hospital-info">Km1 Kwanar Dawaki, Kano-Kaduna Express Way.</div>
-                        <div class="hospital-info">Email: kirctkilimanjarohospital@kirct.com , kirctkilimanjarohospital@gmail.com</div>
-                        <div class="hospital-info">Phone: +2348024646465</div>
+                        ${systemSettings?.reportHeader ? `<div class="hospital-info" style="margin-top: 10px; font-style: italic;">${systemSettings.reportHeader}</div>` : ''}
                         
                         <div class="doc-title">Referral Form</div>
                     </div>
@@ -870,6 +885,12 @@ const PatientDetails = () => {
                                 <span style="border-bottom: 1px solid #000; flex-grow: 1; padding-left: 10px;">Dr. ${user.name}</span>
                             </div>
                         </div>
+
+                        ${systemSettings?.reportFooter ? `
+                        <div style="margin-top: 40px; text-align: center; font-size: 10px; color: #666; border-top: 1px solid #eee; pt-2;">
+                            ${systemSettings.reportFooter}
+                        </div>
+                        ` : ''}
                     </div>
                 </body>
             </html>

@@ -1,13 +1,30 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { FaUserMd, FaPills, FaFlask, FaXRay, FaUserInjured, FaCalendarAlt, FaNotesMedical, FaSignOutAlt, FaTachometerAlt, FaDollarSign, FaFileInvoiceDollar, FaHeart, FaHospital, FaBed, FaChevronDown, FaChevronRight, FaCogs, FaMoneyBillWave, FaExchangeAlt, FaTrash, FaUniversity, FaChartLine, FaFileMedicalAlt } from 'react-icons/fa';
-import { useContext, useState } from 'react';
+import { useContext, useState, useEffect } from 'react';
 import AuthContext from '../context/AuthContext';
+import axios from 'axios';
 
 const Sidebar = () => {
     const { user, logout } = useContext(AuthContext);
     const location = useLocation();
     const navigate = useNavigate();
     const [openDropdown, setOpenDropdown] = useState('');
+
+    const [hospitalName, setHospitalName] = useState('SUD EMR');
+
+    useEffect(() => {
+        const fetchHospitalName = async () => {
+            try {
+                const { data } = await axios.get('http://localhost:5000/api/settings');
+                if (data && data.hospitalName) {
+                    setHospitalName(data.hospitalName);
+                }
+            } catch (error) {
+                console.error('Error fetching hospital name:', error);
+            }
+        };
+        fetchHospitalName();
+    }, []);
 
     if (!user) {
         return null; // Don't render sidebar if user is not logged in
@@ -47,7 +64,7 @@ const Sidebar = () => {
     return (
         <div className="w-64 bg-green-800 text-white min-h-screen flex flex-col">
             <div className="p-6 text-2xl font-bold border-b border-green-700 flex items-center gap-2">
-                <FaNotesMedical /> SUD EMR
+                <FaNotesMedical /> {hospitalName}
             </div>
 
             <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
@@ -202,6 +219,9 @@ const Sidebar = () => {
                             </Link>
                             <Link to="/admin/bank-management" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/bank-management')}`}>
                                 <FaUniversity size={14} /> Bank Management
+                            </Link>
+                            <Link to="/admin/settings" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/settings')}`}>
+                                <FaCogs size={14} /> System Settings
                             </Link>
                         </SidebarDropdown>
 

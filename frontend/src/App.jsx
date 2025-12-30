@@ -38,6 +38,7 @@ import WardManagement from './pages/WardManagement';
 import DrugMetadataManagement from './pages/DrugMetadataManagement';
 import PharmacyManagement from './pages/PharmacyManagement';
 import DrugTransfer from './pages/DrugTransfer';
+import Settings from './pages/Settings';
 import DrugDisposal from './pages/DrugDisposal';
 import HMOManagement from './pages/HMOManagement';
 import ClaimsManagement from './pages/ClaimsManagement';
@@ -86,6 +87,7 @@ function App() {
           <Route path="/admin/hmo-management" element={<HMOManagement />} />
           <Route path="/admin/claims-management" element={<ClaimsManagement />} />
           <Route path="/admin/bank-management" element={<BankManagement />} />
+          <Route path="/admin/settings" element={<Settings />} />
 
           <Route path="/" element={<Navigate to="/dashboard" />} />
           {/* Add other routes here */}

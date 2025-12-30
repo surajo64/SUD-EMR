@@ -14,9 +14,19 @@ const PharmacyPrescriptions = () => {
     const [selectedPrescription, setSelectedPrescription] = useState(null);
     const [dispensingMedicines, setDispensingMedicines] = useState([]);
     const [inventoryAvailability, setInventoryAvailability] = useState({});
+    const [systemSettings, setSystemSettings] = useState(null);
     const { user } = useContext(AuthContext);
 
     useEffect(() => {
+        const fetchSystemSettings = async () => {
+            try {
+                const { data } = await axios.get('http://localhost:5000/api/settings');
+                setSystemSettings(data);
+            } catch (error) {
+                console.error('Error fetching system settings:', error);
+            }
+        };
+        fetchSystemSettings();
         if (user) fetchPrescriptions();
     }, [user]);
 
@@ -132,10 +142,15 @@ const PharmacyPrescriptions = () => {
             </head>
             <body>
                 <div class="header">
-                    <h1>MEDICAL PRESCRIPTION</h1>
-                    <p>Hospital/Clinic Name</p>
-                    <p>Address Line 1, City, State</p>
-                    <p>Phone: (123) 456-7890</p>
+                    ${systemSettings?.hospitalLogo ? `<img src="${systemSettings.hospitalLogo}" style="height: 150px; max-width: 250px; object-fit: contain; margin-bottom: 0;" />` : ''}
+                    <h1 style="margin: 0 0 5px 0;">MEDICAL PRESCRIPTION</h1>
+                    <p style="margin: 0 0 5px 0;"><strong>${systemSettings?.reportHeader || 'SUD EMR'}</strong></p>
+                    <p style="margin: 0 0 5px 0;">${systemSettings?.address || ''}</p>
+                    <p>
+                        ${systemSettings?.phone ? `Phone: ${systemSettings.phone}` : ''}
+                        ${systemSettings?.phone && systemSettings?.email ? ' | ' : ''}
+                        ${systemSettings?.email ? `Email: ${systemSettings.email}` : ''}
+                    </p>
                 </div>
                 
                 <div class="patient-info">

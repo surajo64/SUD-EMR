@@ -17,9 +17,19 @@ const LabDashboard = () => {
     const [viewResultModal, setViewResultModal] = useState(null);
     const [editResultModal, setEditResultModal] = useState(null);
     const [editResults, setEditResults] = useState('');
+    const [systemSettings, setSystemSettings] = useState(null);
     const { user } = useContext(AuthContext);
 
     useEffect(() => {
+        const fetchSystemSettings = async () => {
+            try {
+                const { data } = await axios.get('http://localhost:5000/api/settings');
+                setSystemSettings(data);
+            } catch (error) {
+                console.error('Error fetching system settings:', error);
+            }
+        };
+        fetchSystemSettings();
         fetchLabOrders();
     }, []);
 
@@ -148,8 +158,8 @@ const LabDashboard = () => {
                     <title>Laboratory Report - ${order.testName}</title>
                     <style>
                         body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
-                        .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
-                        .header h1 { font-size: 28px; margin: 0 0 10px 0; }
+                        .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+                        .header h1 { font-size: 28px; margin: 0; }
                         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; font-size: 14px; }
                         .info-grid p { margin: 5px 0; }
                         .results-section { border-top: 1px solid #333; border-bottom: 1px solid #333; padding: 20px 0; margin-bottom: 30px; }
@@ -167,8 +177,15 @@ const LabDashboard = () => {
                 </head>
                 <body>
                     <div class="header">
-                        <h1>Laboratory Report</h1>
-                        <p>Hospital Name</p>
+                        ${systemSettings?.hospitalLogo ? `<img src="${systemSettings.hospitalLogo}" style="height: 150px; max-width: 250px; object-fit: contain; margin-bottom: 0;" />` : ''}
+                        <h1 style="margin: 0 0 5px 0;">${systemSettings?.reportHeader || 'LABORATORY REPORT'}</h1>
+                        <p style="margin: 5px 0; font-size: 14px;">${systemSettings?.address || ''}</p>
+                        <p style="margin: 2px 0; font-size: 12px;">
+                            ${systemSettings?.phone ? `Phone: ${systemSettings.phone}` : ''}
+                            ${systemSettings?.phone && systemSettings?.email ? ' | ' : ''}
+                            ${systemSettings?.email ? `Email: ${systemSettings.email}` : ''}
+                        </p>
+                        <h2 style="font-size: 20px; border-top: 1px solid #eee; pt-2; mt-2;">Laboratory Report</h2>
                     </div>
 
                     <div class="info-grid">
@@ -548,8 +565,17 @@ const LabDashboard = () => {
                         {/* PRINT AREA START */}
                         <div ref={resultRef} className="print-area">
                             <div className="text-center mb-6">
-                                <h1 className="text-3xl font-bold text-gray-800">Laboratory Report</h1>
-                                <p className="text-sm text-gray-600 mt-2">Hospital Name</p>
+                                {systemSettings?.hospitalLogo && (
+                                    <img src={systemSettings.hospitalLogo} alt="Logo" className="h-32 mx-auto mb-0 object-contain" />
+                                )}
+                                <h1 className="text-3xl font-bold text-gray-800 m-0">{systemSettings?.reportHeader || 'Laboratory Report'}</h1>
+                                <p className="text-sm text-gray-600 mt-2">{systemSettings?.address || 'Hospital Name'}</p>
+                                <p className="text-sm text-gray-600">
+                                    {systemSettings?.phone ? `Phone: ${systemSettings.phone}` : ''}
+                                    {systemSettings?.phone && systemSettings?.email ? ' | ' : ''}
+                                    {systemSettings?.email ? `Email: ${systemSettings.email}` : ''}
+                                </p>
+                                <h2 className="text-xl font-semibold mt-4 border-t pt-2">LABORATORY REPORT</h2>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4 mb-6 text-sm">

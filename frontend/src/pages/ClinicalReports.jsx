@@ -59,13 +59,22 @@ const ClinicalReports = () => {
         }));
     };
 
-    const exportToExcel = () => {
+    const exportToExcel = async () => {
         if (!reportData || !reportData.categorizedData) return;
+
+        let hospitalName = 'SUD EMR';
+        try {
+            const { data } = await axios.get('http://localhost:5000/api/settings');
+            hospitalName = data.hospitalName;
+        } catch (e) {
+            console.error('Settings fetch failed', e);
+        }
 
         const worksheetData = [];
         reportData.categorizedData.forEach(cat => {
             cat.records.forEach(rec => {
                 worksheetData.push({
+                    'Hospital': hospitalName,
                     'Category': cat.category,
                     'Date': new Date(rec.date).toLocaleDateString(),
                     'Patient Name': rec.patient?.name || 'N/A',
@@ -84,7 +93,7 @@ const ClinicalReports = () => {
 
         const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
         const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        saveAs(data, `Clinical_Report_${reportType}_${startDate}.xlsx`);
+        saveAs(data, `${hospitalName}_Clinical_Report_${reportType}_${startDate}.xlsx`);
         toast.success('Report exported successfully!');
     };
 
