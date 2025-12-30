@@ -32,6 +32,7 @@ import UserManagement from './pages/UserManagement';
 import RevenueReports from './pages/RevenueReports';
 import PatientManagement from './pages/PatientManagement';
 import ClinicManagement from './pages/ClinicManagement';
+import ClinicalReports from './pages/ClinicalReports';
 import FrontDeskChargeManagement from './pages/FrontDeskChargeManagement';
 import WardManagement from './pages/WardManagement';
 import DrugMetadataManagement from './pages/DrugMetadataManagement';
@@ -73,6 +74,7 @@ function App() {
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/users" element={<UserManagement />} />
           <Route path="/admin/reports" element={<RevenueReports />} />
+          <Route path="/admin/clinical-reports" element={<ClinicalReports />} />
           <Route path="/admin/patients" element={<PatientManagement />} />
           <Route path="/admin/clinics" element={<ClinicManagement />} />
           <Route path="/admin/front-desk-charges" element={<FrontDeskChargeManagement />} />

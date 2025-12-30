@@ -289,7 +289,8 @@ const PatientDetails = () => {
                 {
                     ...soapNote,
                     assessment: soapNote.assessment,
-                    diagnosis: soapNote.diagnosis // Pass the array of objects
+                    diagnosis: soapNote.diagnosis, // Pass the array of objects
+                    consultingPhysician: encounter.consultingPhysician || (user.role === 'doctor' ? user._id : undefined)
                 },
                 config
             );

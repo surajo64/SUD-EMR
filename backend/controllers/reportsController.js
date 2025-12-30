@@ -913,6 +913,188 @@ const getDashboardStats = async (req, res) => {
     }
 };
 
+// @desc    Get clinical reports (Diagnosis, Gender, Age distribution)
+// @route   GET /api/reports/clinical-report?diagnosis=&gender=&minAge=&maxAge=&startDate=&endDate=
+// @access  Private (Admin)
+const getClinicalReport = async (req, res) => {
+    try {
+        const { reportType = 'diagnosis', searchTerm, gender, minAge, maxAge, startDate, endDate } = req.query;
+
+        let dateQuery = {};
+        if (startDate || endDate) {
+            dateQuery.createdAt = {};
+            if (startDate) dateQuery.createdAt.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                dateQuery.createdAt.$lte = end;
+            }
+        }
+
+        let results = [];
+        let grouped = {};
+
+        if (reportType === 'diagnosis') {
+            let visitQuery = { ...dateQuery };
+            if (searchTerm) {
+                visitQuery.$or = [
+                    { 'diagnosis.code': { $regex: searchTerm, $options: 'i' } },
+                    { 'diagnosis.description': { $regex: searchTerm, $options: 'i' } },
+                    { 'assessment': { $regex: searchTerm, $options: 'i' } }
+                ];
+            }
+            results = await Visit.find(visitQuery)
+                .populate('patient')
+                .populate('doctor', 'name role')
+                .populate('consultingPhysician', 'name role')
+                .sort({ createdAt: -1 });
+
+            results = results.filter(v => v.patient &&
+                (gender === 'All' || !gender || v.patient.gender?.toLowerCase() === gender.toLowerCase()) &&
+                (!minAge || v.patient.age >= parseInt(minAge)) &&
+                (!maxAge || v.patient.age <= parseInt(maxAge))
+            );
+
+            results.forEach(v => {
+                // Find best clinical doctor to attribute
+                let clinicalDoctor = v.consultingPhysician || v.doctor;
+
+                // If the check-in person (receptionist) is still showing, try finding a doctor in notes
+                if (clinicalDoctor?.role === 'receptionist' && v.notes && v.notes.length > 0) {
+                    const drNote = [...v.notes].reverse().find(n => n.role?.toLowerCase() === 'doctor');
+                    if (drNote) clinicalDoctor = { name: drNote.author };
+                }
+
+                const diags = v.diagnosis && v.diagnosis.length > 0 ? v.diagnosis : [{ code: 'N/A', description: v.assessment || 'Unspecified clinical finding' }];
+                diags.forEach(d => {
+                    const key = d.code !== 'N/A' ? `${d.code} - ${d.description}` : d.description;
+                    if (searchTerm && !key.toLowerCase().includes(searchTerm.toLowerCase())) return;
+                    if (!grouped[key]) grouped[key] = [];
+                    grouped[key].push({
+                        patient: v.patient,
+                        doctor: clinicalDoctor,
+                        date: v.createdAt,
+                        details: d.code !== 'N/A' ? d.description : 'Clinical Assessment',
+                        _id: v._id
+                    });
+                });
+            });
+        }
+        else if (reportType === 'medication') {
+            let rxQuery = { ...dateQuery };
+            if (searchTerm) {
+                rxQuery['medicines.name'] = { $regex: searchTerm, $options: 'i' };
+            }
+            results = await Prescription.find(rxQuery).populate('patient').populate('doctor', 'name').sort({ createdAt: -1 });
+
+            results = results.filter(r => r.patient &&
+                (gender === 'All' || !gender || r.patient.gender?.toLowerCase() === gender.toLowerCase()) &&
+                (!minAge || r.patient.age >= parseInt(minAge)) &&
+                (!maxAge || r.patient.age <= parseInt(maxAge))
+            );
+
+            results.forEach(r => {
+                r.medicines.forEach(m => {
+                    if (searchTerm && !m.name.toLowerCase().includes(searchTerm.toLowerCase())) return;
+                    if (!grouped[m.name]) grouped[m.name] = [];
+                    grouped[m.name].push({
+                        patient: r.patient,
+                        doctor: r.doctor,
+                        date: r.createdAt,
+                        details: `${m.dosage} ${m.frequency} x ${m.duration}`,
+                        _id: r._id
+                    });
+                });
+            });
+        }
+        else if (reportType === 'lab') {
+            let labQuery = { ...dateQuery };
+            if (searchTerm) {
+                labQuery.testName = { $regex: searchTerm, $options: 'i' };
+            }
+            results = await LabOrder.find(labQuery).populate('patient').populate('doctor', 'name').sort({ createdAt: -1 });
+
+            results = results.filter(l => l.patient &&
+                (gender === 'All' || !gender || l.patient.gender?.toLowerCase() === gender.toLowerCase()) &&
+                (!minAge || l.patient.age >= parseInt(minAge)) &&
+                (!maxAge || l.patient.age <= parseInt(maxAge))
+            );
+
+            results.forEach(l => {
+                if (!grouped[l.testName]) grouped[l.testName] = [];
+                grouped[l.testName].push({
+                    patient: l.patient,
+                    doctor: l.doctor,
+                    date: l.createdAt,
+                    details: l.result || 'Pending Result',
+                    _id: l._id
+                });
+            });
+        }
+        else if (reportType === 'radiology') {
+            let radQuery = { ...dateQuery };
+            if (searchTerm) {
+                radQuery.scanType = { $regex: searchTerm, $options: 'i' };
+            }
+            results = await RadiologyOrder.find(radQuery).populate('patient').populate('doctor', 'name').sort({ createdAt: -1 });
+
+            results = results.filter(r => r.patient &&
+                (gender === 'All' || !gender || r.patient.gender?.toLowerCase() === gender.toLowerCase()) &&
+                (!minAge || r.patient.age >= parseInt(minAge)) &&
+                (!maxAge || r.patient.age <= parseInt(maxAge))
+            );
+
+            results.forEach(r => {
+                if (!grouped[r.scanType]) grouped[r.scanType] = [];
+                grouped[r.scanType].push({
+                    patient: r.patient,
+                    doctor: r.doctor,
+                    date: r.createdAt,
+                    details: r.report || 'Pending Report',
+                    _id: r._id
+                });
+            });
+        }
+
+        const categorizedData = Object.entries(grouped).map(([category, records]) => ({
+            category,
+            count: records.length,
+            records
+        })).sort((a, b) => b.count - a.count);
+
+        const uniquePatients = new Map();
+        categorizedData.forEach(cat => {
+            cat.records.forEach(rec => {
+                if (rec.patient && !uniquePatients.has(rec.patient._id.toString())) {
+                    uniquePatients.set(rec.patient._id.toString(), rec.patient);
+                }
+            });
+        });
+
+        let maleCount = 0;
+        let femaleCount = 0;
+        uniquePatients.forEach(p => {
+            const g = p.gender?.toString().toLowerCase().trim();
+            if (g === 'male') maleCount++;
+            else if (g === 'female') femaleCount++;
+        });
+
+        res.json({
+            summary: {
+                totalVisits: results.length,
+                totalPatients: uniquePatients.size,
+                maleCount,
+                femaleCount,
+            },
+            categorizedData
+        });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     getLabRevenue,
     getRadiologyRevenue,
@@ -920,5 +1102,6 @@ module.exports = {
     getConsultationRevenue,
     getNurseTriageRevenue,
     getOverallRevenue,
-    getDashboardStats
+    getDashboardStats,
+    getClinicalReport
 };

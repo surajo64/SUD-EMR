@@ -535,13 +535,19 @@ const NurseTriage = () => {
     const handleFinishTriage = async () => {
         if (!selectedEncounter || !user || isReadOnly) return;
 
+        if (!selectedDoctor) {
+            toast.warning('Please assign a consulting physician');
+            return;
+        }
+
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
 
-            // Update Visit Status to 'with_doctor' AND save Nursing Notes
+            // Update Visit Status to 'with_doctor' AND save Nursing Notes & Assigned Physician
             await axios.put(`http://localhost:5000/api/visits/${selectedEncounter._id}`, {
                 encounterStatus: 'with_doctor',
+                consultingPhysician: selectedDoctor, // Set the assigned doctor
                 nursingNotes: JSON.stringify(nursingNotesList) // Save structured notes
             }, config);
 

@@ -63,7 +63,6 @@ const NursingServiceManagement = () => {
             const payload = {
                 name: formData.name,
                 type: 'nursing',
-                type: 'nursing',
                 basePrice: parseFloat(formData.standardFee) || 0, // Set basePrice to standardFee for schema compatibility
                 standardFee: parseFloat(formData.standardFee) || 0,
                 retainershipFee: parseFloat(formData.retainershipFee) || 0,

@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { FaUserMd, FaPills, FaFlask, FaXRay, FaUserInjured, FaCalendarAlt, FaNotesMedical, FaSignOutAlt, FaTachometerAlt, FaDollarSign, FaFileInvoiceDollar, FaHeart, FaHospital, FaBed, FaChevronDown, FaChevronRight, FaCogs, FaMoneyBillWave, FaExchangeAlt, FaTrash, FaUniversity } from 'react-icons/fa';
+import { FaUserMd, FaPills, FaFlask, FaXRay, FaUserInjured, FaCalendarAlt, FaNotesMedical, FaSignOutAlt, FaTachometerAlt, FaDollarSign, FaFileInvoiceDollar, FaHeart, FaHospital, FaBed, FaChevronDown, FaChevronRight, FaCogs, FaMoneyBillWave, FaExchangeAlt, FaTrash, FaUniversity, FaChartLine, FaFileMedicalAlt } from 'react-icons/fa';
 import { useContext, useState } from 'react';
 import AuthContext from '../context/AuthContext';
 
@@ -238,15 +238,21 @@ const Sidebar = () => {
                             </Link>
                         </SidebarDropdown>
 
+                        <SidebarDropdown title="Reports & Analytics" icon={<FaChartLine />} name="reports">
+                            <Link to="/admin/reports" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/reports')}`}>
+                                <FaDollarSign size={14} /> Revenue Reports
+                            </Link>
+                            <Link to="/admin/clinical-reports" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/clinical-reports')}`}>
+                                <FaFileMedicalAlt size={14} /> Clinical Reports
+                            </Link>
+                        </SidebarDropdown>
+
                         <SidebarDropdown title="Financials" icon={<FaMoneyBillWave />} name="financials">
                             <Link to="/billing" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/billing')}`}>
                                 <FaFileInvoiceDollar size={14} /> Billing
                             </Link>
                             <Link to="/admin/claims-management" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/admin/claims-management')}`}>
                                 <FaFileInvoiceDollar /> HMO Claims
-                            </Link>
-                            <Link to="/admin/reports" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/reports')}`}>
-                                <FaDollarSign size={14} /> Revenue Reports
                             </Link>
                         </SidebarDropdown>
                     </>
