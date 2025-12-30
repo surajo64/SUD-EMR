@@ -2,6 +2,7 @@ import { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import Layout from '../components/Layout';
+import LoadingOverlay from '../components/loadingOverlay';
 import { FaTrash, FaPlus, FaUndo, FaFileExcel, FaPrint } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx';
@@ -47,11 +48,7 @@ const DrugDisposal = () => {
 
     // Prevent crash if user is not loaded yet
     if (loading) {
-        return (
-            <Layout>
-                <div className="p-8 text-center">Loading user profile...</div>
-            </Layout>
-        );
+        return <LoadingOverlay />;
     }
 
     if (!user) {
@@ -627,10 +624,10 @@ const DrugDisposal = () => {
                                                     <td className="p-2">{disposal.quantity}</td>
                                                     <td className="p-2">
                                                         <span className={`px-2 py-1 rounded text-xs ${disposal.reason === 'expired' ? 'bg-red-100 text-red-800' :
-                                                                disposal.reason === 'damaged' ? 'bg-orange-100 text-orange-800' :
-                                                                    disposal.reason === 'return_to_supplier' ? 'bg-blue-100 text-blue-800' :
-                                                                        disposal.reason === 'return_to_main' ? 'bg-green-100 text-green-800' :
-                                                                            'bg-gray-100 text-gray-800'
+                                                            disposal.reason === 'damaged' ? 'bg-orange-100 text-orange-800' :
+                                                                disposal.reason === 'return_to_supplier' ? 'bg-blue-100 text-blue-800' :
+                                                                    disposal.reason === 'return_to_main' ? 'bg-green-100 text-green-800' :
+                                                                        'bg-gray-100 text-gray-800'
                                                             }`}>
                                                             {disposal.reason.replace(/_/g, ' ').toUpperCase()}
                                                         </span>
@@ -669,10 +666,10 @@ const DrugDisposal = () => {
                                     onClick={handleSubmitAll}
                                     disabled={tempDisposals.length === 0}
                                     className={`px-4 py-2 text-white rounded flex items-center gap-2 ${tempDisposals.length === 0
-                                            ? 'bg-gray-400 cursor-not-allowed'
-                                            : isBranchPharmacy
-                                                ? 'bg-blue-600 hover:bg-blue-700'
-                                                : 'bg-red-600 hover:bg-red-700'
+                                        ? 'bg-gray-400 cursor-not-allowed'
+                                        : isBranchPharmacy
+                                            ? 'bg-blue-600 hover:bg-blue-700'
+                                            : 'bg-red-600 hover:bg-red-700'
                                         }`}
                                 >
                                     <FaTrash /> {isBranchPharmacy ? 'Submit All Returns' : 'Process All Disposals'} ({tempDisposals.length})

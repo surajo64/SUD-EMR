@@ -2,6 +2,7 @@ import { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import Layout from '../components/Layout';
+import LoadingOverlay from '../components/loadingOverlay';
 import { FaChartLine, FaDownload, FaCalendar } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx';
@@ -65,7 +66,8 @@ const RevenueReports = () => {
                 config
             );
             setReportData(data);
-            setLoading(false);
+            // Small delay to ensure UI finishes rendering before hiding overlay
+            setTimeout(() => setLoading(false), 300);
         } catch (error) {
             console.error(error);
             toast.error('Error fetching report');
@@ -229,9 +231,7 @@ const RevenueReports = () => {
                 </div>
 
                 {loading ? (
-                    <div className="bg-white p-12 rounded-lg shadow text-center">
-                        <p className="text-xl text-gray-600">Loading report...</p>
-                    </div>
+                    <LoadingOverlay />
                 ) : reportData ? (
                     <>
                         {/* Summary Cards */}

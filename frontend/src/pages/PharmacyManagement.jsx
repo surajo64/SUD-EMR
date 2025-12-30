@@ -2,6 +2,7 @@ import { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import Layout from '../components/Layout';
+import LoadingOverlay from '../components/loadingOverlay';
 import { FaPlus, FaEdit, FaTrash, FaHospital, FaStar } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 
@@ -28,10 +29,11 @@ const PharmacyManagement = () => {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const { data } = await axios.get('http://localhost:5000/api/pharmacies', config);
             setPharmacies(data);
+            // Small delay to ensure UI finishes rendering before hiding overlay
+            setTimeout(() => setLoading(false), 300);
         } catch (error) {
             console.error(error);
             toast.error('Error fetching pharmacies');
-        } finally {
             setLoading(false);
         }
     };
@@ -92,6 +94,7 @@ const PharmacyManagement = () => {
 
     return (
         <Layout>
+            {loading && <LoadingOverlay />}
             <div className="mb-6 flex justify-between items-center">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3">

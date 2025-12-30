@@ -2,6 +2,7 @@ import { useState, useEffect, useContext } from "react";
 import axios from "axios";
 import AuthContext from "../context/AuthContext";
 import Layout from "../components/Layout";
+import LoadingOverlay from '../components/loadingOverlay';
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import { FaPlus, FaEdit, FaTrash, FaTimes, FaChartLine, FaPrint } from 'react-icons/fa';
@@ -113,9 +114,10 @@ const Inventory = () => {
                 : "http://localhost:5000/api/inventory";
             const { data } = await axios.get(url, config);
             setItems(data);
+            // Small delay to ensure UI finishes rendering before hiding overlay
+            setTimeout(() => setLoading(false), 300);
         } catch (error) {
             console.error(error);
-        } finally {
             setLoading(false);
         }
     };
@@ -372,6 +374,7 @@ const Inventory = () => {
 
     return (
         <Layout>
+            {loading && <LoadingOverlay />}
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <h2 className="text-2xl font-bold">Pharmacy Inventory</h2>
@@ -593,7 +596,7 @@ const Inventory = () => {
             {/* Add/Edit Modal */}
             {showModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-2xl my-8">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-5xl my-8">
                         <div className="flex justify-between items-center mb-4">
                             <h3 className="text-xl font-bold">{isEditMode ? 'Edit Drug' : 'Add New Drug'}</h3>
                             <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-700">
@@ -601,7 +604,7 @@ const Inventory = () => {
                             </button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-5 gap-3">
                             <div className="md:col-span-3">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Drug Name</label>
                                 <input
@@ -612,7 +615,7 @@ const Inventory = () => {
                                 />
                             </div>
 
-                            <div className="md:col-span-3">
+                            <div className="md:col-span-2">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Pharmacy Location</label>
                                 <select
                                     className="w-full border p-2 rounded"
@@ -628,25 +631,11 @@ const Inventory = () => {
                                         </option>
                                     ))}
                                 </select>
-                                {user.role === 'pharmacist' && (
-                                    <p className="text-xs text-gray-500 mt-1">Locked to your assigned pharmacy</p>
-                                )}
                             </div>
 
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                                <input
-                                    type="number"
-                                    className="w-full border p-2 rounded"
-                                    value={currentItem.quantity}
-                                    onChange={(e) => setCurrentItem({ ...currentItem, quantity: e.target.value })}
-                                    required
-                                />
-                            </div>
-
-                            <div className="md:col-span-3">
+                            <div className="md:col-span-5">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Pricing Configuration</label>
-                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 bg-gray-50 p-4 rounded border">
+                                <div className="grid grid-cols-5 gap-3 bg-gray-50 p-3 rounded border">
                                     <div>
                                         <label className="block text-xs font-semibold mb-1 text-blue-600">Standard Fee</label>
                                         <input
@@ -688,17 +677,27 @@ const Inventory = () => {
                                             placeholder="0.00"
                                         />
                                     </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold mb-1 text-gray-600">Purchasing Price</label>
+                                        <input
+                                            type="number"
+                                            className="w-full border p-2 rounded text-sm"
+                                            value={currentItem.purchasingPrice}
+                                            onChange={(e) => setCurrentItem({ ...currentItem, purchasingPrice: e.target.value })}
+                                            placeholder="Cost price"
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Purchasing Price (₦)</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
                                 <input
                                     type="number"
                                     className="w-full border p-2 rounded"
-                                    value={currentItem.purchasingPrice}
-                                    onChange={(e) => setCurrentItem({ ...currentItem, purchasingPrice: e.target.value })}
-                                    placeholder="Cost price for refunds"
+                                    value={currentItem.quantity}
+                                    onChange={(e) => setCurrentItem({ ...currentItem, quantity: e.target.value })}
+                                    required
                                 />
                             </div>
 
@@ -723,6 +722,16 @@ const Inventory = () => {
                                     value={currentItem.expiryDate}
                                     onChange={(e) => setCurrentItem({ ...currentItem, expiryDate: e.target.value })}
                                     required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Reorder Level</label>
+                                <input
+                                    type="number"
+                                    className="w-full border p-2 rounded"
+                                    value={currentItem.reorderLevel}
+                                    onChange={(e) => setCurrentItem({ ...currentItem, reorderLevel: e.target.value })}
                                 />
                             </div>
 
@@ -800,26 +809,7 @@ const Inventory = () => {
                                 />
                             </div>
 
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Barcode</label>
-                                <input
-                                    className="w-full border p-2 rounded"
-                                    value={currentItem.barcode}
-                                    onChange={(e) => setCurrentItem({ ...currentItem, barcode: e.target.value })}
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Reorder Level</label>
-                                <input
-                                    type="number"
-                                    className="w-full border p-2 rounded"
-                                    value={currentItem.reorderLevel}
-                                    onChange={(e) => setCurrentItem({ ...currentItem, reorderLevel: e.target.value })}
-                                />
-                            </div>
-
-                            <div className="md:col-span-3 flex justify-end gap-3 mt-4">
+                            <div className="md:col-span-5 flex justify-end gap-3 mt-2">
                                 <button
                                     type="button"
                                     onClick={() => setShowModal(false)}
