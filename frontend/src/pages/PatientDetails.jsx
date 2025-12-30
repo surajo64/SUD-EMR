@@ -6,7 +6,8 @@ import AuthContext from '../context/AuthContext';
 import Layout from '../components/Layout';
 import LoadingOverlay from '../components/loadingOverlay';
 import AppointmentModal from '../components/AppointmentModal';
-import { FaTimes, FaFileMedical, FaPills, FaChevronDown, FaHeartbeat, FaNotesMedical, FaProcedures, FaXRay, FaVial, FaUserMd, FaCalendarPlus, FaPlus, FaTrash, FaEdit } from 'react-icons/fa';
+import { FaTimes, FaFileMedical, FaPills, FaChevronDown, FaHeartbeat, FaNotesMedical, FaProcedures, FaXRay, FaVial, FaUserMd, FaCalendarPlus, FaPlus, FaTrash, FaEdit, FaSearch } from 'react-icons/fa';
+import icd11Data from '../data/icd11.json';
 
 const PatientDetails = () => {
     const { id } = useParams();
@@ -25,8 +26,25 @@ const PatientDetails = () => {
         subjective: '',
         objective: '',
         assessment: '',
-        plan: ''
+        plan: '',
+        diagnosis: [] // Array of {code, description}
     });
+
+    const [diagSearchTerm, setDiagSearchTerm] = useState('');
+    const [showDiagDropdown, setShowDiagDropdown] = useState(false);
+    const [showSoapModal, setShowSoapModal] = useState(false);
+
+    useEffect(() => {
+        if (showSoapModal && encounter) {
+            setSoapNote({
+                subjective: encounter.subjective || '',
+                objective: encounter.objective || '',
+                assessment: encounter.assessment || '',
+                plan: encounter.plan || '',
+                diagnosis: encounter.diagnosis || []
+            });
+        }
+    }, [showSoapModal, encounter]);
 
     // Orders
     const [selectedLabTest, setSelectedLabTest] = useState('');
@@ -63,7 +81,6 @@ const PatientDetails = () => {
     const [showNoteModal, setShowNoteModal] = useState(false); // Modal for adding note
 
     // Modal States
-    const [showSoapModal, setShowSoapModal] = useState(false);
     const [showLabModal, setShowLabModal] = useState(false);
     const [showRadModal, setShowRadModal] = useState(false);
     const [showRxModal, setShowRxModal] = useState(false);
@@ -269,7 +286,11 @@ const PatientDetails = () => {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             await axios.put(
                 `http://localhost:5000/api/visits/${encounter._id}`,
-                soapNote,
+                {
+                    ...soapNote,
+                    assessment: soapNote.assessment,
+                    diagnosis: soapNote.diagnosis // Pass the array of objects
+                },
                 config
             );
             toast.success('SOAP notes saved!');
@@ -284,7 +305,8 @@ const PatientDetails = () => {
                 subjective: '',
                 objective: '',
                 assessment: '',
-                plan: ''
+                plan: '',
+                diagnosis: []
             });
         } catch (error) {
             console.error(error);
@@ -1183,9 +1205,18 @@ const PatientDetails = () => {
                                                         <p className="text-gray-800">{encounter.objective}</p>
                                                     </div>
                                                 )}
-                                                {encounter.assessment && (
+                                                {(encounter.assessment || (encounter.diagnosis && encounter.diagnosis.length > 0)) && (
                                                     <div className="bg-gray-50 p-4 rounded">
-                                                        <p className="font-semibold text-gray-700 mb-2">Assessment:</p>
+                                                        <p className="font-semibold text-gray-700 mb-2">Assessment (Diagnosis):</p>
+                                                        {encounter.diagnosis && encounter.diagnosis.length > 0 && (
+                                                            <div className="mb-2 flex flex-wrap gap-2">
+                                                                {encounter.diagnosis.map((d, i) => (
+                                                                    <span key={i} className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm font-medium border border-blue-200">
+                                                                        {d.code} - {d.description}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        )}
                                                         <p className="text-gray-800">{encounter.assessment}</p>
                                                     </div>
                                                 )}
@@ -1677,12 +1708,92 @@ const PatientDetails = () => {
                                 </div>
                                 <div>
                                     <label className="block text-gray-700 mb-2 font-semibold">A - Assessment (Diagnosis)</label>
+
+                                    {/* ICD11 Search and Add */}
+                                    <div className="space-y-3 p-3 border rounded bg-gray-50 mb-3">
+                                        <div className="relative">
+                                            <div className="flex gap-2">
+                                                <div className="relative flex-1">
+                                                    <FaSearch className="absolute left-3 top-3 text-gray-400" />
+                                                    <input
+                                                        type="text"
+                                                        className="w-full border p-2 pl-10 rounded text-sm shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                        placeholder="Search ICD-11 by code or diagnosis name..."
+                                                        value={diagSearchTerm}
+                                                        onChange={(e) => {
+                                                            setDiagSearchTerm(e.target.value);
+                                                            setShowDiagDropdown(true);
+                                                        }}
+                                                        onFocus={() => setShowDiagDropdown(true)}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {showDiagDropdown && diagSearchTerm && (
+                                                <div className="absolute z-20 w-full bg-white border rounded shadow-xl max-h-60 overflow-y-auto mt-1 border-gray-200">
+                                                    {icd11Data.filter(d =>
+                                                        d.code.toLowerCase().includes(diagSearchTerm.toLowerCase()) ||
+                                                        d.description.toLowerCase().includes(diagSearchTerm.toLowerCase())
+                                                    ).length > 0 ? (
+                                                        icd11Data.filter(d =>
+                                                            d.code.toLowerCase().includes(diagSearchTerm.toLowerCase()) ||
+                                                            d.description.toLowerCase().includes(diagSearchTerm.toLowerCase())
+                                                        ).map((diag, idx) => (
+                                                            <div
+                                                                key={idx}
+                                                                className="p-3 hover:bg-blue-50 cursor-pointer text-sm border-b last:border-0 flex justify-between items-center transition-colors"
+                                                                onClick={() => {
+                                                                    if (!soapNote.diagnosis.find(d => d.code === diag.code)) {
+                                                                        setSoapNote({
+                                                                            ...soapNote,
+                                                                            diagnosis: [...soapNote.diagnosis, diag]
+                                                                        });
+                                                                    }
+                                                                    setDiagSearchTerm('');
+                                                                    setShowDiagDropdown(false);
+                                                                }}
+                                                            >
+                                                                <div>
+                                                                    <span className="font-bold text-blue-700 mr-2">{diag.code}</span>
+                                                                    <span className="text-gray-700">{diag.description}</span>
+                                                                </div>
+                                                                <FaPlus className="text-blue-500" />
+                                                            </div>
+                                                        ))
+                                                    ) : (
+                                                        <div className="p-4 text-gray-500 text-sm text-center">No matching ICD-11 codes found</div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Selected Diagnoses Tokens */}
+                                        {soapNote.diagnosis.length > 0 && (
+                                            <div className="flex flex-wrap gap-2 mt-2">
+                                                {soapNote.diagnosis.map((diag, i) => (
+                                                    <span key={i} className="bg-blue-600 text-white px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2 shadow-sm">
+                                                        <span>{diag.code}: {diag.description}</span>
+                                                        <button
+                                                            onClick={() => setSoapNote({
+                                                                ...soapNote,
+                                                                diagnosis: soapNote.diagnosis.filter((_, idx) => idx !== i)
+                                                            })}
+                                                            className="hover:text-red-200 transition-colors"
+                                                        >
+                                                            <FaTimes />
+                                                        </button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
                                     <textarea
                                         className="w-full border p-3 rounded"
-                                        rows="3"
+                                        rows="2"
                                         value={soapNote.assessment}
                                         onChange={(e) => setSoapNote({ ...soapNote, assessment: e.target.value })}
-                                        placeholder="Diagnosis, clinical impression..."
+                                        placeholder="Additional assessment comments, clinical impression..."
                                     ></textarea>
                                 </div>
                                 <div>
@@ -1940,77 +2051,6 @@ const PatientDetails = () => {
             }
 
 
-            {/* SOAP Modal */}
-            {
-                showSoapModal && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                        <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-                            <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-xl font-bold">Add SOAP Note</h3>
-                                <button onClick={() => setShowSoapModal(false)} className="text-gray-500 hover:text-gray-700">
-                                    <FaTimes size={24} />
-                                </button>
-                            </div>
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-gray-700 mb-2 font-semibold">S - Subjective (Chief Complaint)</label>
-                                    <textarea
-                                        className="w-full border p-3 rounded"
-                                        rows="3"
-                                        value={soapNote.subjective}
-                                        onChange={(e) => setSoapNote({ ...soapNote, subjective: e.target.value })}
-                                        placeholder="Patient's complaints, symptoms, history..."
-                                    ></textarea>
-                                </div>
-                                <div>
-                                    <label className="block text-gray-700 mb-2 font-semibold">O - Objective (Physical Exam Findings)</label>
-                                    <textarea
-                                        className="w-full border p-3 rounded"
-                                        rows="3"
-                                        value={soapNote.objective}
-                                        onChange={(e) => setSoapNote({ ...soapNote, objective: e.target.value })}
-                                        placeholder="Physical examination findings, observations..."
-                                    ></textarea>
-                                </div>
-                                <div>
-                                    <label className="block text-gray-700 mb-2 font-semibold">A - Assessment (Diagnosis)</label>
-                                    <textarea
-                                        className="w-full border p-3 rounded"
-                                        rows="3"
-                                        value={soapNote.assessment}
-                                        onChange={(e) => setSoapNote({ ...soapNote, assessment: e.target.value })}
-                                        placeholder="Diagnosis, clinical impression..."
-                                    ></textarea>
-                                </div>
-                                <div>
-                                    <label className="block text-gray-700 mb-2 font-semibold">P - Plan (Treatment Plan)</label>
-                                    <textarea
-                                        className="w-full border p-3 rounded"
-                                        rows="3"
-                                        value={soapNote.plan}
-                                        onChange={(e) => setSoapNote({ ...soapNote, plan: e.target.value })}
-                                        placeholder="Treatment plan, follow-up instructions..."
-                                    ></textarea>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={handleSaveSOAP}
-                                        className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 font-semibold"
-                                    >
-                                        Save SOAP Notes
-                                    </button>
-                                    <button
-                                        onClick={() => setShowSoapModal(false)}
-                                        className="bg-gray-400 text-white px-6 py-2 rounded hover:bg-gray-500"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
 
 
 
