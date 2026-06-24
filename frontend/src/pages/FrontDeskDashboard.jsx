@@ -6,6 +6,7 @@ import Layout from '../components/Layout';
 import { FaUserPlus, FaCalendarCheck, FaDollarSign, FaSearch, FaFileAlt, FaPlus, FaTimes, FaClock, FaCalendarAlt, FaBed } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import LoadingOverlay from '../components/loadingOverlay';
+import { formatAge } from '../utils/patientUtils';
 
 const FrontDeskDashboard = () => {
     const [loading, setLoading] = useState(false);
@@ -25,6 +26,7 @@ const FrontDeskDashboard = () => {
     const [selectedClinic, setSelectedClinic] = useState('');
     const [encounterType, setEncounterType] = useState('Outpatient');
     const [reasonForVisit, setReasonForVisit] = useState('');
+    const [isANC, setIsANC] = useState(false);
 
     const [selectedWard, setSelectedWard] = useState('');
     const [selectedBed, setSelectedBed] = useState('');
@@ -41,6 +43,10 @@ const FrontDeskDashboard = () => {
     const [addChargesEncounterId, setAddChargesEncounterId] = useState(null);
     const [selectedAdditionalCharges, setSelectedAdditionalCharges] = useState([]);
 
+    // Change Encounter Type State
+    const [showChangeEncounterModal, setShowChangeEncounterModal] = useState(false);
+    const [changeEncounterVisit, setChangeEncounterVisit] = useState(null);
+
     const { user } = useContext(AuthContext);
     const { backendUrl } = useContext(AppContext);
 
@@ -48,6 +54,7 @@ const FrontDeskDashboard = () => {
     const [newPatient, setNewPatient] = useState({
         name: '',
         age: '',
+        dateOfBirth: '',
         gender: 'male',
         contact: '',
         address: '',
@@ -65,6 +72,46 @@ const FrontDeskDashboard = () => {
         fetchClinics();
         fetchWards();
     }, []);
+
+    const calculateAge = (dob) => {
+        if (!dob) return '';
+        const today = new Date();
+        const birthDate = new Date(dob);
+        let years = today.getFullYear() - birthDate.getFullYear();
+        let months = today.getMonth() - birthDate.getMonth();
+
+        if (months < 0 || (months === 0 && today.getDate() < birthDate.getDate())) {
+            years--;
+            months += 12;
+        }
+
+        if (years > 0) {
+            return years.toString();
+        } else {
+            return months > 0 ? `0.${months}` : '0';
+        }
+    };
+
+    const calculateDOBFromAge = (age) => {
+        if (!age) return '';
+        const today = new Date();
+        const birthYear = today.getFullYear() - parseInt(age);
+        const dob = new Date(birthYear, today.getMonth(), today.getDate());
+        return dob.toISOString().split('T')[0];
+    };
+
+    const handleNewPatientChange = (e) => {
+        const { name, value } = e.target;
+        if (name === 'dateOfBirth') {
+            const age = calculateAge(value);
+            setNewPatient({ ...newPatient, dateOfBirth: value, age: age });
+        } else if (name === 'age') {
+            const dob = calculateDOBFromAge(value);
+            setNewPatient({ ...newPatient, age: value, dateOfBirth: dob });
+        } else {
+            setNewPatient({ ...newPatient, [name]: value });
+        }
+    };
 
     const fetchWards = async () => {
         try {
@@ -91,7 +138,8 @@ const FrontDeskDashboard = () => {
         if (searchTerm) {
             const filtered = patients.filter(p =>
                 p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (p.mrn && p.mrn.toLowerCase().includes(searchTerm.toLowerCase()))
+                (p.mrn && p.mrn.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                (p.contact && p.contact.includes(searchTerm))
             );
             setFilteredPatients(filtered);
         } else {
@@ -240,6 +288,7 @@ const FrontDeskDashboard = () => {
         setSelectedCharges([]);
         setSelectedClinic('');
         setEncounterType('Outpatient');
+        setIsANC(false);
         setShowEncounterModal(true);
     };
 
@@ -252,6 +301,7 @@ const FrontDeskDashboard = () => {
         setReasonForVisit('');
         setSelectedWard('');
         setSelectedBed('');
+        setIsANC(false);
     };
 
     const handleChargeToggle = (chargeId) => {
@@ -270,8 +320,8 @@ const FrontDeskDashboard = () => {
             return;
         }
 
-        if (encounterType !== 'External Investigation' && encounterType !== 'External Pharmacy' && encounterType !== 'Inpatient' && selectedCharges.length === 0) {
-            toast.error('Please select at least one charge');
+        if (!isANC && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && selectedCharges.length === 0) {
+            toast.error('Please select at least one charge, or check the ANC checkbox to skip charges');
             return;
         }
 
@@ -290,7 +340,8 @@ const FrontDeskDashboard = () => {
                 reasonForVisit: reasonForVisit,
                 encounterStatus: 'registered',
                 ward: encounterType === 'Inpatient' ? selectedWard : undefined,
-                bed: encounterType === 'Inpatient' ? selectedBed : undefined
+                bed: encounterType === 'Inpatient' ? selectedBed : undefined,
+                isANC: isANC
             };
             const visitResponse = await axios.post(`${backendUrl}/api/visits`, visitData, config);
 
@@ -310,11 +361,11 @@ const FrontDeskDashboard = () => {
             const selectedChargeObjects = charges.filter(c => selectedCharges.includes(c._id));
             const totalAmount = selectedChargeObjects.reduce((sum, c) => sum + c.basePrice, 0);
 
-            if (encounterType !== 'External Investigation' && encounterType !== 'External Pharmacy' && encounterType !== 'Inpatient') {
-                const newStatus = totalAmount > 0 ? 'payment_pending' : 'in_nursing';
+            if (!['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType)) {
+                const newStatus = isANC ? 'in_nursing' : (totalAmount > 0 ? 'payment_pending' : 'in_nursing');
                 await axios.put(
                     `${backendUrl}/api/visits/${visitResponse.data._id}`,
-                    { encounterStatus: newStatus },
+                    { encounterStatus: newStatus, isANC: isANC || undefined },
                     config
                 );
             }
@@ -428,7 +479,7 @@ const FrontDeskDashboard = () => {
         const today = new Date().toDateString();
         const activeEncounter = encounters.find(e => {
             const eDate = new Date(e.createdAt).toDateString();
-            return eDate === today || (e.type === 'Outpatient' && e.encounterStatus !== 'completed');
+            return eDate === today || ((e.type === 'Outpatient' || e.type === 'Emergency') && e.encounterStatus !== 'completed');
         });
 
         if (!activeEncounter) {
@@ -446,6 +497,81 @@ const FrontDeskDashboard = () => {
         setSelectedWard('');
         setSelectedBed('');
         setShowConvertModal(true);
+    };
+
+    const getActiveExternalEncounter = (patientId) => {
+        const encounters = patientEncounters[patientId] || [];
+        const today = new Date().toDateString();
+        return encounters.find(e => {
+            const eDate = new Date(e.createdAt).toDateString();
+            return eDate === today && ['External Investigation', 'External Pharmacy', 'External Lab/Radiology'].includes(e.type);
+        });
+    };
+
+    const openChangeEncounterModal = (patient) => {
+        const externalEnc = getActiveExternalEncounter(patient._id);
+        if (!externalEnc) {
+            toast.error('No qualifying external encounter found for this patient today');
+            return;
+        }
+        setChangeEncounterVisit(externalEnc);
+        setSelectedPatient(patient);
+        setEncounterType('Outpatient'); // Default new type
+        setSelectedClinic(externalEnc.clinic?._id || externalEnc.clinic || '');
+        setReasonForVisit(externalEnc.reasonForVisit || '');
+        setSelectedCharges([]);
+        setSelectedWard('');
+        setSelectedBed('');
+        setShowChangeEncounterModal(true);
+    };
+
+    const handleChangeEncounterSubmission = async () => {
+        if (!['Inpatient', 'Outpatient', 'Emergency'].includes(encounterType) && selectedCharges.length === 0) {
+            toast.error('Please select at least one charge for the new encounter type');
+            return;
+        }
+
+        if (encounterType === 'Inpatient' && (!selectedWard || !selectedBed)) {
+            toast.error('Ward and Bed are required for Inpatient admission');
+            return;
+        }
+
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+
+            // 1. Update Encounter Type & Details
+            await axios.put(`${backendUrl}/api/visits/${changeEncounterVisit._id}/change-type`, {
+                type: encounterType,
+                encounterType: encounterType,
+                clinic: selectedClinic || undefined,
+                reasonForVisit: reasonForVisit,
+                ward: encounterType === 'Inpatient' ? selectedWard : undefined,
+                bed: encounterType === 'Inpatient' ? selectedBed : undefined
+            }, config);
+
+            // 2. Add New Charges
+            for (const chargeId of selectedCharges) {
+                await axios.post(`${backendUrl}/api/encounter-charges`, {
+                    encounterId: changeEncounterVisit._id,
+                    patientId: selectedPatient._id,
+                    chargeId: chargeId,
+                    quantity: 1,
+                    notes: 'Added during encounter type change'
+                }, config);
+            }
+
+            toast.success('Encounter type changed and charges added!');
+            setShowChangeEncounterModal(false);
+            setChangeEncounterVisit(null);
+            setSelectedPatient(null);
+            fetchRecentPatients();
+        } catch (error) {
+            console.error(error);
+            toast.error(error.response?.data?.message || 'Error changing encounter type');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleConvertFromFrontDesk = async () => {
@@ -495,22 +621,48 @@ const FrontDeskDashboard = () => {
                             type="text"
                             placeholder="Full Name *"
                             className="border p-2 rounded"
+                            name="name"
                             value={newPatient.name}
-                            onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })}
+                            onChange={handleNewPatientChange}
                             required
                         />
-                        <input
-                            type="number"
-                            placeholder="Age *"
-                            className="border p-2 rounded"
-                            value={newPatient.age}
-                            onChange={(e) => setNewPatient({ ...newPatient, age: e.target.value })}
-                            required
-                        />
+                        <div className="flex gap-2">
+                            <div className="flex-1">
+                                <label className="block text-[10px] text-gray-500 uppercase font-bold pl-1">Date of Birth</label>
+                                <input
+                                    type="date"
+                                    name="dateOfBirth"
+                                    className="w-full border p-2 rounded text-sm"
+                                    value={newPatient.dateOfBirth}
+                                    onChange={handleNewPatientChange}
+                                    max={new Date().toISOString().split('T')[0]}
+                                />
+                            </div>
+                            <div className="flex-1">
+                                <label className="block text-[10px] text-gray-500 uppercase font-bold pl-1">Age *</label>
+                                <input
+                                    type="number"
+                                    name="age"
+                                    placeholder="Age *"
+                                    className="w-full border p-2 rounded text-sm"
+                                    value={newPatient.age}
+                                    onChange={handleNewPatientChange}
+                                    required
+                                    min="0"
+                                    step="0.01"
+                                />
+                                {newPatient.age && (
+                                    <span className="text-[10px] text-blue-600 italic pl-1">
+                                        {formatAge(newPatient.age)}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
                         <select
                             className="border p-2 rounded"
+                            name="gender"
                             value={newPatient.gender}
-                            onChange={(e) => setNewPatient({ ...newPatient, gender: e.target.value })}
+                            onChange={handleNewPatientChange}
                         >
                             <option value="male">Male</option>
                             <option value="female">Female</option>
@@ -518,23 +670,26 @@ const FrontDeskDashboard = () => {
                         </select>
                         <input
                             type="text"
+                            name="contact"
                             placeholder="Contact Number *"
                             className="border p-2 rounded"
                             value={newPatient.contact}
-                            onChange={(e) => setNewPatient({ ...newPatient, contact: e.target.value })}
+                            onChange={handleNewPatientChange}
                             required
                         />
                         <input
                             type="text"
+                            name="address"
                             placeholder="Address"
                             className="border p-2 rounded md:col-span-2"
                             value={newPatient.address}
-                            onChange={(e) => setNewPatient({ ...newPatient, address: e.target.value })}
+                            onChange={handleNewPatientChange}
                         />
                         <select
                             className="border p-2 rounded"
+                            name="provider"
                             value={newPatient.provider}
-                            onChange={(e) => setNewPatient({ ...newPatient, provider: e.target.value })}
+                            onChange={handleNewPatientChange}
                         >
                             <option value="Standard">Standard</option>
                             <option value="Retainership">Retainership</option>
@@ -544,33 +699,37 @@ const FrontDeskDashboard = () => {
                         {newPatient.provider === 'NHIA' && (
                             <input
                                 type="text"
+                                name="hmo"
                                 placeholder="HMO *"
                                 className="border p-2 rounded"
                                 value={newPatient.hmo}
-                                onChange={(e) => setNewPatient({ ...newPatient, hmo: e.target.value })}
+                                onChange={handleNewPatientChange}
                                 required
                             />
                         )}
                         <input
                             type="text"
+                            name="insuranceNumber"
                             placeholder="Insurance Number (Optional)"
                             className="border p-2 rounded"
                             value={newPatient.insuranceNumber}
-                            onChange={(e) => setNewPatient({ ...newPatient, insuranceNumber: e.target.value })}
+                            onChange={handleNewPatientChange}
                         />
                         <input
                             type="text"
+                            name="emergencyContactName"
                             placeholder="Emergency Contact Name"
                             className="border p-2 rounded"
                             value={newPatient.emergencyContactName}
-                            onChange={(e) => setNewPatient({ ...newPatient, emergencyContactName: e.target.value })}
+                            onChange={handleNewPatientChange}
                         />
                         <input
                             type="text"
+                            name="emergencyContactPhone"
                             placeholder="Emergency Contact Phone"
                             className="border p-2 rounded"
                             value={newPatient.emergencyContactPhone}
-                            onChange={(e) => setNewPatient({ ...newPatient, emergencyContactPhone: e.target.value })}
+                            onChange={handleNewPatientChange}
                         />
                         <button className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 md:col-span-2">
                             Register Patient
@@ -588,7 +747,7 @@ const FrontDeskDashboard = () => {
                     <FaSearch className="absolute left-3 top-3 text-gray-400" />
                     <input
                         type="text"
-                        placeholder="Search patient by name or MRN..."
+                        placeholder="Search patient by name, MRN or Phone..."
                         className="w-full pl-10 p-2 border rounded"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -608,7 +767,7 @@ const FrontDeskDashboard = () => {
                                     <div>
                                         <p className="font-semibold">{patient.name}</p>
                                         <p className="text-sm text-gray-600">
-                                            MRN: {patient.mrn} | Age: {patient.age} | {patient.gender}
+                                            MRN: {patient.mrn} | Age: {formatAge(patient.age)} | {patient.gender}
                                         </p>
                                         {hasTodayEncounter && (
                                             <p className="text-xs text-orange-600 mt-1">
@@ -629,26 +788,37 @@ const FrontDeskDashboard = () => {
                                     </button>
                                     {hasTodayEncounter && (
                                         <div className="flex gap-2">
-                                            <button
-                                                onClick={() => handleAddChargesClick(patient)}
-                                                className="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-green-700 text-sm"
-                                            >
-                                                <FaDollarSign /> Add Charges
-                                            </button>
-                                            {hasActiveInpatientEncounter(patient._id) ? (
+                                            {getActiveExternalEncounter(patient._id) ? (
                                                 <button
-                                                    onClick={() => window.location.href = `/patient/${patient._id}`}
-                                                    className="bg-red-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-red-700"
+                                                    onClick={() => openChangeEncounterModal(patient)}
+                                                    className="bg-orange-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-orange-700"
                                                 >
-                                                    <FaBed /> Discharge
+                                                    <FaCalendarAlt /> Change Encounter Type
                                                 </button>
                                             ) : (
-                                                <button
-                                                    onClick={() => handleEditClick(patient)}
-                                                    className="bg-purple-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-purple-700"
-                                                >
-                                                    <FaBed /> Edit / Admit
-                                                </button>
+                                                <>
+                                                    <button
+                                                        onClick={() => handleAddChargesClick(patient)}
+                                                        className="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-green-700 text-sm"
+                                                    >
+                                                        <FaDollarSign /> Add Charges
+                                                    </button>
+                                                    {hasActiveInpatientEncounter(patient._id) ? (
+                                                        <button
+                                                            onClick={() => window.location.href = `/patient/${patient._id}`}
+                                                            className="bg-red-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-red-700"
+                                                        >
+                                                            <FaBed /> Discharge
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => handleEditClick(patient)}
+                                                            className="bg-purple-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-purple-700"
+                                                        >
+                                                            <FaBed /> Edit / Admit
+                                                        </button>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
                                     )}
@@ -681,7 +851,7 @@ const FrontDeskDashboard = () => {
                                     <div>
                                         <p className="font-semibold">{patient.name}</p>
                                         <p className="text-sm text-gray-600">
-                                            MRN: {patient.mrn} | Age: {patient.age} | {patient.gender}
+                                            MRN: {patient.mrn} | Age: {formatAge(patient.age)} | {patient.gender}
                                         </p>
                                         {hasTodayEncounter && (
                                             <p className="text-xs text-orange-600 mt-1">
@@ -702,26 +872,37 @@ const FrontDeskDashboard = () => {
                                     </button>
                                     {hasTodayEncounter && (
                                         <div className="flex gap-2">
-                                            <button
-                                                onClick={() => handleAddChargesClick(patient)}
-                                                className="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-green-700 text-sm"
-                                            >
-                                                <FaDollarSign /> Add Charges
-                                            </button>
-                                            {hasActiveInpatientEncounter(patient._id) ? (
+                                            {getActiveExternalEncounter(patient._id) ? (
                                                 <button
-                                                    onClick={() => window.location.href = `/patient/${patient._id}`}
-                                                    className="bg-red-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-red-700"
+                                                    onClick={() => openChangeEncounterModal(patient)}
+                                                    className="bg-orange-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-orange-700"
                                                 >
-                                                    <FaBed /> Discharge
+                                                    <FaCalendarAlt /> Change Encounter Type
                                                 </button>
                                             ) : (
-                                                <button
-                                                    onClick={() => handleEditClick(patient)}
-                                                    className="bg-purple-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-purple-700"
-                                                >
-                                                    <FaBed /> Edit / Admit
-                                                </button>
+                                                <>
+                                                    <button
+                                                        onClick={() => handleAddChargesClick(patient)}
+                                                        className="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-green-700 text-sm"
+                                                    >
+                                                        <FaDollarSign /> Add Charges
+                                                    </button>
+                                                    {hasActiveInpatientEncounter(patient._id) ? (
+                                                        <button
+                                                            onClick={() => window.location.href = `/patient/${patient._id}`}
+                                                            className="bg-red-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-red-700"
+                                                        >
+                                                            <FaBed /> Discharge
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => handleEditClick(patient)}
+                                                            className="bg-purple-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-purple-700"
+                                                        >
+                                                            <FaBed /> Edit / Admit
+                                                        </button>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
                                     )}
@@ -786,7 +967,7 @@ const FrontDeskDashboard = () => {
                                     </div>
                                     <div>
                                         <p className="text-sm text-gray-600">Age</p>
-                                        <p className="font-semibold">{selectedPatient.age} years</p>
+                                        <p className="font-semibold">{formatAge(selectedPatient.age)}</p>
                                     </div>
                                     <div>
                                         <p className="text-sm text-gray-600">Gender</p>
@@ -806,12 +987,9 @@ const FrontDeskDashboard = () => {
                                     onChange={(e) => setEncounterType(e.target.value)}
                                 >
                                     <option value="Outpatient">Outpatient</option>
+                                    <option value="Follow-up">Follow-up</option>
                                     <option value="Inpatient">Inpatient</option>
                                     <option value="Emergency">Emergency</option>
-                                    <option value="Follow-up">Follow-up</option>
-                                    <option value="External Investigation">External Investigation</option>
-                                    <option value="External Pharmacy">External Pharmacy</option>
-                                    <option value="Consultation">Consultation</option>
                                 </select>
                             </div>
 
@@ -846,6 +1024,26 @@ const FrontDeskDashboard = () => {
                                     value={reasonForVisit}
                                     onChange={(e) => setReasonForVisit(e.target.value)}
                                 />
+                            </div>
+
+                            {/* ANC Checkbox */}
+                            <div className="mb-6">
+                                <label className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${isANC ? 'bg-pink-50 border-pink-400' : 'bg-gray-50 border-gray-200 hover:border-pink-300'
+                                    }`}>
+                                    <input
+                                        type="checkbox"
+                                        checked={isANC}
+                                        onChange={(e) => {
+                                            setIsANC(e.target.checked);
+                                            if (e.target.checked) setSelectedCharges([]);
+                                        }}
+                                        className="w-5 h-5 accent-pink-600"
+                                    />
+                                    <div>
+                                        <p className="font-bold text-pink-700 text-sm">🤰 Antenatal Care (ANC) Follow-Up Visit</p>
+                                        <p className="text-xs text-pink-500 mt-0.5">Check for ANC patients — no charges now. Uncheck when doctor consultation charges are needed.</p>
+                                    </div>
+                                </label>
                             </div>
 
                             {/* Inpatient Ward Selection */}
@@ -899,7 +1097,7 @@ const FrontDeskDashboard = () => {
                             )}
 
                             {/* Charges Selection */}
-                            {encounterType !== 'External Investigation' && encounterType !== 'Inpatient' && (
+                            {!isANC && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && (
                                 <div className="mb-6">
                                     <label className="block text-gray-700 font-semibold mb-2">
                                         Select Charges <span className="text-red-500">*</span>
@@ -986,9 +1184,9 @@ const FrontDeskDashboard = () => {
                             <button
                                 onClick={handleCreateEncounter}
                                 className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 flex items-center gap-2"
-                                disabled={encounterType !== 'External Investigation' && encounterType !== 'Inpatient' && selectedCharges.length === 0}
+                                disabled={!isANC && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && selectedCharges.length === 0}
                             >
-                                <FaPlus /> Create Encounter
+                                <FaPlus /> {isANC ? '🤰 Create ANC Encounter' : 'Create Encounter'}
                             </button>
                         </div>
                     </div>
@@ -1128,11 +1326,10 @@ const FrontDeskDashboard = () => {
                                                     return (
                                                         <label
                                                             key={charge._id}
-                                                            className={`flex items-center justify-between p-3 rounded border cursor-pointer transition-colors ${
-                                                                isSelected
-                                                                    ? 'bg-green-50 border-green-400'
-                                                                    : 'bg-white border-gray-200 hover:bg-gray-50'
-                                                            }`}
+                                                            className={`flex items-center justify-between p-3 rounded border cursor-pointer transition-colors ${isSelected
+                                                                ? 'bg-green-50 border-green-400'
+                                                                : 'bg-white border-gray-200 hover:bg-gray-50'
+                                                                }`}
                                                         >
                                                             <div className="flex items-center gap-3">
                                                                 <input
@@ -1195,13 +1392,237 @@ const FrontDeskDashboard = () => {
                                 <button
                                     onClick={handleSubmitAdditionalCharges}
                                     disabled={selectedAdditionalCharges.length === 0}
-                                    className={`px-6 py-2 rounded text-white font-semibold flex items-center gap-2 ${
-                                        selectedAdditionalCharges.length === 0
-                                            ? 'bg-green-300 cursor-not-allowed'
-                                            : 'bg-green-600 hover:bg-green-700'
-                                    }`}
+                                    className={`px-6 py-2 rounded text-white font-semibold flex items-center gap-2 ${selectedAdditionalCharges.length === 0
+                                        ? 'bg-green-300 cursor-not-allowed'
+                                        : 'bg-green-600 hover:bg-green-700'
+                                        }`}
                                 >
                                     <FaDollarSign /> Add to Encounter
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* ===================== CHANGE ENCOUNTER TYPE MODAL ===================== */}
+            {showChangeEncounterModal && selectedPatient && changeEncounterVisit && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+                        {/* Modal Header */}
+                        <div className="bg-orange-600 text-white p-4 rounded-t-lg flex justify-between items-center sticky top-0">
+                            <h3 className="text-xl font-bold flex items-center gap-2">
+                                <FaCalendarAlt /> Change Encounter Type
+                            </h3>
+                            <button
+                                onClick={() => setShowChangeEncounterModal(false)}
+                                className="text-white hover:text-gray-200"
+                            >
+                                <FaTimes size={24} />
+                            </button>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="p-6">
+                            <div className="bg-orange-50 p-4 rounded mb-6 border border-orange-100">
+                                <h4 className="font-bold text-orange-800 mb-1">Current Encounter: {changeEncounterVisit.type}</h4>
+                                <p className="text-sm text-orange-700">You are changing the type of the encounter created today for this patient. This is typically used to upgrade an external service to a full consultation or admission.</p>
+                            </div>
+
+                            {/* Patient Info */}
+                            <div className="bg-gray-50 p-4 rounded mb-6">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div>
+                                        <p className="text-sm text-gray-600">Name</p>
+                                        <p className="font-semibold">{selectedPatient.name}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-600">MRN</p>
+                                        <p className="font-semibold">{selectedPatient.mrn}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-600">Gender</p>
+                                        <p className="font-semibold capitalize">{selectedPatient.gender}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-600">Provider</p>
+                                        <p className="font-semibold">{selectedPatient.provider}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                {/* Left Side: Configuration */}
+                                <div>
+                                    <div className="mb-6">
+                                        <label className="block text-gray-700 font-semibold mb-2">New Encounter Type</label>
+                                        <select
+                                            className="w-full border p-2 rounded focus:ring-2 focus:ring-orange-500"
+                                            value={encounterType}
+                                            onChange={(e) => setEncounterType(e.target.value)}
+                                        >
+                                            <option value="Outpatient">Outpatient Consultation</option>
+                                            <option value="Inpatient">Inpatient Admission</option>
+                                            <option value="Emergency">Emergency</option>
+                                            <option value="External Pharmacy">External Pharmacy</option>
+                                            <option value="External Lab/Radiology">External Lab/Radiology</option>
+                                            <option value="External Investigation">External Investigation</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="mb-6">
+                                        <label className="block text-gray-700 font-semibold mb-2">Assign to Clinic</label>
+                                        <select
+                                            className="w-full border p-2 rounded"
+                                            value={selectedClinic}
+                                            onChange={(e) => setSelectedClinic(e.target.value)}
+                                        >
+                                            <option value="">-- Select Clinic --</option>
+                                            {clinics.map(clinic => (
+                                                <option key={clinic._id} value={clinic._id}>{clinic.name} ({clinic.department})</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className="mb-6">
+                                        <label className="block text-gray-700 font-semibold mb-2">Reason for Change / Visit</label>
+                                        <textarea
+                                            className="w-full border p-2 rounded h-24"
+                                            placeholder="Enter reason for visit or change..."
+                                            value={reasonForVisit}
+                                            onChange={(e) => setReasonForVisit(e.target.value)}
+                                        ></textarea>
+                                    </div>
+                                </div>
+
+                                {/* Right Side: Dynamic Content (Charges or Ward/Bed) */}
+                                <div>
+                                    {encounterType === 'Inpatient' ? (
+                                        <div className="bg-purple-50 p-6 rounded-lg border border-purple-200 h-full flex flex-col">
+                                            <h4 className="text-purple-800 font-bold mb-4 flex items-center gap-2 text-lg">
+                                                <FaBed className="text-purple-600" /> Ward Admission Assignment
+                                            </h4>
+                                            <p className="text-sm text-purple-700 mb-6">Allocate a ward and bed for this patient to complete the admission process.</p>
+
+                                            <div className="space-y-6 flex-1">
+                                                <div>
+                                                    <label className="block text-sm text-gray-700 font-bold mb-2 uppercase tracking-wider">Select Ward</label>
+                                                    <select
+                                                        className="w-full border-2 border-purple-200 p-3 rounded-lg focus:border-purple-500 transition-colors"
+                                                        value={selectedWard}
+                                                        onChange={(e) => setSelectedWard(e.target.value)}
+                                                    >
+                                                        <option value="">-- Choose Ward --</option>
+                                                        {wards.map(ward => (
+                                                            <option key={ward._id} value={ward._id}>{ward.name} ({ward.type})</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-sm text-gray-700 font-bold mb-2 uppercase tracking-wider">Select Bed</label>
+                                                    <select
+                                                        className="w-full border-2 border-purple-200 p-3 rounded-lg focus:border-purple-500 transition-colors"
+                                                        value={selectedBed}
+                                                        onChange={(e) => setSelectedBed(e.target.value)}
+                                                        disabled={!selectedWard}
+                                                    >
+                                                        <option value="">-- Choose Bed --</option>
+                                                        {availableBeds.map(bed => (
+                                                            <option key={bed._id} value={bed.number}>{bed.number}</option>
+                                                        ))}
+                                                    </select>
+                                                    {selectedWard && availableBeds.length === 0 && (
+                                                        <p className="text-red-500 text-sm mt-2 font-semibold">⚠ No beds available in this ward.</p>
+                                                    )}
+                                                </div>
+
+                                                {selectedWard && selectedPatient?.provider && (
+                                                    <div className="mt-8 p-4 bg-white rounded shadow-sm border border-purple-100">
+                                                        <p className="text-xs text-purple-400 font-bold uppercase mb-1">Billing Summary</p>
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="text-gray-600">Daily Rate ({selectedPatient.provider}):</span>
+                                                            <span className="text-xl font-bold text-purple-800">
+                                                                ₦{(wards.find(w => w._id === selectedWard)?.rates?.[selectedPatient.provider] ||
+                                                                    wards.find(w => w._id === selectedWard)?.rates?.Standard ||
+                                                                    wards.find(w => w._id === selectedWard)?.dailyRate || 0).toLocaleString()}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-col h-full overflow-hidden">
+                                            <h4 className="text-gray-700 font-bold mb-3 flex items-center gap-2">
+                                                <FaDollarSign className="text-green-600" /> Select New Charges (Consultation Fee, etc.)
+                                            </h4>
+                                            <div className="border rounded-lg overflow-hidden flex flex-col flex-1 max-h-[500px]">
+                                                <div className="p-4 bg-gray-50 border-b">
+                                                    <p className="text-sm text-gray-500 italic">Select the charges to be added for this new encounter type.</p>
+                                                </div>
+                                                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                                    {Object.keys(chargesByType).map(type => (
+                                                        <div key={type} className="mb-4">
+                                                            <h5 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{chargeTypeLabels[type] || type}</h5>
+                                                            <div className="space-y-2">
+                                                                {chargesByType[type].map(charge => {
+                                                                    const isSelected = selectedCharges.includes(charge._id);
+                                                                    let fee = charge.standardFee || charge.basePrice || 0;
+                                                                    if (selectedPatient.provider === 'Retainership') fee = charge.retainershipFee || fee;
+                                                                    else if (selectedPatient.provider === 'NHIA') fee = charge.nhiaFee || fee;
+                                                                    else if (selectedPatient.provider === 'KSCHMA') fee = charge.kschmaFee || fee;
+
+                                                                    return (
+                                                                        <div
+                                                                            key={charge._id}
+                                                                            onClick={() => handleChargeToggle(charge._id)}
+                                                                            className={`flex items-center justify-between p-3 rounded border cursor-pointer transition-all ${isSelected ? 'bg-blue-50 border-blue-400 ring-1 ring-blue-400' : 'bg-white border-gray-200 hover:bg-gray-50'}`}
+                                                                        >
+                                                                            <div className="flex items-center gap-3">
+                                                                                <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-300'}`}>
+                                                                                    {isSelected && <FaPlus size={10} />}
+                                                                                </div>
+                                                                                <span className="font-semibold text-gray-800">{charge.name}</span>
+                                                                            </div>
+                                                                            <span className="font-bold text-blue-700">₦{fee.toLocaleString()}</span>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                <div className="p-4 bg-gray-100 border-t flex justify-between items-center">
+                                                    <span className="text-gray-600 text-sm font-semibold">{selectedCharges.length} item(s) selected</span>
+                                                    <span className="text-lg font-bold text-gray-800">
+                                                        Total: ₦{charges.filter(c => selectedCharges.includes(c._id)).reduce((sum, c) => {
+                                                            let fee = c.standardFee || c.basePrice || 0;
+                                                            if (selectedPatient.provider === 'Retainership') fee = c.retainershipFee || fee;
+                                                            else if (selectedPatient.provider === 'NHIA') fee = c.nhiaFee || fee;
+                                                            else if (selectedPatient.provider === 'KSCHMA') fee = c.kschmaFee || fee;
+                                                            return sum + fee;
+                                                        }, 0).toLocaleString()}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Modal Footer */}
+                            <div className="mt-8 pt-6 border-t flex justify-end gap-4">
+                                <button
+                                    onClick={() => setShowChangeEncounterModal(false)}
+                                    className="px-6 py-2 bg-gray-200 text-gray-800 rounded font-bold hover:bg-gray-300"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleChangeEncounterSubmission}
+                                    className="px-8 py-2 bg-orange-600 text-white rounded font-bold hover:bg-orange-700 shadow-lg flex items-center gap-2"
+                                >
+                                    <FaCalendarAlt /> Update Encounter & Add Charges
                                 </button>
                             </div>
                         </div>
@@ -1213,3 +1634,4 @@ const FrontDeskDashboard = () => {
 };
 
 export default FrontDeskDashboard;
+

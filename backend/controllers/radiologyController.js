@@ -1,6 +1,9 @@
 const RadiologyOrder = require('../models/radiologyOrderModel');
 const EncounterCharge = require('../models/encounterChargeModel');
 const Visit = require('../models/visitModel');
+const Patient = require('../models/patientModel');
+const Receipt = require('../models/receiptModel');
+const Charge = require('../models/chargeModel');
 
 // @desc    Create new radiology order
 // @route   POST /api/radiology
@@ -34,8 +37,8 @@ const createRadiologyOrder = async (req, res) => {
 // @access  Private
 const getRadiologyOrders = async (req, res) => {
     const orders = await RadiologyOrder.find({})
-        .populate('doctor', 'name')
-        .populate('patient', 'name mrn')
+        .populate('patient', 'name mrn age gender contact')
+        .populate('visit', 'type createdAt')
         .populate('charge', 'status')
         .populate('signedBy', 'name');
     res.json(orders);
@@ -200,6 +203,161 @@ const deleteRadiologyOrder = async (req, res) => {
     res.json({ message: 'Radiology order and associated pending charge deleted.' });
 };
 
+// @desc    Process a direct/walk-in POS sale at Radiology
+// @route   POST /api/radiology/pos-sale
+// @access  Private (Radiologist)
+const processDirectSale = async (req, res) => {
+    try {
+        const { customerName, age, gender, items, discount, tax, paymentMethod } = req.body;
+        // items: [{ chargeId, name, price }]
+
+        if (!customerName || !customerName.trim()) {
+            return res.status(400).json({ message: 'Customer name is required.' });
+        }
+
+        if (!age || isNaN(age)) {
+            return res.status(400).json({ message: 'Age is required and must be a number.' });
+        }
+
+        if (!gender) {
+            return res.status(400).json({ message: 'Gender is required.' });
+        }
+
+        if (!items || items.length === 0) {
+            return res.status(400).json({ message: 'No items selected.' });
+        }
+
+        // ── 1. Create walk-in patient ──────────────────────────────
+        const currentYear = new Date().getFullYear();
+        const prefix = `RAD-${currentYear}-`;
+
+        // Find the latest patient with similar MRN prefix
+        const lastPatient = await Patient.findOne({ mrn: new RegExp(`^${prefix}`) })
+            .sort({ mrn: -1 })
+            .limit(1);
+
+        let sequence = 1;
+        if (lastPatient) {
+            const parts = lastPatient.mrn.split('-');
+            if (parts.length === 3) {
+                const lastSequence = parseInt(parts[2]);
+                if (!isNaN(lastSequence)) {
+                    sequence = lastSequence + 1;
+                }
+            }
+        }
+
+        const walkInMrn = `${prefix}${sequence.toString().padStart(4, '0')}`;
+        const walkInPatient = await Patient.create({
+            mrn: walkInMrn,
+            name: customerName.trim(),
+            age: Number(age),
+            gender: gender,
+            contact: 'Walk-in',
+            provider: 'Standard',
+            depositBalance: 0
+        });
+
+        // ── 2. Create Visit ──────────────────────────────────────────
+        const walkInVisit = await Visit.create({
+            patient: walkInPatient._id,
+            doctor: req.user._id,
+            type: 'External Radiology',
+            status: 'Discharged',
+            encounterStatus: 'completed',
+            paymentValidated: true,
+            reasonForVisit: 'Direct Radiology Purchase (POS)'
+        });
+
+        const createdChargeIds = [];
+        let subtotal = 0;
+
+        // ── 3. Create Charges & Radiology Orders ──────────────────────────
+        for (const item of items) {
+            const { chargeId, name, price } = item;
+            const totalItemAmount = parseFloat(price);
+            subtotal += totalItemAmount;
+
+            const encounterCharge = await EncounterCharge.create({
+                encounter: walkInVisit._id,
+                patient: walkInPatient._id,
+                charge: chargeId,
+                quantity: 1,
+                unitPrice: price,
+                totalAmount: totalItemAmount,
+                patientPortion: totalItemAmount,
+                hmoPortion: 0,
+                status: 'paid',
+                addedBy: req.user._id,
+                itemType: 'Radiology',
+                itemName: name,
+                department: 'Radiology'
+            });
+
+            createdChargeIds.push(encounterCharge._id);
+
+            // Create Radiology Order
+            await RadiologyOrder.create({
+                doctor: req.user._id,
+                patient: walkInPatient._id,
+                visit: walkInVisit._id,
+                charge: encounterCharge._id,
+                scanType: name,
+                status: 'pending'
+            });
+        }
+
+        // ── 4. Apply discount and tax ──────────────────────────────────────────
+        const discountAmt = parseFloat(discount) || 0;
+        const taxAmt = parseFloat(tax) || 0;
+        const totalAmount = subtotal - discountAmt + taxAmt;
+
+        // ── 5. Create Receipt ─────────────────────────────────────────
+        const receiptNumber = `POS-RAD-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+        const receipt = await Receipt.create({
+            patient: walkInPatient._id,
+            encounter: walkInVisit._id,
+            charges: createdChargeIds,
+            amountPaid: totalAmount < 0 ? 0 : totalAmount,
+            paymentMethod: paymentMethod || 'cash',
+            cashier: req.user._id,
+            receiptNumber,
+            validated: true,
+            validatedBy: [{
+                user: req.user._id,
+                department: 'Radiology',
+                timestamp: new Date()
+            }]
+        });
+
+        // ── 6. Link receipt on charges ─────────────────────────────────────────
+        await EncounterCharge.updateMany(
+            { _id: { $in: createdChargeIds } },
+            { receipt: receipt._id }
+        );
+
+        const populatedReceipt = await Receipt.findById(receipt._id)
+            .populate('patient', 'name mrn')
+            .populate('cashier', 'name')
+            .populate({
+                path: 'charges',
+                select: 'itemName quantity unitPrice totalAmount'
+            });
+
+        res.status(201).json({
+            message: 'Sale completed successfully',
+            receipt: populatedReceipt,
+            receiptNumber,
+            totalAmount: totalAmount < 0 ? 0 : totalAmount
+        });
+
+    } catch (error) {
+        console.error('Radiology POS Sale Error:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     createRadiologyOrder,
     getRadiologyOrders,
@@ -208,4 +366,5 @@ module.exports = {
     uploadRadiologyImages,
     deleteRadiologyImage,
     deleteRadiologyOrder,
+    processDirectSale,
 };

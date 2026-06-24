@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { protect, admin } = require('../middleware/authMiddleware');
+const { protect, admin, adminOrReceptionist, checkNotReadOnly } = require('../middleware/authMiddleware');
 const {
     getHMOs,
     getHMOById,
+    getNextHMOCode,
     createHMO,
     updateHMO,
     deleteHMO,
@@ -29,15 +30,16 @@ const upload = multer({
 // Routes
 router.route('/')
     .get(protect, getHMOs)
-    .post(protect, admin, createHMO);
+    .post(protect, adminOrReceptionist, checkNotReadOnly, createHMO);
 
-router.post('/import-excel', protect, admin, upload.single('file'), importHMOsFromExcel);
+router.post('/import-excel', protect, adminOrReceptionist, checkNotReadOnly, upload.single('file'), importHMOsFromExcel);
+router.get('/next-code', protect, getNextHMOCode);
 
 router.route('/:id')
     .get(protect, getHMOById)
-    .put(protect, admin, updateHMO)
-    .delete(protect, admin, deleteHMO);
+    .put(protect, adminOrReceptionist, checkNotReadOnly, updateHMO)
+    .delete(protect, adminOrReceptionist, checkNotReadOnly, deleteHMO);
 
-router.patch('/:id/toggle-status', protect, admin, toggleHMOStatus);
+router.patch('/:id/toggle-status', protect, adminOrReceptionist, checkNotReadOnly, toggleHMOStatus);
 
 module.exports = router;

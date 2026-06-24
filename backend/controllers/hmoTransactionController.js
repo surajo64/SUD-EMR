@@ -53,15 +53,10 @@ const getHMOStatement = async (req, res) => {
             };
         }
 
-        // 1. Get deposits (filtered)
+        // 1. Get HMO Transactions (Deposits, Manual Charges, Refunds)
         const depositQuery = { hmo: hmoId };
         if (startDate && endDate) {
-            depositQuery.date = dateFilter; // Assuming 'date' field in HMOTransaction
-            // If HMOTransaction uses createdAt, use that instead. 
-            // Checking model... usually custom 'date' or timestamps. 
-            // Let's assume 'date' based on previous view, but fallback to createdAt if needed.
-            // Actually, let's check the model structure in my memory or just use createdAt if date is missing.
-            // The view showed 'date: d.date' in the map, so 'date' field likely exists.
+            depositQuery.date = dateFilter;
         }
         const deposits = await HMOTransaction.find(depositQuery).lean();
 
@@ -87,17 +82,17 @@ const getHMOStatement = async (req, res) => {
         // 3. Merge and Format
         const statement = [];
 
-        // Add Deposits
+        // MERGE: Add Deposits AND Manual Charges
         deposits.forEach(d => {
             statement.push({
                 _id: d._id,
                 date: d.date,
-                type: 'Deposit',
+                type: d.type === 'deposit' ? 'Deposit' : 'Charge',
                 description: d.description,
                 serviceName: '-',
                 reference: d.reference,
-                amount: d.amount, // Credit
-                isCredit: true,
+                amount: d.amount,
+                isCredit: d.type === 'deposit',
                 patientName: '-'
             });
         });
@@ -121,9 +116,21 @@ const getHMOStatement = async (req, res) => {
         statement.sort((a, b) => new Date(b.date) - new Date(a.date));
 
         // Calculate Summary
-        const totalDeposits = deposits.reduce((sum, d) => sum + d.amount, 0);
-        const totalCharges = charges.reduce((sum, c) => sum + c.hmoPortion, 0);
-        const balance = totalDeposits - totalCharges;
+        const totalDeposits = deposits
+            .filter(d => d.type === 'deposit')
+            .reduce((sum, d) => sum + d.amount, 0);
+
+        const manualCharges = deposits
+            .filter(d => d.type === 'charge')
+            .reduce((sum, d) => sum + d.amount, 0);
+
+        const refunds = deposits
+            .filter(d => d.type === 'refund')
+            .reduce((sum, d) => sum + d.amount, 0);
+
+        const totalUtilized = charges.reduce((sum, c) => sum + c.hmoPortion, 0);
+        const totalCharges = totalUtilized + manualCharges;
+        const balance = totalDeposits - (totalCharges + refunds);
 
         res.json({
             hmo: {
@@ -133,6 +140,8 @@ const getHMOStatement = async (req, res) => {
             },
             summary: {
                 totalDeposits,
+                totalUtilized,
+                manualCharges,
                 totalCharges,
                 balance
             },
@@ -145,7 +154,123 @@ const getHMOStatement = async (req, res) => {
     }
 };
 
+// @desc    Get Total Retainership HMO Balance
+// @route   GET /api/hmo-transactions/total-retainership-balance
+// @access  Private
+const getTotalRetainershipBalance = async (req, res) => {
+    try {
+        // 1. Get all Retainership HMOs
+        const retainershipHMOs = await HMO.find({ category: 'Retainership', active: true });
+        const hmoIds = retainershipHMOs.map(h => h._id);
+        const hmoNames = retainershipHMOs.map(h => h.name);
+
+        // 2. Sum deposits for these HMOs
+        const deposits = await HMOTransaction.find({ hmo: { $in: hmoIds }, type: 'deposit' });
+        const totalDeposits = deposits.reduce((sum, d) => sum + d.amount, 0);
+
+        // 2.5 Sum manual charges for these HMOs
+        const manualCharges = await HMOTransaction.find({ hmo: { $in: hmoIds }, type: 'charge' });
+        const totalManualCharges = manualCharges.reduce((sum, c) => sum + c.amount, 0);
+
+        // 3. Sum utilized charges for patients belonging to these HMOs
+        const patients = await Patient.find({ hmo: { $in: hmoNames } }).select('_id');
+        const patientIds = patients.map(p => p._id);
+
+        const charges = await EncounterCharge.find({
+            patient: { $in: patientIds },
+            hmoPortion: { $gt: 0 }
+        });
+        const totalCharges = charges.reduce((sum, c) => sum + c.hmoPortion, 0) + totalManualCharges;
+
+        const balance = totalDeposits - totalCharges;
+
+        res.json({
+            totalDeposits,
+            totalCharges,
+            balance
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Get deposit status for every active Retainership HMO
+// @route   GET /api/hmo-transactions/retainership-deposit-status
+// @access  Private
+const getRetainershipDepositStatus = async (req, res) => {
+    try {
+        const retainershipHMOs = await HMO.find({ category: 'Retainership', active: true }).lean();
+
+        // For each HMO, check if at least one deposit transaction exists
+        const result = await Promise.all(
+            retainershipHMOs.map(async (hmo) => {
+                const depositCount = await HMOTransaction.countDocuments({
+                    hmo: hmo._id,
+                    type: 'deposit'
+                });
+                return {
+                    _id: hmo._id,
+                    name: hmo.name,
+                    hasDeposit: depositCount > 0
+                };
+            })
+        );
+
+        res.json(result);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Update an HMO Transaction
+// @route   PUT /api/hmo-transactions/:id
+// @access  Private (Admin)
+const updateHMOTransaction = async (req, res) => {
+    try {
+        const { amount, description, reference, date } = req.body;
+        const transaction = await HMOTransaction.findById(req.params.id);
+
+        if (!transaction) {
+            return res.status(404).json({ message: 'Transaction not found' });
+        }
+
+        if (amount !== undefined) transaction.amount = amount;
+        if (description !== undefined) transaction.description = description;
+        if (reference !== undefined) transaction.reference = reference;
+        if (date !== undefined) transaction.date = date;
+
+        const updatedTransaction = await transaction.save();
+        res.json(updatedTransaction);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Delete an HMO Transaction
+// @route   DELETE /api/hmo-transactions/:id
+// @access  Private (Admin)
+const deleteHMOTransaction = async (req, res) => {
+    try {
+        const transaction = await HMOTransaction.findById(req.params.id);
+
+        if (!transaction) {
+            return res.status(404).json({ message: 'Transaction not found' });
+        }
+
+        await transaction.deleteOne();
+        res.json({ message: 'Transaction removed' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     addDeposit,
-    getHMOStatement
+    getHMOStatement,
+    getTotalRetainershipBalance,
+    getRetainershipDepositStatus,
+    updateHMOTransaction,
+    deleteHMOTransaction
 };

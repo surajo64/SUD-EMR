@@ -66,6 +66,9 @@ const loginUser = async (req, res) => {
     const user = await User.findOne({ email }).populate('assignedPharmacy', 'name isMainPharmacy');
 
     if (user && (await user.matchPassword(password))) {
+        if (!user.isActive) {
+            return res.status(401).json({ message: 'Account is deactivated. Please contact administrator.' });
+        }
         res.json({
             _id: user.id,
             name: user.name,
@@ -192,6 +195,26 @@ const deleteUser = async (req, res) => {
     }
 };
 
+// @desc    Activate user
+// @route   PUT /api/users/:id/activate
+// @access  Private (Admin only)
+const activateUser = async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id);
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        user.isActive = true;
+        await user.save();
+
+        res.json({ message: 'User activated successfully' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // @desc    Reset user password
 // @route   POST /api/users/:id/reset-password
 // @access  Private (Admin only)
@@ -255,6 +278,7 @@ module.exports = {
     getAllUsers,
     updateUser,
     deleteUser,
+    activateUser,
     resetUserPassword,
     getDoctors,
     changePassword,

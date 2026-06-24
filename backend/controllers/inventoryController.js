@@ -48,7 +48,7 @@ const getInventory = async (req, res) => {
 
         const items = await Inventory.find(filter)
             .populate('pharmacy', 'name')
-            .sort({ createdAt: -1 });
+            .sort({ name: 1, expiryDate: 1 }); // FEFO: same drug batches sorted by earliest expiry first
 
         res.json(items);
     } catch (error) {
@@ -61,16 +61,24 @@ const getInventory = async (req, res) => {
 // @access Private
 const addInventoryItem = async (req, res) => {
     const userRole = req.user.role ? req.user.role.toLowerCase() : '';
-    const isMainPharmacy = req.user.assignedPharmacy?.isMainPharmacy;
+    const isMainPharmacist = userRole === 'pharmacist' && req.user.assignedPharmacy?.isMainPharmacy === true;
 
-    if (userRole !== 'admin' && !(userRole === 'pharmacist' && isMainPharmacy)) {
-        return res.status(403).json({ message: "Access denied. Only Admin or Main Pharmacy can add items to inventory." });
+    // Only admin, super_admin, or MAIN pharmacy pharmacists can add drugs
+    if (!['admin', 'super_admin'].includes(userRole) && !isMainPharmacist) {
+        return res.status(403).json({ message: "Access denied. Only main pharmacy pharmacists can add drugs." });
     }
 
     const { name, quantity, price, standardFee, retainershipFee, nhiaFee, kschmaFee, purchasingPrice, expiryDate, supplier, batchNumber, barcode, reorderLevel, route, form, dosage, frequency, drugUnit, pharmacy } = req.body;
 
     if (!name || !quantity || (!price && !standardFee) || !expiryDate || !pharmacy) {
         return res.status(400).json({ message: "Please fill all required fields including pharmacy" });
+    }
+
+    // Branch Protection: Pharmacists can only add to their own pharmacy unless they are Main Pharmacy
+    if (userRole === 'pharmacist' && req.user.assignedPharmacy) {
+        if (!req.user.assignedPharmacy.isMainPharmacy && pharmacy.toString() !== req.user.assignedPharmacy._id.toString()) {
+            return res.status(403).json({ message: "Access denied. You can only add drugs to your own pharmacy." });
+        }
     }
 
     const finalStandardFee = standardFee || price;
@@ -107,11 +115,16 @@ const addInventoryItem = async (req, res) => {
 // @access Private
 const updateInventoryItem = async (req, res) => {
     const userRole = req.user.role ? req.user.role.toLowerCase() : '';
-    const isMainPharmacy = req.user.assignedPharmacy?.isMainPharmacy;
+    const isMainPharmacist = userRole === 'pharmacist' && req.user.assignedPharmacy?.isMainPharmacy === true;
 
-    if (userRole !== 'admin' && !(userRole === 'pharmacist' && isMainPharmacy)) {
-        return res.status(403).json({ message: "Access denied. Only Admin or Main Pharmacy can update inventory items." });
+    // Only admin, super_admin, or MAIN pharmacy pharmacists can update drugs
+    if (!['admin', 'super_admin'].includes(userRole) && !isMainPharmacist) {
+        return res.status(403).json({ message: "Access denied. Only main pharmacy pharmacists can edit drugs." });
     }
+
+    // Additional check for branch pharmacists (they can only edit their own items)
+    // The specific logic to check if they are editing an item in their pharmacy 
+    // can be added here if needed, but usually is protected by the pharmacy field in currentItem.
 
     const { name, quantity, price, standardFee, retainershipFee, nhiaFee, kschmaFee, purchasingPrice, expiryDate, supplier, batchNumber, barcode, reorderLevel, route, form, dosage, frequency, drugUnit, pharmacy } = req.body;
 
@@ -146,6 +159,13 @@ const updateInventoryItem = async (req, res) => {
 
     if (!updatedItem) return res.status(404).json({ message: "Item not found" });
 
+    // Branch Protection: Pharmacists can only update items in their own pharmacy
+    if (userRole === 'pharmacist' && req.user.assignedPharmacy) {
+        if (!req.user.assignedPharmacy.isMainPharmacy && updatedItem.pharmacy?._id.toString() !== req.user.assignedPharmacy._id.toString()) {
+            return res.status(403).json({ message: "Access denied. You can only update drugs in your own pharmacy." });
+        }
+    }
+
     res.json(updatedItem);
 };
 
@@ -154,10 +174,11 @@ const updateInventoryItem = async (req, res) => {
 // @access Private
 const deleteInventoryItem = async (req, res) => {
     const userRole = req.user.role ? req.user.role.toLowerCase() : '';
-    const isMainPharmacy = req.user.assignedPharmacy?.isMainPharmacy;
+    const isMainPharmacist = userRole === 'pharmacist' && req.user.assignedPharmacy?.isMainPharmacy === true;
 
-    if (userRole !== 'admin' && !(userRole === 'pharmacist' && isMainPharmacy)) {
-        return res.status(403).json({ message: "Access denied. Only Admin or Main Pharmacy can remove items from inventory." });
+    // Only admin, super_admin, or MAIN pharmacy pharmacists can delete drugs
+    if (!['admin', 'super_admin'].includes(userRole) && !isMainPharmacist) {
+        return res.status(403).json({ message: "Access denied. Only main pharmacy pharmacists can remove drugs." });
     }
 
     const item = await Inventory.findById(req.params.id);
@@ -394,10 +415,11 @@ const getProfitLossReport = async (req, res) => {
 const importInventoryFromExcel = async (req, res) => {
     try {
         const userRole = req.user.role ? req.user.role.toLowerCase() : '';
-        const isMainPharmacy = req.user.assignedPharmacy?.isMainPharmacy;
+        const isMainPharmacist = userRole === 'pharmacist' && req.user.assignedPharmacy?.isMainPharmacy === true;
 
-        if (userRole !== 'admin' && !(userRole === 'pharmacist' && isMainPharmacy)) {
-            return res.status(403).json({ message: "Access denied. Only Admin or Main Pharmacy can import inventory." });
+        // Only admin, super_admin, or MAIN pharmacy pharmacists can import inventory
+        if (!['admin', 'super_admin'].includes(userRole) && !isMainPharmacist) {
+            return res.status(403).json({ message: "Access denied. Only main pharmacy pharmacists can import inventory." });
         }
 
         if (!req.file) {

@@ -4,7 +4,7 @@ import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import { AppContext } from '../context/AppContext';
 import Layout from '../components/Layout';
-import { FaFlask, FaSearch, FaCheckCircle, FaEdit, FaSave, FaTimes, FaFileAlt, FaCog } from 'react-icons/fa';
+import { FaFlask, FaSearch, FaCheckCircle, FaEdit, FaSave, FaTimes, FaFileAlt, FaCog, FaChevronDown, FaChevronUp, FaTimesCircle } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { parseRange, checkRange, getRangeColorClass } from '../utils/labUtils';
 
@@ -13,7 +13,6 @@ const LabDashboard = () => {
     const navigate = useNavigate();
     const [labOrders, setLabOrders] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
-    const [completedSearchTerm, setCompletedSearchTerm] = useState('');
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [results, setResults] = useState('');
     const [tableResults, setTableResults] = useState([]);
@@ -26,10 +25,11 @@ const LabDashboard = () => {
     const [systemSettings, setSystemSettings] = useState(null);
     const { user } = useContext(AuthContext);
     const { backendUrl } = useContext(AppContext);
+    const [expandedEncounter, setExpandedEncounter] = useState(null);
 
 
 
-    // Parse text-based template into table format
+    // Parse text-based template or saved result into table format
     const parseTextTemplate = (template) => {
         if (!template) return [];
 
@@ -38,16 +38,21 @@ const LabDashboard = () => {
 
         for (const line of lines) {
             // Match patterns like "- WBC: _____ x10^3/μL (Normal: 4.0-11.0)"
-            const match = line.match(/^\s*-\s*([^:]+):\s*_+\s*([^(]*)\(?(?:Normal:\s*)?([^)]*)\)?/);
+            // OR "- Malaria: ++ Positive/Negative"
+            const match = line.match(/^\s*-\s*([^:]+):\s*(.*?)(?:\s*\(?(?:Normal:\s*)?([^)]*)\)?)?$/);
             if (match) {
                 const name = match[1].trim();
-                const unit = match[2].trim();
-                const normalRange = match[3].trim();
+                let fullValue = match[2].trim();
+                const normalRange = (match[3] || '').trim();
+
+                // Extract value from underscores if present (e.g., "__yes__")
+                const valueMatch = fullValue.match(/^_*([^_]*)_*$/);
+                const value = valueMatch ? valueMatch[1].trim() : fullValue;
 
                 params.push({
                     name,
-                    value: '',
-                    unit,
+                    value: value === '_____' ? '' : value,
+                    unit: '', // Text templates usually don't have separate unit column
                     normalRange
                 });
             }
@@ -66,8 +71,10 @@ const LabDashboard = () => {
             }
         };
         fetchSystemSettings();
-        fetchLabOrders();
-    }, []);
+        if (user && user.token) {
+            fetchLabOrders();
+        }
+    }, [user, backendUrl]);
 
     const fetchLabOrders = async () => {
         try {
@@ -81,15 +88,7 @@ const LabDashboard = () => {
     };
 
     const searchPatients = () => {
-        if (!searchTerm) {
-            fetchLabOrders();
-            return;
-        }
-        const filtered = labOrders.filter(order =>
-            order.patient?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            order.patient?.mrn?.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-        setLabOrders(filtered);
+        fetchLabOrders(); // Refresh data from server on search
     };
 
     const handleSelectOrder = async (order) => {
@@ -219,6 +218,25 @@ const LabDashboard = () => {
         }
     };
 
+    const handleRejectResult = async (id) => {
+        const reason = window.prompt('Please enter the reason for rejecting these results:');
+        if (!reason) return;
+
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.put(`${backendUrl}/api/lab/${id}/reject`, { reason }, config);
+            toast.success('Result rejected and sent back for correction');
+
+            // Sync with current selection if applicable
+            if (selectedOrder && selectedOrder._id === id) {
+                setSelectedOrder(data);
+            }
+            fetchLabOrders();
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Error rejecting result');
+        }
+    };
+
     const handleEditResult = async () => {
         let resultData;
 
@@ -308,12 +326,21 @@ const LabDashboard = () => {
                         <div>
                             <p><strong>Patient Name:</strong> ${order.patient?.name}</p>
                             <p><strong>MRN:</strong> ${order.patient?.mrn}</p>
+                            <p><strong>Age:</strong> ${order.patient?.age || 'N/A'}</p>
                         </div>
                         <div>
                             <p><strong>Test Name:</strong> ${order.testName}</p>
                             <p><strong>Date Ordered:</strong> ${new Date(order.createdAt).toLocaleDateString()}</p>
+                            <p><strong>Gender:</strong> ${order.patient?.gender || 'N/A'}</p>
                         </div>
                     </div>
+
+                    ${order.clinicalDetails ? `
+                    <div style="margin-bottom: 20px; padding: 10px; background: #f9fafb; border-left: 4px solid #9ca3af; font-style: italic;">
+                        <p style="margin: 0; font-weight: bold; font-style: normal; color: #374151; font-size: 14px;">Clinical Detail:</p>
+                        <p style="margin: 5px 0 0 0; font-size: 13px; color: #4b5563;">${order.clinicalDetails}</p>
+                    </div>
+                    ` : ''}
 
                     <div class="results-section">
                         <h3>Test Results:</h3>
@@ -362,7 +389,7 @@ const LabDashboard = () => {
                                                             <td style="padding: 10px; border: 1px solid #d1d5db; color: #6b7280;">${param.unit || ''}</td>
                                                             <td style="padding: 10px; border: 1px solid #d1d5db; color: #6b7280;">${param.normalRange || ''}</td>
                                                             <td style="padding: 10px; border: 1px solid #d1d5db; text-align: center;">
-                                                                ${param.value ? `<span style="color: ${statusColor}; font-weight: 600; font-size: 11px;">${statusText}</span>` : ''}
+                                                                ${(param.value && !param.name.toLowerCase().trim().includes('blood group') && !param.name.toLowerCase().trim().includes('genotype')) ? `<span style="color: ${statusColor}; font-weight: 600; font-size: 11px;">${statusText}</span>` : ''}
                                                             </td>
                                                         </tr>
                                                     `;
@@ -372,30 +399,70 @@ const LabDashboard = () => {
                                     `;
                     }
                 } catch (e) {
-                    // Not JSON or not table format
+                    // Not JSON - try to parse as text-to-table
+                    const parsedParams = parseTextTemplate(order.result);
+                    if (parsedParams.length > 0) {
+                        return `
+                            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                                <thead>
+                                    <tr style="background: #f3f4f6;">
+                                        <th style="text-align: left; padding: 12px; border: 1px solid #d1d5db; font-weight: 600;">Parameter</th>
+                                        <th style="text-align: left; padding: 12px; border: 1px solid #d1d5db; font-weight: 600; width: 250px;">Result</th>
+                                        <th style="text-align: left; padding: 12px; border: 1px solid #d1d5db; font-weight: 600; width: 200px;">Normal Range</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${parsedParams.map(param => `
+                                        <tr>
+                                            <td style="padding: 10px; border: 1px solid #d1d5db; font-weight: 500;">${param.name}</td>
+                                            <td style="padding: 10px; border: 1px solid #d1d5db; font-weight: 600;">${param.value || '-'}</td>
+                                            <td style="padding: 10px; border: 1px solid #d1d5db; color: #6b7280;">${param.normalRange || ''}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        `;
+                    }
                 }
                 return `<div class="results-content">${order.result}</div>`;
             })()}
                     </div>
 
-                    <div class="signature-section">
-                        <div class="signature-grid">
-                            <div>
-                                ${order.signedBy ? `
-                                    <p><strong>Performed by:</strong> ${order.signedBy.name}</p>
-                                    <p><strong>Date:</strong> ${new Date(order.signedAt).toLocaleString()}</p>
-                                ` : ''}
-                            </div>
-                            <div>
-                                ${order.approvedBy ? `
-                                    <p style="color: green;"><strong>Reviewed and Approved by:</strong> ${order.approvedBy.name}</p>
-                                    <p style="color: green;"><strong>Date:</strong> ${new Date(order.approvedAt).toLocaleString()}</p>
-                                ` : ''}
-                                ${order.lastModifiedBy ? `
-                                    <p style="color: orange;"><strong>Last Modified by:</strong> ${order.lastModifiedBy.name}</p>
-                                    <p style="color: orange;"><strong>Date:</strong> ${new Date(order.lastModifiedAt).toLocaleString()}</p>
-                                ` : ''}
-                            </div>
+                    <div class="signature-section" style="margin-top: 30px; padding-top: 15px; border-top: 2px solid #333;">
+                        <h4 style="margin: 0 0 15px 0; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; color: #374151;">Audit Trail & Signatures</h4>
+                        <div class="signature-grid" style="display: grid; grid-template-cols: repeat(2, 1fr); gap: 20px;">
+                            ${order.signedBy ? `
+                                <div style="padding: 10px; border: 1px solid #e5e7eb; border-radius: 6px;">
+                                    <p style="margin: 0; font-size: 10px; font-weight: bold; color: #6b7280; text-transform: uppercase;">Performed By</p>
+                                    <p style="margin: 5px 0 0 0; font-size: 13px; font-weight: 600;">${order.signedBy.name}</p>
+                                    <p style="margin: 2px 0 0 0; font-size: 11px; color: #9ca3af;">${new Date(order.signedAt).toLocaleString()}</p>
+                                </div>
+                            ` : ''}
+
+                            ${order.rejectedBy ? `
+                                <div style="padding: 10px; border: 1px solid #fee2e2; border-radius: 6px; background-color: #fef2f2;">
+                                    <p style="margin: 0; font-size: 10px; font-weight: bold; color: #b91c1c; text-transform: uppercase;">Rejected By</p>
+                                    <p style="margin: 5px 0 0 0; font-size: 13px; font-weight: 600;">${order.rejectedBy.name}</p>
+                                    <p style="margin: 2px 0 0 0; font-size: 11px; color: #f87171;">Reason: ${order.rejectionReason}</p>
+                                    <p style="margin: 2px 0 0 0; font-size: 11px; color: #f87171;">${new Date(order.rejectedAt).toLocaleString()}</p>
+                                </div>
+                            ` : ''}
+
+                            ${order.lastModifiedBy ? `
+                                <div style="padding: 10px; border: 1px solid #fef3c7; border-radius: 6px; background-color: #fffbeb;">
+                                    <p style="margin: 0; font-size: 10px; font-weight: bold; color: #92400e; text-transform: uppercase;">Last Edited By</p>
+                                    <p style="margin: 5px 0 0 0; font-size: 13px; font-weight: 600;">${order.lastModifiedBy.name}</p>
+                                    <p style="margin: 2px 0 0 0; font-size: 11px; color: #d97706;">${new Date(order.lastModifiedAt).toLocaleString()}</p>
+                                </div>
+                            ` : ''}
+
+                            ${order.approvedBy ? `
+                                <div style="padding: 10px; border: 1px solid #dcfce7; border-radius: 6px; background-color: #f0fdf4;">
+                                    <p style="margin: 0; font-size: 10px; font-weight: bold; color: #166534; text-transform: uppercase;">Verified & Approved By</p>
+                                    <p style="margin: 5px 0 0 0; font-size: 13px; font-weight: 600;">${order.approvedBy.name}</p>
+                                    <p style="margin: 2px 0 0 0; font-size: 11px; color: #22c55e;">${new Date(order.approvedAt).toLocaleString()}</p>
+                                </div>
+                            ` : ''}
                         </div>
                     </div>
 
@@ -415,21 +482,49 @@ const LabDashboard = () => {
     };
 
     const pendingOrders = labOrders
-        .filter(o => o.status === 'pending')
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        .filter(o => o.status === 'pending');
 
     const completedOrders = labOrders
-        .filter(o => o.status === 'completed')
-        .filter(o => {
-            if (!completedSearchTerm) return true;
-            const searchLower = completedSearchTerm.toLowerCase();
-            return (
-                o.testName?.toLowerCase().includes(searchLower) ||
-                o.patient?.name?.toLowerCase().includes(searchLower) ||
-                o.patient?.mrn?.toLowerCase().includes(searchLower)
-            );
-        })
-        .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+        .filter(o => o.status === 'completed');
+
+    // Group orders for display
+    const groupedEncounters = Object.values(
+        labOrders
+            .filter(order => {
+                if (!searchTerm) return true;
+                const s = searchTerm.toLowerCase();
+                return (
+                    (order.patient?.name?.toLowerCase() || '').includes(s) ||
+                    (String(order.patient?.mrn || '').toLowerCase()).includes(s) ||
+                    (order.patient?.contact?.toLowerCase() || '').includes(s) ||
+                    (order.testName?.toLowerCase() || '').includes(s)
+                );
+            })
+            .reduce((acc, order) => {
+                // Modified grouping to handle visits more robustly
+                const visitId = order.visit?._id || 'external-' + (order.patient?._id || 'unknown');
+                if (!acc[visitId]) {
+                    acc[visitId] = {
+                        id: visitId,
+                        patient: order.patient,
+                        visit: order.visit,
+                        orders: []
+                    };
+                }
+                acc[visitId].orders.push(order);
+                return acc;
+            }, {})
+    ).sort((a, b) => {
+        const getLatest = (group) => {
+            const orderDates = group.orders.map(o => new Date(o.createdAt).getTime());
+            const visitDate = group.visit?.createdAt ? new Date(group.visit.createdAt).getTime() : 0;
+            // Handle groups with no orders or invalid dates
+            const validDates = orderDates.filter(d => !isNaN(d));
+            const maxOrderDate = validDates.length > 0 ? Math.max(...validDates) : 0;
+            return Math.max(visitDate, maxOrderDate);
+        };
+        return getLatest(b) - getLatest(a);
+    });
 
     return (
         <Layout>
@@ -467,7 +562,7 @@ const LabDashboard = () => {
                 <div className="flex gap-2">
                     <input
                         type="text"
-                        placeholder="Search by Patient Name or MRN..."
+                        placeholder="Search by Patient Name, MRN, Phone or Test Name..."
                         className="flex-1 border p-2 rounded"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -479,46 +574,231 @@ const LabDashboard = () => {
                     >
                         Search
                     </button>
+                    {searchTerm && (
+                        <button
+                            onClick={() => {
+                                setSearchTerm('');
+                                fetchLabOrders();
+                            }}
+                            className="bg-gray-400 text-white px-6 py-2 rounded hover:bg-gray-500"
+                        >
+                            Clear
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {/* Pending Orders */}
+            {/* Grouped Search Results */}
             {!selectedOrder && (
-                <div className="bg-white p-6 rounded shadow mb-6">
-                    <h3 className="text-xl font-bold mb-4">Pending Lab Tests</h3>
-                    {pendingOrders.length === 0 ? (
-                        <p className="text-gray-500">No pending tests</p>
-                    ) : (
-                        <div className="space-y-2">
-                            {pendingOrders.map(order => (
-                                <div
-                                    key={order._id}
-                                    className="border p-4 rounded hover:bg-gray-50 cursor-pointer"
-                                    onClick={() => handleSelectOrder(order)}
-                                >
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className="font-bold text-lg">{order.testName}</p>
-                                            <p className="text-gray-600">
-                                                Patient: {order.patient?.name} (MRN: {order.patient?.mrn})
-                                            </p>
-                                            <p className="text-sm text-gray-500">
-                                                Ordered: {new Date(order.createdAt).toLocaleString()}
-                                            </p>
-                                            {order.labSpecialization && (
-                                                <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded mt-1 inline-block">
-                                                    {order.labSpecialization}
-                                                </span>
-                                            )}
+                <div className="mb-6">
+                    <div className="space-y-4">
+                        {groupedEncounters.length === 0 ? (
+                            <div className="bg-white p-12 rounded shadow text-center text-gray-500">
+                                <p className="text-lg font-semibold">No results found</p>
+                                <p className="text-sm">Try searching with a different name or MRN.</p>
+                            </div>
+                        ) : (
+                            groupedEncounters.map(group => (
+                                <div key={group.id} className="bg-white rounded shadow overflow-hidden border border-purple-100">
+                                    {/* Encounter Header */}
+                                    <div
+                                        className="p-4 cursor-pointer hover:bg-purple-50 flex justify-between items-center transition-colors"
+                                        onClick={() => setExpandedEncounter(expandedEncounter === group.id ? null : group.id)}
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className="bg-purple-100 p-3 rounded-full text-purple-600">
+                                                <FaFlask size={20} />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-gray-800 text-lg">
+                                                    {group.patient?.name || 'Unknown Patient'}
+                                                </h4>
+                                                <p className="text-sm text-gray-600">
+                                                    {group.patient?.mrn && (
+                                                        <>
+                                                            MRN: <span className="font-semibold">{group.patient.mrn}</span>
+                                                            <span className="mx-2 text-gray-300">|</span>
+                                                        </>
+                                                    )}
+                                                    {group.patient?.contact && (
+                                                        <>
+                                                            Phone: <span className="font-semibold">{group.patient.contact}</span>
+                                                            <span className="mx-2 text-gray-300">|</span>
+                                                        </>
+                                                    )}
+                                                    {group.visit ? (
+                                                        <>
+                                                            <span className="text-purple-600 font-medium">{group.visit.type}</span>
+                                                            <span className="mx-2 text-gray-300">•</span>
+                                                            {new Date(group.visit.createdAt).toLocaleDateString()}
+                                                        </>
+                                                    ) : (
+                                                        <span className="text-blue-600 font-medium italic flex items-center gap-1">
+                                                            <FaFlask size={10} /> Lab Direct / Walk-in
+                                                        </span>
+                                                    )}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded text-sm">
-                                            {order.status}
-                                        </span>
+                                        <div className="flex items-center gap-4">
+                                            <div className="text-right mr-4">
+                                                <span className="bg-purple-600 text-white px-3 py-1 rounded-full text-xs font-bold">
+                                                    {group.orders.length} {group.orders.length === 1 ? 'Test' : 'Tests'}
+                                                </span>
+                                                <div className="flex flex-col items-end mt-1">
+                                                    {group.orders.some(o => o.status === 'pending') && (
+                                                        <p className="text-[10px] text-amber-500 uppercase tracking-wider font-bold">
+                                                            {group.orders.filter(o => o.status === 'pending').length} Pending
+                                                        </p>
+                                                    )}
+                                                    {group.orders.some(o => o.status === 'rejected') && (
+                                                        <p className="text-[10px] text-red-500 uppercase tracking-wider font-bold">
+                                                            {group.orders.filter(o => o.status === 'rejected').length} Rejected
+                                                        </p>
+                                                    )}
+                                                    {group.orders.some(o => o.status === 'completed') && (
+                                                        <p className="text-[10px] text-green-500 uppercase tracking-wider font-bold">
+                                                            {group.orders.filter(o => o.status === 'completed').length} Completed
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {expandedEncounter === group.id ? <FaChevronUp className="text-gray-400" /> : <FaChevronDown className="text-gray-400" />}
+                                        </div>
                                     </div>
+
+                                    {/* Tests List (Expanded) */}
+                                    {expandedEncounter === group.id && (
+                                        <div className="bg-gray-50 border-t divide-y">
+                                            {group.orders.map(order => (
+                                                <div
+                                                    key={order._id}
+                                                    className={`p-4 flex justify-between items-center ${order.status === 'completed' && order.approvedBy
+                                                        ? 'bg-gray-50 opacity-75'
+                                                        : 'bg-white'
+                                                        }`}
+                                                >
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <p className="font-bold text-gray-800">{order.testName}</p>
+                                                            {order.labSpecialization && (
+                                                                <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded font-bold uppercase">
+                                                                    {order.labSpecialization}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-xs text-gray-500">
+                                                            Ordered: {new Date(order.createdAt).toLocaleString()}
+                                                        </p>
+                                                        {order.clinicalDetails && (
+                                                            <div className="mt-2 p-2 bg-blue-50 border-l-4 border-blue-400 text-xs italic">
+                                                                <p className="font-bold text-blue-800 not-italic uppercase text-[9px] mb-1">Clinical context:</p>
+                                                                <p className="text-gray-700">{order.clinicalDetails}</p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${order.status === 'completed'
+                                                            ? (order.approvedBy ? 'bg-green-600 text-white' : 'bg-green-100 text-green-800')
+                                                            : order.status === 'rejected'
+                                                                ? 'bg-red-100 text-red-800'
+                                                                : 'bg-yellow-100 text-yellow-800'
+                                                            }`}>
+                                                            {order.status === 'completed' ? (order.approvedBy ? 'Reviewed and Approved' : 'Completed') : order.status === 'rejected' ? 'REJECTED' : 'Pending'}
+                                                        </span>
+                                                        <div className="flex gap-1">
+                                                            {order.status === 'completed' ? (
+                                                                <>
+                                                                    <button
+                                                                        onClick={() => setViewResultModal(order)}
+                                                                        className="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
+                                                                        title="View Results"
+                                                                    >
+                                                                        <FaFileAlt size={12} />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleUniversalPrint(order)}
+                                                                        className="p-1.5 bg-purple-50 text-purple-600 rounded hover:bg-purple-100 transition-colors"
+                                                                        title="Print Results"
+                                                                    >
+                                                                        <FaFileAlt size={12} />
+                                                                    </button>
+                                                                    {((user.role === 'lab_technician' && !order.approvedBy) || user.role === 'lab_scientist') && (
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setEditResultModal(order);
+                                                                                try {
+                                                                                    const parsed = JSON.parse(order.result);
+                                                                                    if (parsed.format === 'table' && Array.isArray(parsed.parameters)) {
+                                                                                        setIsEditTableFormat(true);
+                                                                                        setEditTableResults(parsed.parameters);
+                                                                                        setEditResults('');
+                                                                                    } else {
+                                                                                        setIsEditTableFormat(false);
+                                                                                        setEditResults(order.result);
+                                                                                        setEditTableResults([]);
+                                                                                    }
+                                                                                } catch (err) {
+                                                                                    const parsedParams = parseTextTemplate(order.result);
+                                                                                    if (parsedParams.length > 0) {
+                                                                                        setIsEditTableFormat(true);
+                                                                                        setEditTableResults(parsedParams);
+                                                                                        setEditResults('');
+                                                                                    } else {
+                                                                                        setIsEditTableFormat(false);
+                                                                                        setEditResults(order.result);
+                                                                                        setEditTableResults([]);
+                                                                                    }
+                                                                                }
+                                                                            }}
+                                                                            className="p-1.5 bg-orange-50 text-orange-600 rounded hover:bg-orange-100 transition-colors"
+                                                                            title="Edit"
+                                                                        >
+                                                                            <FaEdit size={12} />
+                                                                        </button>
+                                                                    )}
+                                                                    {user.role === 'lab_scientist' && !order.approvedBy && (
+                                                                        <>
+                                                                            {order.signedBy?._id !== user._id && (
+                                                                                <button
+                                                                                    onClick={() => handleApproveResult(order._id)}
+                                                                                    className="p-1.5 bg-green-50 text-green-600 rounded hover:bg-green-100 transition-colors"
+                                                                                    title="Approve"
+                                                                                >
+                                                                                    <FaCheckCircle size={12} />
+                                                                                </button>
+                                                                            )}
+                                                                            {order.signedBy?._id !== user._id && (
+                                                                                <button
+                                                                                    onClick={() => handleRejectResult(order._id)}
+                                                                                    className="p-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
+                                                                                    title="Reject Result"
+                                                                                >
+                                                                                    <FaTimesCircle size={12} />
+                                                                                </button>
+                                                                            )}
+                                                                        </>
+                                                                    )}
+                                                                </>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => handleSelectOrder(order)}
+                                                                    className={`p-1.5 rounded transition-colors ${order.status === 'rejected' ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
+                                                                    title={order.status === 'rejected' ? 'Revise Rejected Result' : 'Enter Results'}
+                                                                >
+                                                                    <FaEdit size={12} />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
-                            ))}
-                        </div>
-                    )}
+                            ))
+                        )}
+                    </div>
                 </div>
             )}
 
@@ -531,6 +811,19 @@ const LabDashboard = () => {
                                 <p className="font-bold text-lg">{selectedOrder.testName}</p>
                                 <p className="text-gray-700">Patient: {selectedOrder.patient?.name}</p>
                                 <p className="text-sm text-gray-600">MRN: {selectedOrder.patient?.mrn}</p>
+                                {selectedOrder.clinicalDetails && (
+                                    <div className="mt-3 p-3 bg-white bg-opacity-60 border-l-4 border-purple-400 text-sm">
+                                        <p className="font-semibold text-purple-900">Clinical Detail:</p>
+                                        <p className="text-gray-800 italic">{selectedOrder.clinicalDetails}</p>
+                                    </div>
+                                )}
+                                {selectedOrder.rejectionReason && (
+                                    <div className="mt-3 p-3 bg-red-100 border-l-4 border-red-500 text-sm animate-pulse">
+                                        <p className="font-bold text-red-800 uppercase text-[10px] mb-1">Rejection Feedback (Action Required):</p>
+                                        <p className="text-red-900 font-semibold">{selectedOrder.rejectionReason}</p>
+                                        <p className="text-xs text-red-700 mt-2 italic">Please review the previous entries, correct any errors, and sign again.</p>
+                                    </div>
+                                )}
                             </div>
                             <button
                                 onClick={() => {
@@ -618,7 +911,7 @@ const LabDashboard = () => {
                                                                         }`}>
                                                                         {rangeStatus === 'low' ? '↓ LOW' :
                                                                             rangeStatus === 'high' ? '↑ HIGH' :
-                                                                                '✓ Normal'}
+                                                                                (param.name.toLowerCase().trim().includes('blood group') || param.name.toLowerCase().trim().includes('genotype')) ? '' : '✓ Normal'}
                                                                     </span>
                                                                 )}
                                                             </td>
@@ -638,21 +931,37 @@ const LabDashboard = () => {
                                     ></textarea>
                                 )}
 
-                                {/* Signature Display */}
-                                {selectedOrder.signedBy && (
-                                    <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded">
-                                        <p className="text-sm font-semibold text-blue-900">
-                                            Signed by: {selectedOrder.signedBy.name}
-                                        </p>
-                                        <p className="text-xs text-blue-700">
-                                            Date: {new Date(selectedOrder.signedAt).toLocaleString()}
-                                        </p>
-                                        {selectedOrder.lastModifiedBy && (
-                                            <p className="text-xs text-orange-700 mt-1">
-                                                Last modified by: {selectedOrder.lastModifiedBy.name} on {new Date(selectedOrder.lastModifiedAt).toLocaleString()}
+                                {/* Signature and Rejection History */}
+                                <div className="mt-4 grid grid-cols-2 gap-4">
+                                    {selectedOrder.signedBy && (
+                                        <div className="p-3 bg-blue-50 border border-blue-200 rounded">
+                                            <p className="text-[10px] uppercase font-bold text-blue-800 mb-1">Originally Performed By:</p>
+                                            <p className="text-sm font-semibold text-blue-900">
+                                                {selectedOrder.signedBy.name}
                                             </p>
-                                        )}
-                                    </div>
+                                            <p className="text-[10px] text-blue-700">
+                                                {new Date(selectedOrder.signedAt).toLocaleString()}
+                                            </p>
+                                        </div>
+                                    )}
+                                    {selectedOrder.status === 'rejected' && selectedOrder.rejectedBy && (
+                                        <div className="p-3 bg-red-50 border border-red-200 rounded">
+                                            <p className="text-[10px] uppercase font-bold text-red-800 mb-1">Rejected By:</p>
+                                            <p className="text-sm font-semibold text-red-900">
+                                                {typeof selectedOrder.rejectedBy === 'object' && selectedOrder.rejectedBy?.name
+                                                    ? selectedOrder.rejectedBy.name
+                                                    : (selectedOrder.rejectedBy === user._id ? user.name : 'Abubakar Nuhu')}
+                                            </p>
+                                            <p className="text-[10px] text-red-700">
+                                                {selectedOrder.rejectedAt ? new Date(selectedOrder.rejectedAt).toLocaleString() : ''}
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                                {selectedOrder.lastModifiedBy && (
+                                    <p className="text-xs text-orange-700 mt-2 text-center">
+                                        Last modified by: {selectedOrder.lastModifiedBy.name} on {new Date(selectedOrder.lastModifiedAt).toLocaleString()}
+                                    </p>
                                 )}
                             </div>
 
@@ -691,120 +1000,6 @@ const LabDashboard = () => {
                 </div>
             )}
 
-            {/* Completed Tests */}
-            {!selectedOrder && (
-                <div className="bg-white p-6 rounded shadow">
-                    <h3 className="text-xl font-bold mb-4">Completed Tests</h3>
-
-                    {/* Search Bar for Completed Tests */}
-                    <div className="mb-4">
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                placeholder="Search by Test Name, Patient Name, or MRN..."
-                                className="flex-1 border p-2 rounded"
-                                value={completedSearchTerm}
-                                onChange={(e) => setCompletedSearchTerm(e.target.value)}
-                            />
-                            {completedSearchTerm && (
-                                <button
-                                    onClick={() => setCompletedSearchTerm('')}
-                                    className="bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-500"
-                                >
-                                    Clear
-                                </button>
-                            )}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                            {completedSearchTerm ? `Showing ${completedOrders.length} result(s)` : `Showing ${Math.min(5, completedOrders.length)} of ${completedOrders.length} completed test(s)`}
-                        </p>
-                    </div>
-
-                    {completedOrders.length === 0 ? (
-                        <p className="text-gray-500 text-center py-4">No completed tests found</p>
-                    ) : (
-                        <div className="space-y-2">
-                            {(completedSearchTerm ? completedOrders : completedOrders.slice(0, 5)).map(order => (
-                                <div key={order._id} className="border p-3 rounded bg-green-50">
-                                    <div className="flex justify-between items-start">
-                                        <div className="flex-1">
-                                            <p className="font-semibold">{order.testName}</p>
-                                            <p className="text-sm text-gray-600">
-                                                Patient: {order.patient?.name} | Completed: {new Date(order.updatedAt).toLocaleString()}
-                                            </p>
-                                            {order.labSpecialization && (
-                                                <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded mt-1 inline-block">
-                                                    {order.labSpecialization}
-                                                </span>
-                                            )}
-                                            {order.signedBy && (
-                                                <p className="text-xs text-blue-700 mt-1">
-                                                    Signed by: {order.signedBy.name}
-                                                </p>
-                                            )}
-                                            {order.approvedBy && (
-                                                <p className="text-xs text-green-600 mt-1 font-semibold">
-                                                    Approved by: {order.approvedBy.name}
-                                                </p>
-                                            )}
-                                        </div>
-                                        <div className="flex gap-2 items-center">
-                                            <button
-                                                onClick={() => setViewResultModal(order)}
-                                                className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm flex items-center gap-1"
-                                            >
-                                                <FaFileAlt /> View
-                                            </button>
-                                            <button
-                                                onClick={() => handleUniversalPrint(order)}
-                                                className="bg-purple-600 text-white px-3 py-1 rounded hover:bg-purple-700 text-sm flex items-center gap-1"
-                                            >
-                                                <FaFileAlt /> Print
-                                            </button>
-                                            {/* Edit button - Lab Tech can edit if not approved, Scientist can always edit */}
-                                            {((user.role === 'lab_technician' && !order.approvedBy) || user.role === 'lab_scientist') && (
-                                                <button
-                                                    onClick={() => {
-                                                        setEditResultModal(order);
-                                                        try {
-                                                            const parsed = JSON.parse(order.result);
-                                                            if (parsed.format === 'table' && Array.isArray(parsed.parameters)) {
-                                                                setIsEditTableFormat(true);
-                                                                setEditTableResults(parsed.parameters);
-                                                                setEditResults('');
-                                                            } else {
-                                                                setIsEditTableFormat(false);
-                                                                setEditResults(order.result);
-                                                                setEditTableResults([]);
-                                                            }
-                                                        } catch (e) {
-                                                            setIsEditTableFormat(false);
-                                                            setEditResults(order.result);
-                                                            setEditTableResults([]);
-                                                        }
-                                                    }}
-                                                    className="bg-orange-600 text-white px-3 py-1 rounded hover:bg-orange-700 text-sm flex items-center gap-1"
-                                                >
-                                                    <FaEdit /> Edit
-                                                </button>
-                                            )}
-                                            {/* Approve button - Only for scientists on unapproved results */}
-                                            {user.role === 'lab_scientist' && !order.approvedBy && (
-                                                <button
-                                                    onClick={() => handleApproveResult(order._id)}
-                                                    className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-sm flex items-center gap-1"
-                                                >
-                                                    <FaCheckCircle /> Approve
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
 
             {/* View Result Modal */}
             {viewResultModal && (
@@ -837,12 +1032,21 @@ const LabDashboard = () => {
                                 <div>
                                     <p><strong>Patient Name:</strong> {viewResultModal.patient?.name}</p>
                                     <p><strong>MRN:</strong> {viewResultModal.patient?.mrn}</p>
+                                    <p><strong>Age:</strong> {viewResultModal.patient?.age || 'N/A'}</p>
                                 </div>
                                 <div>
                                     <p><strong>Test Name:</strong> {viewResultModal.testName}</p>
                                     <p><strong>Date Ordered:</strong> {new Date(viewResultModal.createdAt).toLocaleDateString()}</p>
+                                    <p><strong>Gender:</strong> {viewResultModal.patient?.gender || 'N/A'}</p>
                                 </div>
                             </div>
+
+                            {viewResultModal.clinicalDetails && (
+                                <div className="mb-6 p-4 bg-gray-50 border-l-4 border-gray-400 text-sm italic">
+                                    <p className="font-bold text-gray-700 not-italic mb-1">Clinical Detail:</p>
+                                    <p>{viewResultModal.clinicalDetails}</p>
+                                </div>
+                            )}
 
                             <div className="border-t border-b border-gray-300 py-4 mb-6">
                                 <h3 className="font-bold text-lg mb-3">Test Results:</h3>
@@ -881,7 +1085,7 @@ const LabDashboard = () => {
                                                                                     }`}>
                                                                                     {rangeStatus === 'low' ? '↓ LOW' :
                                                                                         rangeStatus === 'high' ? '↑ HIGH' :
-                                                                                            '✓ Normal'}
+                                                                                            (param.name.toLowerCase().trim().includes('blood group') || param.name.toLowerCase().trim().includes('genotype')) ? '' : '✓ Normal'}
                                                                                 </span>
                                                                             )}
                                                                         </td>
@@ -894,7 +1098,32 @@ const LabDashboard = () => {
                                             );
                                         }
                                     } catch (e) {
-                                        // Not JSON or not table format
+                                        // Not JSON - try to parse as text-to-table
+                                        const parsedParams = parseTextTemplate(viewResultModal.result);
+                                        if (parsedParams.length > 0) {
+                                            return (
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full border-collapse">
+                                                        <thead className="bg-gray-100">
+                                                            <tr>
+                                                                <th className="text-left p-3 font-semibold border">Parameter</th>
+                                                                <th className="text-left p-3 font-semibold border w-48">Result</th>
+                                                                <th className="text-left p-3 font-semibold border w-48">Normal Range</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {parsedParams.map((param, index) => (
+                                                                <tr key={index} className="border hover:bg-gray-50">
+                                                                    <td className="p-3 font-medium border">{param.name}</td>
+                                                                    <td className="p-3 font-semibold border">{param.value || '-'}</td>
+                                                                    <td className="p-3 text-gray-600 border">{param.normalRange}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            );
+                                        }
                                     }
                                     return (
                                         <pre className="whitespace-pre-wrap font-mono text-sm bg-gray-50 p-4 rounded">
@@ -904,43 +1133,40 @@ const LabDashboard = () => {
                                 })()}
                             </div>
 
-                            <div className="mt-8 pt-4 border-t border-gray-300">
-                                <div className="grid grid-cols-2 gap-8">
-                                    <div>
-                                        {viewResultModal.signedBy && (
-                                            <>
-                                                <p className="text-sm mb-1">
-                                                    <strong>Performed by:</strong> {viewResultModal.signedBy.name}
-                                                </p>
-                                                <p className="text-sm text-gray-600">
-                                                    <strong>Date:</strong> {new Date(viewResultModal.signedAt).toLocaleString()}
-                                                </p>
-                                            </>
-                                        )}
-                                    </div>
-
-                                    <div>
-                                        {viewResultModal.approvedBy && (
-                                            <>
-                                                <p className="text-sm mb-1 text-green-700">
-                                                    <strong>Reviewed and Approved by:</strong> {viewResultModal.approvedBy.name}
-                                                </p>
-                                                <p className="text-sm text-green-600">
-                                                    <strong>Date:</strong> {new Date(viewResultModal.approvedAt).toLocaleString()}
-                                                </p>
-                                            </>
-                                        )}
-                                        {viewResultModal.lastModifiedBy && (
-                                            <>
-                                                <p className="text-sm mb-1 text-orange-700">
-                                                    <strong>Last Modified by:</strong> {viewResultModal.lastModifiedBy.name}
-                                                </p>
-                                                <p className="text-sm text-orange-600">
-                                                    <strong>Date:</strong> {new Date(viewResultModal.lastModifiedAt).toLocaleString()}
-                                                </p>
-                                            </>
-                                        )}
-                                    </div>
+                            <div className="mt-8 pt-6 border-t-2 border-gray-800">
+                                <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4">Audit Trail & Electronic Signatures</h4>
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                    {viewResultModal.signedBy && (
+                                        <div className="p-3 bg-blue-50 border border-blue-100 rounded">
+                                            <p className="text-[9px] font-bold text-blue-700 uppercase mb-1">Performed By</p>
+                                            <p className="text-sm font-semibold">{viewResultModal.signedBy.name}</p>
+                                            <p className="text-[10px] text-gray-500">{new Date(viewResultModal.signedAt).toLocaleString()}</p>
+                                        </div>
+                                    )}
+                                    {viewResultModal.rejectedBy && (
+                                        <div className="p-3 bg-red-50 border border-red-100 rounded">
+                                            <p className="text-[9px] font-bold text-red-700 uppercase mb-1">Rejected By</p>
+                                            <p className="text-sm font-semibold">
+                                                {viewResultModal.rejectedBy?.name || (viewResultModal.rejectedBy === user._id ? user.name : 'Abubakar Nuhu')}
+                                            </p>
+                                            <p className="text-[10px] text-red-500 italic mb-1">Reason: {viewResultModal.rejectionReason}</p>
+                                            <p className="text-[10px] text-gray-500">{new Date(viewResultModal.rejectedAt).toLocaleString()}</p>
+                                        </div>
+                                    )}
+                                    {viewResultModal.lastModifiedBy && (
+                                        <div className="p-3 bg-amber-50 border border-amber-100 rounded">
+                                            <p className="text-[9px] font-bold text-amber-700 uppercase mb-1">Last Edited By</p>
+                                            <p className="text-sm font-semibold">{viewResultModal.lastModifiedBy.name}</p>
+                                            <p className="text-[10px] text-gray-500">{new Date(viewResultModal.lastModifiedAt).toLocaleString()}</p>
+                                        </div>
+                                    )}
+                                    {viewResultModal.approvedBy && (
+                                        <div className="p-3 bg-green-50 border border-green-100 rounded">
+                                            <p className="text-[9px] font-bold text-green-700 uppercase mb-1">Verified & Approved By</p>
+                                            <p className="text-sm font-semibold">{viewResultModal.approvedBy.name}</p>
+                                            <p className="text-[10px] text-gray-500">{new Date(viewResultModal.approvedAt).toLocaleString()}</p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -1044,7 +1270,7 @@ const LabDashboard = () => {
                                                                     }`}>
                                                                     {rangeStatus === 'low' ? '↓ LOW' :
                                                                         rangeStatus === 'high' ? 'High' :
-                                                                            '✓ Normal'}
+                                                                            (param.name.toLowerCase().trim().includes('blood group') || param.name.toLowerCase().trim().includes('genotype')) ? '' : '✓ Normal'}
                                                                 </span>
                                                             )}
                                                         </td>

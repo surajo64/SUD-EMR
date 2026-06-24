@@ -6,9 +6,11 @@ const {
     getLabOrdersByVisit,
     updateLabResult,
     approveLabResult,
-    deleteLabOrder
+    rejectLabResult,
+    deleteLabOrder,
+    processDirectSale
 } = require('../controllers/labController');
-const { protect } = require('../middleware/authMiddleware');
+const { protect, scientist } = require('../middleware/authMiddleware');
 
 router.route('/')
     .post(protect, createLabOrder)
@@ -17,6 +19,8 @@ router.route('/')
 router.get('/visit/:id', protect, getLabOrdersByVisit);
 router.put('/:id/result', protect, updateLabResult);
 router.put('/:id/approve', protect, approveLabResult);
+router.put('/:id/reject', protect, scientist, rejectLabResult);
 router.delete('/:id', protect, deleteLabOrder);
+router.post('/pos-sale', protect, processDirectSale);
 
 module.exports = router;

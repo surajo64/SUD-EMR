@@ -6,15 +6,16 @@ import Layout from "../components/Layout";
 import LoadingOverlay from '../components/loadingOverlay';
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
-import { FaPlus, FaEdit, FaTrash, FaTimes, FaChartLine, FaPrint, FaDownload, FaUpload } from 'react-icons/fa';
+import { FaPlus, FaEdit, FaTrash, FaTimes, FaChartLine, FaPrint, FaDownload, FaUpload, FaRedo } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 
 const Inventory = () => {
     const { user } = useContext(AuthContext);
     const { backendUrl } = useContext(AppContext);
 
-    // Authorization Check
-    const isAdminOrMain = user?.role === 'admin' || user?.role === 'super_admin' || (user?.role === 'pharmacist' && user?.assignedPharmacy?.isMainPharmacy);
+    // Authorization Check — only main pharmacy pharmacists (or admin/super_admin) can add/edit/import/export
+    const isAdminOrMain = user?.role === 'admin' || user?.role === 'super_admin' ||
+        (user?.role === 'pharmacist' && user?.assignedPharmacy?.isMainPharmacy === true);
 
     // States
     const [items, setItems] = useState([]);
@@ -69,7 +70,7 @@ const Inventory = () => {
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 5;
+    const itemsPerPage = 30;
 
     // Fetch inventory on load
     useEffect(() => {
@@ -320,6 +321,31 @@ const Inventory = () => {
         setShowModal(true);
     };
 
+    const handleReorder = (item) => {
+        setIsEditMode(false); // Creating a NEW entry/batch
+        setCurrentItem({
+            name: item.name,
+            quantity: "",
+            standardFee: item.standardFee || item.price || "",
+            retainershipFee: item.retainershipFee || "",
+            nhiaFee: item.nhiaFee || "",
+            kschmaFee: item.kschmaFee || "",
+            purchasingPrice: item.purchasingPrice || "",
+            supplier: item.supplier || "",
+            expiryDate: "", // New batch needs new expiry
+            batchNumber: "", // New batch needs new batch number
+            barcode: item.barcode || "",
+            reorderLevel: item.reorderLevel || "10",
+            route: item.route || "",
+            form: item.form || "",
+            dosage: item.dosage || "",
+            frequency: item.frequency || "",
+            drugUnit: item.drugUnit || "unit",
+            pharmacy: item.pharmacy?._id || item.pharmacy || selectedPharmacy || mainPharmacy?._id || ""
+        });
+        setShowModal(true);
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
@@ -381,30 +407,48 @@ const Inventory = () => {
         .filter((item) => item.name.toLowerCase().includes(search.toLowerCase()))
         .filter((item) => expiryFilter === "All" || checkExpiry(item.expiryDate) === expiryFilter);
 
-    // If viewing all pharmacies, aggregate quantities by drug name
+    // If viewing all pharmacies, aggregate quantities by drug name - but still show batch details
     if (!selectedPharmacy) {
         const aggregated = {};
         filteredItems.forEach(item => {
             const key = item.name.toLowerCase();
             if (!aggregated[key]) {
                 aggregated[key] = {
-                    _id: `aggregated-${key}`, // Use unique ID for aggregated items
+                    _id: `aggregated-${key}`,
                     name: item.name,
                     form: item.form,
                     dosage: item.dosage,
                     route: item.route,
                     drugUnit: item.drugUnit,
                     price: item.price,
+                    standardFee: item.standardFee,
+                    retainershipFee: item.retainershipFee,
+                    nhiaFee: item.nhiaFee,
+                    kschmaFee: item.kschmaFee,
                     expiryDate: item.expiryDate,
                     reorderLevel: item.reorderLevel || 0,
                     quantity: 0,
-                    pharmacies: []
+                    pharmacies: [],
+                    batches: []
                 };
             }
             aggregated[key].quantity += item.quantity;
-            aggregated[key].pharmacies.push({
-                name: item.pharmacy?.name || 'Unknown',
-                quantity: item.quantity
+            // Track pharmacies (de-duplicate by name)
+            const existingPharmacy = aggregated[key].pharmacies.find(p => p.name === (item.pharmacy?.name || 'Unknown'));
+            if (existingPharmacy) {
+                existingPharmacy.quantity += item.quantity;
+            } else {
+                aggregated[key].pharmacies.push({
+                    name: item.pharmacy?.name || 'Unknown',
+                    quantity: item.quantity
+                });
+            }
+            // Track individual batches
+            aggregated[key].batches.push({
+                batchNumber: item.batchNumber || 'N/A',
+                quantity: item.quantity,
+                expiryDate: item.expiryDate,
+                pharmacy: item.pharmacy?.name || 'Unknown'
             });
             // Keep the earliest expiry date
             if (new Date(item.expiryDate) < new Date(aggregated[key].expiryDate)) {
@@ -413,6 +457,16 @@ const Inventory = () => {
         });
         filteredItems = Object.values(aggregated);
     }
+
+    // For single-pharmacy view: compute which drug names have multiple batches
+    // so we can show FEFO labels on the table rows
+    const multiBatchDrugs = selectedPharmacy
+        ? filteredItems.reduce((acc, item) => {
+            const key = item.name.toLowerCase();
+            acc[key] = (acc[key] || 0) + 1;
+            return acc;
+        }, {})
+        : {};
 
     // Pagination logic
     const indexOfLastItem = currentPage * itemsPerPage;
@@ -435,6 +489,12 @@ const Inventory = () => {
 
         setSelectedPharmacy(newPharmacyId);
     };
+
+    // Calculate Summary Stats - unique drug names regardless of batch
+    const totalUniqueDrugs = selectedPharmacy
+        ? [...new Set(filteredItems.map(i => i.name.toLowerCase()))].length
+        : filteredItems.length;
+    const totalItemsInStock = filteredItems.reduce((acc, item) => acc + (item.quantity || 0), 0);
 
     return (
         <Layout>
@@ -532,6 +592,28 @@ const Inventory = () => {
                 </div>
             )}
 
+            {/* Inventory Summary Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded shadow flex items-center justify-between">
+                    <div>
+                        <p className="text-blue-800 font-bold text-lg">Total Unique Drugs</p>
+                        <p className="text-3xl font-black text-blue-900 mt-1">{totalUniqueDrugs.toLocaleString()}</p>
+                    </div>
+                    <div className="text-blue-200">
+                        <FaChartLine size={48} />
+                    </div>
+                </div>
+                <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded shadow flex items-center justify-between">
+                    <div>
+                        <p className="text-green-800 font-bold text-lg">Total Items in Stock</p>
+                        <p className="text-3xl font-black text-green-900 mt-1">{totalItemsInStock.toLocaleString()}</p>
+                    </div>
+                    <div className="text-green-200">
+                        <FaPlus size={48} />
+                    </div>
+                </div>
+            </div>
+
             {/* Search, Filter, Download */}
             <div className="flex flex-col md:flex-row md:items-center gap-4 mb-6">
                 <input
@@ -566,7 +648,8 @@ const Inventory = () => {
                 <table className="w-full border-collapse">
                     <thead className="bg-gray-100">
                         <tr>
-                            <th className="p-4 border-b">Name</th>
+                            <th className="p-4 border-b text-left">Name</th>
+                            <th className="p-4 border-b text-left">Batch #</th>
                             <th className="p-4 border-b">Qty</th>
                             <th className="p-4 border-b">Unit</th>
                             <th className="p-4 border-b">Price</th>
@@ -584,6 +667,45 @@ const Inventory = () => {
                                     <div className="text-xs text-gray-500">
                                         {item.form} - {item.dosage} ({item.route})
                                     </div>
+                                    {selectedPharmacy && multiBatchDrugs[item.name.toLowerCase()] > 1 && (() => {
+                                        const sameDrugBatches = filteredItems
+                                            .filter(i => i.name.toLowerCase() === item.name.toLowerCase())
+                                            .sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
+                                        const isEarliest = sameDrugBatches[0]?._id === item._id;
+                                        return isEarliest ? (
+                                            <span className="inline-block mt-1 text-xs bg-amber-100 text-amber-700 border border-amber-300 px-2 py-0.5 rounded-full font-semibold">
+                                                ⚡ Deducting First (FEFO)
+                                            </span>
+                                        ) : (
+                                            <span className="inline-block mt-1 text-xs bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full">
+                                                🔜 Next Batch
+                                            </span>
+                                        );
+                                    })()}
+                                    {!selectedPharmacy && item.batches && item.batches.length > 1 && (
+                                        <div className="text-xs text-blue-600 mt-1 font-medium">
+                                            {item.batches.length} batches · Deducting from earliest expiry first
+                                        </div>
+                                    )}
+                                </td>
+                                {/* Batch Number column */}
+                                <td className="p-4 border-b">
+                                    {selectedPharmacy ? (
+                                        <span className="text-xs font-mono bg-gray-100 px-2 py-1 rounded">
+                                            {item.batchNumber || <span className="text-gray-400 italic">No batch</span>}
+                                        </span>
+                                    ) : (
+                                        item.batches && item.batches.length > 0 ? (
+                                            <div className="space-y-1">
+                                                {item.batches.map((b, idx) => (
+                                                    <div key={idx} className="text-xs">
+                                                        <span className="font-mono bg-gray-100 px-1 rounded">{b.batchNumber}</span>
+                                                        <span className="text-gray-500 ml-1">({b.quantity} units)</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : <span className="text-gray-400 text-xs italic">—</span>
+                                    )}
                                 </td>
                                 <td className={`p-4 border-b ${item.quantity < item.reorderLevel ? "text-red-600 font-bold" : ""}`}>
                                     <div className="font-semibold">{item.quantity}</div>
@@ -646,10 +768,13 @@ const Inventory = () => {
                                     {/* Only allow edit/delete for admin or main pharmacy pharmacists */}
                                     {isAdminOrMain ? (
                                         <>
-                                            <button onClick={() => handleOpenEditModal(item)} className="text-blue-600 hover:text-blue-800">
+                                            <button onClick={() => handleReorder(item)} className="text-green-600 hover:text-green-800" title="Reorder / Add Batch">
+                                                <FaRedo />
+                                            </button>
+                                            <button onClick={() => handleOpenEditModal(item)} className="text-blue-600 hover:text-blue-800" title="Edit Item">
                                                 <FaEdit />
                                             </button>
-                                            <button onClick={() => deleteItem(item._id)} className="text-red-600 hover:text-red-800">
+                                            <button onClick={() => deleteItem(item._id)} className="text-red-600 hover:text-red-800" title="Delete Item">
                                                 <FaTrash />
                                             </button>
                                         </>

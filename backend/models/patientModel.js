@@ -4,6 +4,7 @@ const patientSchema = mongoose.Schema({
     mrn: { type: String, unique: true, required: true },
     name: { type: String, required: true },
     age: { type: Number, required: true },
+    dateOfBirth: { type: Date },
     gender: { type: String, required: true },
     contact: { type: String, required: true },
     address: { type: String },
@@ -36,6 +37,10 @@ const patientSchema = mongoose.Schema({
         notes: String
     }],
     pastSurgeries: [{ type: String }],
+
+    // Family File Integration
+    isFamilyMember: { type: Boolean, default: false },
+    familyFile: { type: mongoose.Schema.Types.ObjectId, ref: 'FamilyFile' },
 }, {
     timestamps: true,
 });

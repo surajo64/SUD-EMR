@@ -1,6 +1,7 @@
 const Receipt = require('../models/receiptModel');
 const Invoice = require('../models/invoiceModel');
 const Patient = require('../models/patientModel');
+const FamilyFile = require('../models/familyFileModel');
 
 // @desc    Create receipt (collect payment)
 // @route   POST /api/receipts
@@ -17,6 +18,36 @@ const createReceipt = async (req, res) => {
 
         if (invoice.status === 'paid') {
             return res.status(400).json({ message: 'Invoice already paid' });
+        }
+
+        // Handle Deposit Payment
+        if (paymentMethod === 'deposit') {
+            const patient = await Patient.findById(invoice.patient._id);
+            if (!patient) {
+                return res.status(404).json({ message: 'Patient not found' });
+            }
+
+            const Visit = require('../models/visitModel');
+            const visit = await Visit.findById(invoice.visit);
+            const isAdmitted = visit && (
+                visit.type === 'Inpatient' ||
+                visit.encounterType === 'Inpatient' ||
+                visit.encounterStatus === 'admitted' ||
+                visit.encounterStatus === 'in_ward' ||
+                visit.status === 'Admitted'
+            );
+            const creditLimit = isAdmitted ? 50000 : 0;
+
+            if ((patient.depositBalance || 0) + creditLimit < invoice.totalAmount) {
+                const errorMessage = isAdmitted
+                    ? `Insufficient funds. Admitted patients have a credit limit of ₦50,000. Balance: ₦${patient.depositBalance || 0}, Required: ₦${invoice.totalAmount}`
+                    : `Insufficient deposit balance. Balance: ₦${patient.depositBalance || 0}, Required: ₦${invoice.totalAmount}`;
+                return res.status(400).json({ message: errorMessage });
+            }
+
+            // Deduct from deposit
+            patient.depositBalance -= invoice.totalAmount;
+            await patient.save();
         }
 
         // Generate unique receipt number: RCP-Timestamp-Random
@@ -38,7 +69,8 @@ const createReceipt = async (req, res) => {
         const populatedReceipt = await Receipt.findById(receipt._id)
             .populate('patient', 'name mrn')
             .populate('cashier', 'name')
-            .populate('invoice');
+            .populate('invoice')
+            .populate({ path: 'familyFile', model: 'FamilyFile' });
 
         res.status(201).json(populatedReceipt);
     } catch (error) {
@@ -59,6 +91,8 @@ const getReceipts = async (req, res) => {
                 path: 'charges',
                 populate: { path: 'charge' }
             })
+            .populate({ path: 'familyFile', model: 'FamilyFile' })
+            .populate({ path: 'hmo', model: 'HMO' })
             .sort({ createdAt: -1 });
         res.json(receipts);
     } catch (error) {
@@ -78,7 +112,9 @@ const getReceiptById = async (req, res) => {
             .populate({
                 path: 'charges',
                 populate: { path: 'charge' }
-            });
+            })
+            .populate({ path: 'familyFile', model: 'FamilyFile' })
+            .populate({ path: 'hmo', model: 'HMO' });
 
         if (receipt) {
             res.json(receipt);
@@ -106,6 +142,8 @@ const getReceiptsWithClaimStatus = async (req, res) => {
                 path: 'charges',
                 populate: { path: 'charge' }
             })
+            .populate({ path: 'familyFile', model: 'FamilyFile' })
+            .populate({ path: 'hmo', model: 'HMO' })
             .sort({ createdAt: -1 });
 
         // For each receipt, find associated claim if it exists
@@ -179,11 +217,24 @@ const createReceiptForCharges = async (req, res) => {
             if (!patient) {
                 return res.status(404).json({ message: 'Patient not found' });
             }
-            console.log('Patient deposit before:', patient.depositBalance);
-            if ((patient.depositBalance || 0) < totalAmount) {
-                return res.status(400).json({
-                    message: `Insufficient deposit balance. Balance: ₦${patient.depositBalance || 0}, Required: ₦${totalAmount}`
-                });
+
+            const visit = await Visit.findById(encounterId);
+            const isAdmitted = visit && (
+                visit.type === 'Inpatient' ||
+                visit.encounterType === 'Inpatient' ||
+                visit.encounterStatus === 'admitted' ||
+                visit.encounterStatus === 'in_ward' ||
+                visit.status === 'Admitted'
+            );
+            const creditLimit = isAdmitted ? 50000 : 0;
+
+            console.log('Payment Check:', { isAdmitted, balance: patient.depositBalance, creditLimit, totalAmount });
+
+            if ((patient.depositBalance || 0) + creditLimit < totalAmount) {
+                const errorMessage = isAdmitted
+                    ? `Insufficient funds. Admitted patients have a credit limit of ₦50,000. Balance: ₦${patient.depositBalance || 0}, Required: ₦${totalAmount}`
+                    : `Insufficient deposit balance. Balance: ₦${patient.depositBalance || 0}, Required: ₦${totalAmount}`;
+                return res.status(400).json({ message: errorMessage });
             }
 
             // Deduct from deposit
@@ -306,7 +357,8 @@ const createReceiptForCharges = async (req, res) => {
             .populate({
                 path: 'charges',
                 populate: { path: 'charge' }
-            });
+            })
+            .populate({ path: 'familyFile', model: 'FamilyFile' });
 
         // Auto-generate HMO claim for NHIA/KSCHMA patients
         const patient = await Patient.findById(patientId);
@@ -424,7 +476,8 @@ const validateReceipt = async (req, res) => {
             .populate({
                 path: 'charges',
                 populate: { path: 'charge' }
-            });
+            })
+            .populate({ path: 'familyFile', model: 'FamilyFile' });
 
         if (!receipt) {
             return res.status(404).json({ valid: false, message: 'Receipt not found' });
@@ -468,7 +521,9 @@ const getReceiptByNumber = async (req, res) => {
             .populate({
                 path: 'charges',
                 populate: { path: 'charge' }
-            });
+            })
+            .populate({ path: 'familyFile', model: 'FamilyFile' })
+            .populate({ path: 'hmo', model: 'HMO' });
 
         if (receipt) {
             res.json(receipt);
@@ -485,35 +540,331 @@ const getReceiptByNumber = async (req, res) => {
 // @route   POST /api/receipts/:id/reverse
 // @access  Private (admin/cashier)
 const reverseReceipt = async (req, res) => {
+    const { chargeIds } = req.body; // Optional array of charge IDs to reverse
+
     try {
         const receipt = await Receipt.findById(req.params.id)
             .populate({ path: 'charges', populate: { path: 'charge' } })
             .populate('patient', 'name mrn depositBalance')
+            .populate({ path: 'hmo', model: 'HMO' })
             .populate('cashier', 'name');
 
         if (!receipt) {
             return res.status(404).json({ message: 'Receipt not found' });
         }
 
-        // If payment was made via deposit, restore the amount to patient's deposit
+        const EncounterCharge = require('../models/encounterChargeModel');
+        let amountToReverse = 0;
+        let chargesToProcess = [];
+
+        if (chargeIds && Array.isArray(chargeIds) && chargeIds.length > 0) {
+            // Partial reversal
+            chargesToProcess = receipt.charges.filter(c => chargeIds.includes(c._id.toString()));
+
+            if (chargesToProcess.length === 0) {
+                return res.status(400).json({ message: 'No matching charges found in this receipt' });
+            }
+
+            amountToReverse = chargesToProcess.reduce((sum, c) => sum + c.totalAmount, 0);
+        } else {
+            // Full reversal (legacy or explicit)
+            chargesToProcess = receipt.charges;
+            amountToReverse = receipt.amountPaid;
+        }
+
+        // 1. Restore patient deposit if applicable
         if (receipt.paymentMethod === 'deposit') {
             const patient = await Patient.findById(receipt.patient._id);
             if (patient) {
-                patient.depositBalance += receipt.amountPaid;
+                patient.depositBalance += amountToReverse;
                 await patient.save();
             }
         }
 
-        // Mark the receipt as reversed (you could add a 'status' field to Receipt model)
-        // For now, we'll delete it or you can add a status field
-        await Receipt.findByIdAndDelete(req.params.id);
+        // 2. Handle Inventory Return and Partial Quantity Logic
+        const { returnDetails } = req.body;
+        // Filter out any invalid charges before processing to prevent crashes
+        const validChargesToProcess = (chargesToProcess || []).filter(c => c && c._id);
+        const processedChargeIds = validChargesToProcess.map(c => c._id.toString());
+        let totalRefunded = 0;
 
-        res.json({
-            message: 'Payment reversed successfully',
-            amountReversed: receipt.amountPaid,
-            depositRestored: receipt.paymentMethod === 'deposit'
-        });
+        if (returnDetails && Array.isArray(returnDetails) && returnDetails.length > 0) {
+            const Inventory = require('../models/inventoryModel');
+
+            for (const detail of returnDetails) {
+                const { chargeId, quantity: returnQty } = detail;
+                const charge = validChargesToProcess.find(c => c._id.toString() === chargeId);
+
+                // Track pharmacy types flexibly
+                const isPharmacyItem = charge && (
+                    charge.itemType?.toLowerCase() === 'pharmacy' ||
+                    charge.itemType?.toLowerCase() === 'drugs' ||
+                    charge.itemType?.toLowerCase() === 'drug' ||
+                    charge.charge?.type?.toLowerCase() === 'pharmacy' ||
+                    charge.charge?.type?.toLowerCase() === 'drugs' ||
+                    charge.charge?.type?.toLowerCase() === 'drug'
+                );
+
+                if (isPharmacyItem && returnQty > 0) {
+                    const returnQtyNum = Number(returnQty);
+
+                    // a. Restore to Inventory
+                    // Fallback to charge.name if itemName is missing (common for internal prescriptions)
+                    const drugName = charge.itemName || (charge.charge && charge.charge.name);
+
+                    if (!drugName) {
+                        console.warn(`Could not determine drug name for charge ${chargeId}`);
+                        continue;
+                    }
+
+                    const inventoryItem = await Inventory.findOne({
+                        name: { $regex: new RegExp(`^${drugName}$`, 'i') },
+                        expiryDate: { $gte: new Date() }
+                    }).sort({ expiryDate: -1 });
+
+                    if (inventoryItem) {
+                        inventoryItem.quantity += returnQtyNum;
+                        await inventoryItem.save();
+                    }
+
+                    // b. Handle Partial Quantity vs Full Reversal
+                    if (returnQtyNum < charge.quantity) {
+                        // PARTIAL quantity reversal
+                        const originalQty = charge.quantity;
+                        const factor = (originalQty - returnQtyNum) / originalQty;
+                        const reverseFactor = returnQtyNum / originalQty;
+
+                        const refundAmountForCharge = (charge.totalAmount || 0) * reverseFactor;
+                        totalRefunded += refundAmountForCharge;
+
+                        // Update EncounterCharge
+                        charge.quantity -= returnQtyNum;
+                        charge.totalAmount -= refundAmountForCharge;
+                        charge.patientPortion *= factor;
+                        charge.hmoPortion *= factor;
+                        await charge.save();
+
+                        // This charge stays on the receipt, remove from "fully reversed" list
+                        const index = processedChargeIds.indexOf(charge._id.toString());
+                        if (index > -1) {
+                            processedChargeIds.splice(index, 1);
+                        }
+                    } else {
+                        // FULL quantity reversal for this charge
+                        totalRefunded += (charge.totalAmount || 0);
+                    }
+                } else if (charge) {
+                    // Item selected for full reversal
+                    totalRefunded += (charge.totalAmount || 0);
+                }
+            }
+        } else {
+            // Standard path: all selected charges are fully reversed
+            totalRefunded = amountToReverse;
+        }
+
+        // 3. Restore patient deposit if applicable
+        if (receipt.paymentMethod === 'deposit') {
+            const patient = await Patient.findById(receipt.patient?._id || receipt.patient);
+            if (patient) {
+                patient.depositBalance += totalRefunded;
+                await patient.save();
+            }
+        }
+
+        // 4. Reset charge statuses to 'pending' for those FULLY reversed
+        if (processedChargeIds.length > 0) {
+            await EncounterCharge.updateMany(
+                { _id: { $in: processedChargeIds } },
+                { status: 'pending', $unset: { receipt: "" } }
+            );
+        }
+
+        // 5. Update or Delete the receipt
+        // Filter out any potential nulls or deleted charges
+        const remainingChargesOnReceipt = (receipt.charges || []).filter(c =>
+            c && c._id && !processedChargeIds.includes(c._id.toString())
+        );
+
+        if (remainingChargesOnReceipt.length === 0) {
+            // All charges reversed -> Delete receipt
+            await Receipt.findByIdAndDelete(req.params.id);
+            res.json({
+                message: 'Receipt reversed and deleted successfully',
+                amountReversed: totalRefunded,
+                fullReversal: true
+            });
+        } else {
+            // Partial reversal -> Update receipt
+            receipt.amountPaid = Math.max(0, (receipt.amountPaid || 0) - totalRefunded);
+            // Ensure we only save IDs back to the charges array
+            receipt.charges = remainingChargesOnReceipt.map(c => c._id);
+            await receipt.save();
+
+            res.json({
+                message: 'Partial reversal successful',
+                amountReversed: totalRefunded,
+                remainingAmount: receipt.amountPaid,
+                fullReversal: false
+            });
+        }
     } catch (error) {
+        console.error('Reversal Error:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+
+// @desc    Create receipt for family file registration
+// @route   POST /api/receipts/family-file
+// @access  Private (cashier)
+const createFamilyFileReceipt = async (req, res) => {
+    const { familyFileId, paymentMethod } = req.body;
+
+    try {
+        const familyFile = await FamilyFile.findById(familyFileId).populate('familyCharge');
+        if (!familyFile) {
+            return res.status(404).json({ message: 'Family File not found' });
+        }
+
+        if (familyFile.paymentStatus === 'paid') {
+            return res.status(400).json({ message: 'Family registration already paid' });
+        }
+
+        // Generate receipt number
+        const receiptNumber = `RCP-FAM-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+        // Create receipt
+        const receipt = await Receipt.create({
+            familyFile: familyFileId,
+            amountPaid: familyFile.registrationCharge,
+            paymentMethod: paymentMethod || 'cash',
+            cashier: req.user._id,
+            receiptNumber
+        });
+
+        // Update family file status
+        familyFile.paymentStatus = 'paid';
+        familyFile.paidAt = Date.now();
+        await familyFile.save();
+
+        const populatedReceipt = await Receipt.findById(receipt._id)
+            .populate({ path: 'familyFile', model: 'FamilyFile' })
+            .populate('cashier', 'name');
+
+        res.status(201).json(populatedReceipt);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+
+// @desc    Create receipt for HMO/Retainership registration
+// @route   POST /api/receipts/hmo-registration
+// @access  Private (cashier)
+const createHMOReceipt = async (req, res) => {
+    const { hmoId, paymentMethod } = req.body;
+
+    try {
+        const HMO = require('../models/hmoModel');
+        const HMOTransaction = require('../models/hmoTransactionModel');
+        const EncounterCharge = require('../models/encounterChargeModel');
+        const Patient = require('../models/patientModel');
+
+        const hmo = await HMO.findById(hmoId);
+        if (!hmo) {
+            return res.status(404).json({ message: 'Retainership entity not found' });
+        }
+
+        if (hmo.paymentStatus === 'paid') {
+            return res.status(400).json({ message: 'Registration fee already paid' });
+        }
+
+        const registrationCharge = hmo.registrationCharge || 0;
+
+        // Handle Deposit Payment
+        if (paymentMethod === 'deposit') {
+            // Calculate HMO Balance
+            // 1. Total Deposits
+            const hmoTransactions = await HMOTransaction.find({ hmo: hmo._id });
+            const totalDeposits = hmoTransactions
+                .filter(t => t.type === 'deposit')
+                .reduce((sum, d) => sum + d.amount, 0);
+
+            const manualCharges = hmoTransactions
+                .filter(t => t.type === 'charge')
+                .reduce((sum, c) => sum + c.amount, 0);
+
+            // 2. Total Utilized (Charges for all patients of this HMO)
+            const hmoPatients = await Patient.find({ hmo: hmo.name }).select('_id');
+            const hmoPatientIds = hmoPatients.map(p => p._id);
+
+            const existingCharges = await EncounterCharge.find({
+                patient: { $in: hmoPatientIds },
+                hmoPortion: { $gt: 0 }
+            });
+            const totalUtilized = existingCharges.reduce((sum, c) => sum + c.hmoPortion, 0);
+
+            const totalDepositsNum = Number(totalDeposits) || 0;
+            const totalUtilizedNum = Number(totalUtilized) || 0;
+            const manualChargesNum = Number(manualCharges) || 0;
+            const balanceNum = totalDepositsNum - (totalUtilizedNum + manualChargesNum);
+            const requiredAmount = Number(registrationCharge) || 0;
+
+            console.log('--- HMO DEPOSIT CHECK DEBUG (REFINED) ---');
+            console.log('Total Deposits Num:', totalDepositsNum);
+            console.log('Total Utilized Num:', totalUtilizedNum);
+            console.log('Manual Charges Num:', manualChargesNum);
+            console.log('Balance Num:', balanceNum);
+            console.log('Required Amount:', requiredAmount);
+            console.log('-------------------------------');
+
+            if (totalDepositsNum === 0) {
+                return res.status(400).json({
+                    message: "No initial deposit was found for this retainership. Please make a deposit first."
+                });
+            }
+
+            if (balanceNum < requiredAmount) {
+                return res.status(400).json({
+                    message: `Insufficient HMO Retainership balance. Balance: ₦${balanceNum.toLocaleString()}, Required: ₦${requiredAmount.toLocaleString()}`
+                });
+            }
+
+            // Create negative transaction (charge) for registration
+            await HMOTransaction.create({
+                hmo: hmoId,
+                type: 'charge',
+                amount: registrationCharge,
+                description: 'Retainership Registration Fee (Deducted from Deposit)',
+                recordedBy: req.user._id
+            });
+        }
+
+        // Generate receipt number
+        const receiptNumber = `RCP-HMO-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+        // Create receipt
+        const receipt = await Receipt.create({
+            hmo: hmoId,
+            amountPaid: registrationCharge,
+            paymentMethod: paymentMethod || 'cash',
+            cashier: req.user._id,
+            receiptNumber
+        });
+
+        // Update HMO status
+        hmo.paymentStatus = 'paid';
+        hmo.paidAt = Date.now();
+        await hmo.save();
+
+        const populatedReceipt = await Receipt.findById(receipt._id)
+            .populate({ path: 'hmo', model: 'HMO' })
+            .populate('cashier', 'name');
+
+        res.status(201).json(populatedReceipt);
+    } catch (error) {
+        console.error('Error creating HMO receipt:', error);
         res.status(500).json({ message: error.message });
     }
 };
@@ -528,4 +879,6 @@ module.exports = {
     validateReceipt,
     getReceiptByNumber,
     reverseReceipt,
+    createFamilyFileReceipt,
+    createHMOReceipt
 };

@@ -1,13 +1,17 @@
-﻿import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import { AppContext } from '../context/AppContext';
 import Layout from '../components/Layout';
-import { FaUserMd, FaSearch, FaCheckCircle, FaNotesMedical, FaHeartbeat, FaMoneyBillWave, FaTrash, FaEdit } from 'react-icons/fa';
+import { FaUserMd, FaSearch, FaCheckCircle, FaNotesMedical, FaHeartbeat, FaMoneyBillWave, FaTrash, FaEdit, FaPlus, FaTable, FaClock, FaChevronDown, FaChevronRight, FaHistory } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import LoadingOverlay from '../components/loadingOverlay';
+import { formatAge } from '../utils/patientUtils';
 
 const NurseTriage = () => {
+    const { patientId, encounterId } = useParams();
+    const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [patients, setPatients] = useState([]);
@@ -36,6 +40,7 @@ const NurseTriage = () => {
         spo2: '',
         bmi: ''
     });
+    const [showVitalsModal, setShowVitalsModal] = useState(false);
 
     // Calculate BMI automatically when weight and height change
     const calculateBMI = (weight, height) => {
@@ -44,7 +49,7 @@ const NurseTriage = () => {
         const heightNum = parseFloat(height);
         if (isNaN(weightNum) || isNaN(heightNum) || heightNum === 0) return '';
 
-        // BMI = weight (kg) / (height (m))Â²
+        // BMI = weight (kg) / (height (m))Ã‚Â²
         const heightInMeters = heightNum / 100; // Convert cm to meters
         const bmi = weightNum / (heightInMeters * heightInMeters);
         return bmi.toFixed(1);
@@ -69,6 +74,21 @@ const NurseTriage = () => {
     const [selectedBed, setSelectedBed] = useState('');
     const [availableBeds, setAvailableBeds] = useState([]);
     const [encounterToConvert, setEncounterToConvert] = useState(null);
+
+    // Drug Administration State
+    const [dispensedPrescriptions, setDispensedPrescriptions] = useState([]);
+    const [administrationHistory, setAdministrationHistory] = useState([]);
+    const [showDrugAdminModal, setShowDrugAdminModal] = useState(false);
+    const [adminForm, setAdminForm] = useState({
+        prescriptionId: '',
+        medicineId: '',
+        medicineName: '',
+        dosage: '',
+        date: new Date().toISOString().split('T')[0],
+        time: new Date().toTimeString().slice(0, 5),
+        remarks: ''
+    });
+    const [expandedDays, setExpandedDays] = useState({});
     const { user } = useContext(AuthContext);
     const { backendUrl } = useContext(AppContext);
 
@@ -76,8 +96,46 @@ const NurseTriage = () => {
         if (user) {
             fetchDoctors();
             fetchNursingCharges();
+
+            if (patientId) {
+                handleFetchAndSelectPatient(patientId, encounterId);
+            }
         }
-    }, [user]);
+    }, [user, patientId, encounterId]);
+
+    const handleFetchAndSelectPatient = async (pId, eId) => {
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+
+            // Fetch patient details
+            const { data: patient } = await axios.get(`${backendUrl}/api/patients/${pId}`, config);
+            setSelectedPatient(patient);
+
+            // Fetch patient's encounters
+            const { data: patientEncounters } = await axios.get(`${backendUrl}/api/visits?patient=${pId}`, config);
+
+            // Filter by relevant statuses if needed (optional, but keep consistent with previous logic if it was filtering)
+            const filteredEncounters = patientEncounters.filter(v =>
+                ['registered', 'payment_pending', 'in_nursing', 'with_doctor', 'awaiting_services', 'in_pharmacy', 'in_lab', 'in_radiology', 'in_ward', 'admitted', 'completed', 'cancelled', 'discharged'].includes(v.encounterStatus)
+            );
+
+            filteredEncounters.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            setEncounters(filteredEncounters);
+
+            if (eId) {
+                const targetEncounter = filteredEncounters.find(e => e._id === eId);
+                if (targetEncounter) {
+                    handleSelectEncounter(targetEncounter);
+                }
+            }
+        } catch (error) {
+            console.error('Error auto-selecting patient:', error);
+            toast.error('Error loading patient details');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const fetchNursingCharges = async () => {
         try {
@@ -171,7 +229,8 @@ const NurseTriage = () => {
             const { data } = await axios.get(`${backendUrl}/api/patients`, config);
             const filtered = data.filter(p =>
                 p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (p.mrn && p.mrn.toLowerCase().includes(searchTerm.toLowerCase()))
+                (p.mrn && p.mrn.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                (p.contact && p.contact.includes(searchTerm))
             );
             setPatients(filtered);
         } catch (error) {
@@ -194,15 +253,15 @@ const NurseTriage = () => {
             if (!user) return;
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const { data } = await axios.get(`${backendUrl}/api/visits`, config);
-            const patientEncounters = data.filter(v =>
-                (v.patient._id === patient._id || v.patient === patient._id) &&
-                (v.encounterStatus === 'payment_pending' || v.encounterStatus === 'in_nursing' || v.encounterStatus === 'registered' || v.encounterStatus === 'with_doctor' ||
-                    v.encounterStatus === 'completed' || v.encounterStatus === 'cancelled' || v.encounterStatus === 'discharged' || v.encounterStatus === 'in_ward' || v.encounterStatus === 'admitted')
+            const { data: patientEncounters } = await axios.get(`${backendUrl}/api/visits?patient=${patient._id}`, config);
+
+            const filteredEncounters = patientEncounters.filter(v =>
+                ['registered', 'payment_pending', 'in_nursing', 'with_doctor', 'awaiting_services', 'in_pharmacy', 'in_lab', 'in_radiology', 'in_ward', 'admitted', 'completed', 'cancelled', 'discharged'].includes(v.encounterStatus)
+
             );
             // Sort encounters by creation date - latest first
-            patientEncounters.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-            setEncounters(patientEncounters);
+            filteredEncounters.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            setEncounters(filteredEncounters);
         } catch (error) {
             console.error(error);
             toast.error('Error fetching encounters');
@@ -214,10 +273,10 @@ const NurseTriage = () => {
     const handleSelectEncounter = async (encounter) => {
         setSelectedEncounter(encounter);
 
-        // Check if already validated
-        if (encounter.paymentValidated) {
+        // Check if already validated OR if it's an ANC visit (bypass payment validation)
+        if (encounter.paymentValidated || encounter.isANC) {
             setReceiptValidated(true);
-            setReceiptNumber(encounter.receiptNumber || 'PRE-VALIDATED');
+            setReceiptNumber(encounter.receiptNumber || (encounter.isANC ? 'ANC-BYPASS' : 'PRE-VALIDATED'));
         } else {
             setReceiptValidated(false);
             setReceiptNumber('');
@@ -238,6 +297,11 @@ const NurseTriage = () => {
 
             // Fetch encounter charges
             await fetchEncounterCharges(encounter._id);
+
+            // Fetch drug administration data if Inpatient
+            if (encounter.type === 'Inpatient') {
+                await fetchDrugAdministrationData(encounter._id);
+            }
 
             // Pre-fill doctor if assigned
             if (encounter.consultingPhysician) {
@@ -322,8 +386,8 @@ const NurseTriage = () => {
             spo2: vital.spo2 || '',
             bmi: vital.bmi || calculateBMI(weight, height)
         });
-        // Scroll to form
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        setShowVitalsModal(true);
+        // Scroll to form - no longer needed as it's a modal
     };
 
     const handleCancelEdit = () => {
@@ -332,6 +396,7 @@ const NurseTriage = () => {
             temperature: '', bloodPressure: '', heartRate: '',
             respiratoryRate: '', weight: '', height: '', spo2: '', bmi: ''
         });
+        setShowVitalsModal(false);
     };
 
     // Helper function to get color class for vital signs based on normal ranges
@@ -343,7 +408,7 @@ const NurseTriage = () => {
 
         switch (vitalType) {
             case 'temperature':
-                // Normal: 36.1-37.2Â°C
+                // Normal: 36.1-37.2Ã‚Â°C
                 if (numValue < 36.1) return 'text-yellow-600 font-semibold';
                 if (numValue > 37.2) return 'text-red-600 font-semibold';
                 return '';
@@ -361,7 +426,7 @@ const NurseTriage = () => {
                 return '';
 
             case 'spo2':
-                // Normal: â‰¥95%
+                // Normal: Ã¢â€°Â¥95%
                 if (numValue < 95) return 'text-red-600 font-semibold';
                 if (numValue < 90) return 'text-red-700 font-bold';
                 return '';
@@ -427,11 +492,11 @@ const NurseTriage = () => {
             const { data } = await axios.get(`${backendUrl}/api/vitals/visit/${selectedEncounter._id}`, config);
             setExistingVitals(data);
 
-            // Clear form
             setVitals({
                 temperature: '', bloodPressure: '', heartRate: '',
                 respiratoryRate: '', weight: '', height: '', spo2: '', bmi: ''
             });
+            setShowVitalsModal(false);
         } catch (error) {
             console.error(error);
             toast.error('Error recording vitals');
@@ -449,6 +514,63 @@ const NurseTriage = () => {
             setEncounterCharges(data);
         } catch (error) {
             console.error(error);
+        }
+    };
+
+    const fetchDrugAdministrationData = async (encounterId) => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data: prescriptions } = await axios.get(`${backendUrl}/api/prescriptions/visit/${encounterId}`, config);
+            const consumableKeywords = ['syringe', 'cannula', 'giving set', 'infusion set', 'needle', 'plaster', 'gloves', 'mask', 'catheter', 'bandage'];
+            const filteredPrescriptions = prescriptions.filter(p => p.status === 'dispensed').map(p => ({
+                ...p,
+                medicines: p.medicines.filter(m => {
+                    const isMedication = m.dosage || m.route || m.frequency;
+                    const isConsumable = consumableKeywords.some(keyword => m.name.toLowerCase().includes(keyword));
+                    return isMedication && !isConsumable;
+                })
+            })).filter(p => p.medicines.length > 0);
+
+            setDispensedPrescriptions(filteredPrescriptions);
+
+            const { data: history } = await axios.get(`${backendUrl}/api/drug-administration/visit/${encounterId}`, config);
+            setAdministrationHistory(history);
+        } catch (error) {
+            console.error('Error fetching drug admin data:', error);
+        }
+    };
+
+    const handleRecordDrugAdmin = async () => {
+        if (!adminForm.date || !adminForm.time) {
+            toast.error('Please select date and time');
+            return;
+        }
+
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const administeredAt = new Date(`${adminForm.date}T${adminForm.time}`);
+
+            await axios.post(`${backendUrl}/api/drug-administration`, {
+                visitId: selectedEncounter._id,
+                patientId: selectedPatient._id,
+                prescriptionId: adminForm.prescriptionId,
+                medicineId: adminForm.medicineId,
+                medicineName: adminForm.medicineName,
+                dosage: adminForm.dosage,
+                administeredAt,
+                remarks: adminForm.remarks
+            }, config);
+
+            toast.success('Drug administration recorded');
+            setShowDrugAdminModal(false);
+            fetchDrugAdministrationData(selectedEncounter._id);
+            setAdminForm({ ...adminForm, remarks: '' });
+        } catch (error) {
+            console.error(error);
+            toast.error('Error recording administration');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -613,12 +735,28 @@ const NurseTriage = () => {
     const handleCancelNoteEdit = () => {
         setNoteForm({ selectedServiceId: '', comment: '', editingNoteId: null });
     };
-    // Check if the selected encounter is read-only (completed, cancelled, discharged)
-    const isReadOnly = selectedEncounter && (
-        selectedEncounter.encounterStatus === 'completed' ||
-        selectedEncounter.encounterStatus === 'cancelled' ||
-        selectedEncounter.encounterStatus === 'discharged'
-    );
+
+    // Helper to check if an encounter is active (for Outpatients, check 24h window; for Inpatients, check status)
+
+    const isEncounterActive = (encounter) => {
+        if (!encounter) return false;
+        const now = new Date();
+        const created = new Date(encounter.createdAt);
+        const inactiveStatuses = ['completed', 'cancelled', 'discharged'];
+
+        if (encounter.type === 'Inpatient') {
+            return !inactiveStatuses.includes(encounter.encounterStatus);
+        } else {
+            // awaiting_services stays active regardless of time window
+            if (encounter.encounterStatus === 'awaiting_services') return true;
+            const oneDay = 24 * 60 * 60 * 1000;
+            const isActiveTime = (now - created) < oneDay;
+            return isActiveTime && !inactiveStatuses.includes(encounter.encounterStatus);
+        }
+    };
+
+    // Check if the selected encounter is read-only
+    const isReadOnly = selectedEncounter && !isEncounterActive(selectedEncounter);
 
     const handleFinishTriage = async () => {
         if (!selectedEncounter || !user || isReadOnly) return;
@@ -668,6 +806,34 @@ const NurseTriage = () => {
         }
     };
 
+    const handleDischarge = async (e, encounter) => {
+        e.stopPropagation();
+        if (!window.confirm('Are you sure you want to discharge this patient? This will release their bed and close the encounter.')) {
+            return;
+        }
+
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            await axios.put(`${backendUrl}/api/visits/${encounter._id}`, {
+                encounterStatus: 'discharged',
+                status: 'Discharged'
+            }, config);
+
+            toast.success('Patient discharged successfully!');
+
+            // Refresh patient encounters if this patient is selected
+            if (selectedPatient && (selectedPatient._id === encounter.patient._id || selectedPatient._id === encounter.patient)) {
+                handleSelectPatient(selectedPatient);
+            }
+        } catch (error) {
+            console.error(error);
+            toast.error('Error discharging patient');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <Layout>
             {loading && <LoadingOverlay />}
@@ -683,7 +849,7 @@ const NurseTriage = () => {
                 <div className="flex gap-2 mb-4">
                     <input
                         type="text"
-                        placeholder="Search by Name or MRN..."
+                        placeholder="Search by Name, MRN or Phone Number..."
                         className="flex-1 border p-2 rounded"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -709,7 +875,7 @@ const NurseTriage = () => {
                             >
                                 <p className="font-semibold">{patient.name}</p>
                                 <p className="text-sm text-gray-600">
-                                    MRN: {patient.mrn} | Age: {patient.age} | {patient.gender}
+                                    MRN: {patient.mrn} | Age: {formatAge(patient.age)} | {patient.gender}
                                 </p>
                             </div>
                         ))}
@@ -729,7 +895,7 @@ const NurseTriage = () => {
                                 }}
                                 className="text-blue-600 text-sm mt-2 hover:underline"
                             >
-                                â† Change Patient
+                                Ã¢â€ Â Change Patient
                             </button>
                         </div>
 
@@ -746,21 +912,28 @@ const NurseTriage = () => {
                                     >
                                         <div className="flex justify-between items-start">
                                             <div>
-                                                <p className="font-semibold">{encounter.type} Visit</p>
+                                                <p className="font-semibold flex items-center gap-2">
+                                                    {encounter.type} Visit
+                                                    {encounter.isANC && (
+                                                        <span className="bg-pink-100 text-pink-700 text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                                            ðŸ¤° ANC
+                                                        </span>
+                                                    )}
+                                                </p>
                                                 <p className="text-sm text-gray-600">
                                                     {new Date(encounter.createdAt).toLocaleDateString()} - Status: {encounter.encounterStatus}
                                                 </p>
                                             </div>
                                             <div className="flex flex-col items-end gap-2">
-                                                <span className={`px-3 py-1 rounded text-sm ${encounter.paymentValidated
+                                                <span className={`px-3 py-1 rounded text-sm ${(encounter.paymentValidated || encounter.isANC)
                                                     ? 'bg-green-100 text-green-800'
                                                     : 'bg-yellow-100 text-yellow-800'
                                                     }`}>
-                                                    {encounter.paymentValidated ? 'Paid' : 'Pending'}
+                                                    {(encounter.paymentValidated || encounter.isANC) ? (encounter.isANC ? 'ANC' : 'Paid') : 'Pending'}
                                                 </span>
 
-                                                {/* Admit Button (Outpatient -> Inpatient) */}
-                                                {encounter.type === 'Outpatient' && encounter.encounterStatus !== 'completed' && (
+                                                {/* Admit Button (Active Outpatient/Emergency -> Inpatient) */}
+                                                {(encounter.type === 'Outpatient' || encounter.type === 'Emergency') && isEncounterActive(encounter) && (
                                                     <button
                                                         onClick={(e) => handleOpenConvertModal(e, encounter)}
                                                         className="text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700 z-10"
@@ -769,13 +942,10 @@ const NurseTriage = () => {
                                                     </button>
                                                 )}
 
-                                                {/* Discharge Button (Inpatient/Admitted -> Discharge) */}
-                                                {encounter.type === 'Inpatient' && encounter.encounterStatus === 'admitted' && (
+                                                {/* Discharge Button (Active Inpatients) */}
+                                                {encounter.type === 'Inpatient' && isEncounterActive(encounter) && (
                                                     <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            window.location.href = `/patient/${encounter.patient._id || encounter.patient}`;
-                                                        }}
+                                                        onClick={(e) => handleDischarge(e, encounter)}
                                                         className="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700 z-10"
                                                     >
                                                         Discharge
@@ -796,7 +966,14 @@ const NurseTriage = () => {
                 <div className="bg-white p-6 rounded shadow mb-6">
                     <div className="bg-blue-50 p-4 rounded mb-6 flex justify-between items-center">
                         <div>
-                            <p className="font-bold">{selectedPatient.name} - {selectedEncounter.type} Visit</p>
+                            <p className="font-bold flex items-center gap-2">
+                                {selectedPatient.name} - {selectedEncounter.type} Visit
+                                {selectedEncounter.isANC && (
+                                    <span className="bg-pink-100 text-pink-700 text-xs px-2 py-1 rounded-full font-bold">
+                                        ðŸ¤° ANC Visit (Payment Bypassed)
+                                    </span>
+                                )}
+                            </p>
                             <p className="text-sm text-gray-600">
                                 {new Date(selectedEncounter.createdAt).toLocaleDateString()}
                             </p>
@@ -841,7 +1018,7 @@ const NurseTriage = () => {
                         <div>
                             <div className="bg-green-50 p-4 rounded mb-6">
                                 <p className="text-green-700 font-semibold flex items-center gap-2">
-                                    <FaCheckCircle /> Payment Validated - Receipt #{receiptNumber}
+                                    <FaCheckCircle /> {selectedEncounter.isANC ? 'ANC Visit - Payment Verification Bypassed' : `Payment Validated - Receipt #${receiptNumber}`}
                                 </p>
                             </div>
 
@@ -855,7 +1032,7 @@ const NurseTriage = () => {
                                                 <tr>
                                                     <th className="p-2">Time</th>
                                                     <th className="p-2">BP (mmHg)</th>
-                                                    <th className="p-2">Temp (Â°C)</th>
+                                                    <th className="p-2">Temp (Ã‚Â°C)</th>
                                                     <th className="p-2">HR (bpm)</th>
                                                     <th className="p-2">RR (/min)</th>
                                                     <th className="p-2">SpO2 (%)</th>
@@ -927,6 +1104,174 @@ const NurseTriage = () => {
                                 </div>
                             )}
 
+                            {/* Drug Observation Chart - Only for Admitted Inpatients */}
+                            {(selectedEncounter.type === 'Inpatient' && selectedEncounter.encounterStatus !== 'discharged' && selectedEncounter.encounterStatus !== 'cancelled') && (
+                                <div className="mb-8">
+                                    <div className="bg-gradient-to-r from-blue-700 to-blue-600 text-white p-3 rounded-t-lg flex justify-between items-center shadow-md">
+                                        <h4 className="font-bold flex items-center gap-2">
+                                            <FaTable /> Drug Observation Chart (MAR)
+                                        </h4>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-[10px] bg-blue-500/50 px-2 py-0.5 rounded-full uppercase tracking-widest font-bold border border-blue-400/30">Dispensed</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white border-x border-b border-blue-200 rounded-b-lg shadow-sm overflow-hidden">
+                                        {dispensedPrescriptions.length === 0 ? (
+                                            <div className="p-8 text-center text-gray-400 italic text-sm">
+                                                No dispensed medications found.
+                                            </div>
+                                        ) : (
+                                            <div className="">
+                                                {/* Group administrations by Day */}
+                                                {(() => {
+                                                    const admissionDate = new Date(selectedEncounter.admissionDate || selectedEncounter.createdAt);
+                                                    admissionDate.setHours(0, 0, 0, 0);
+
+                                                    // Get all unique dates from history, and today
+                                                    const historyDates = [...new Set(administrationHistory.map(h => {
+                                                        const d = new Date(h.administeredAt);
+                                                        d.setHours(0, 0, 0, 0);
+                                                        return d.getTime();
+                                                    }))];
+
+                                                    const today = new Date();
+                                                    today.setHours(0, 0, 0, 0);
+                                                    if (!historyDates.includes(today.getTime())) {
+                                                        historyDates.push(today.getTime());
+                                                    }
+
+                                                    return historyDates.sort().reverse().map((dateTimestamp, idx) => {
+                                                        const currentDate = new Date(dateTimestamp);
+                                                        const diffTime = dateTimestamp - admissionDate.getTime();
+                                                        const dayNum = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                                                        const isExpanded = expandedDays[dateTimestamp] !== false; // Default to true if not explicitly false
+
+                                                        const dayHistory = administrationHistory.filter(h => {
+                                                            const d = new Date(h.administeredAt);
+                                                            d.setHours(0, 0, 0, 0);
+                                                            return d.getTime() === dateTimestamp;
+                                                        });
+
+                                                        const dayTimes = [...new Set(dayHistory.map(h =>
+                                                            new Date(h.administeredAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+                                                        ))].sort();
+
+                                                        return (
+                                                            <div key={dateTimestamp} className="border-b last:border-0">
+                                                                <button
+                                                                    onClick={() => setExpandedDays(prev => ({ ...prev, [dateTimestamp]: !isExpanded }))}
+                                                                    className="w-full bg-gray-50/50 px-4 py-2 hover:bg-blue-50 transition-colors flex items-center justify-between text-blue-900 border-b border-gray-100"
+                                                                >
+                                                                    <div className="flex items-center gap-3">
+                                                                        {isExpanded ? <FaChevronDown size={12} className="text-blue-400" /> : <FaChevronRight size={12} className="text-blue-400" />}
+                                                                        <span className="font-bold text-sm">Day {dayNum} <span className="text-gray-400 font-normal ml-2">({currentDate.toLocaleDateString('en-GB')})</span></span>
+                                                                        {dayNum === 1 && <span className="text-[9px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-bold uppercase">Admission</span>}
+                                                                        {dateTimestamp === today.getTime() && <span className="text-[9px] bg-green-100 text-green-600 px-1.5 py-0.5 rounded font-bold uppercase">Today</span>}
+                                                                    </div>
+                                                                    <div className="text-[10px] text-gray-500 font-medium">
+                                                                        {dayHistory.length} Administrations recorded
+                                                                    </div>
+                                                                </button>
+
+                                                                {isExpanded && (
+                                                                    <div className="overflow-x-auto">
+                                                                        <table className="w-full text-xs text-left border-collapse">
+                                                                            <thead className="bg-gray-100/50 border-b">
+                                                                                <tr>
+                                                                                    <th className="p-2 border-r font-bold text-gray-600 w-64">Medication</th>
+                                                                                    {dayTimes.map(timeStr => (
+                                                                                        <th key={timeStr} className="p-2 border-r font-bold text-gray-600 text-center min-w-[70px]">
+                                                                                            {timeStr}
+                                                                                        </th>
+                                                                                    ))}
+                                                                                    <th className="p-2 border-r font-bold text-green-700 text-center w-16 bg-green-50/30">Action</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                {dispensedPrescriptions.flatMap(p => p.medicines.map(m => (
+                                                                                    <tr key={`${p._id}-${m._id || m.name}`} className="hover:bg-blue-50/10 border-b last:border-0 transition-colors">
+                                                                                        <td className="p-2 border-r">
+                                                                                            <div className="font-bold text-blue-950 leading-tight flex items-center gap-2">
+                                                                                                {m.name}
+                                                                                                {m.buyOutside && (
+                                                                                                    <span className="text-[9px] bg-orange-100 text-orange-800 px-1.5 py-0.5 rounded border border-orange-200 uppercase font-black">
+                                                                                                        Buy Outside
+                                                                                                    </span>
+                                                                                                )}
+                                                                                            </div>
+                                                                                            <div className="text-[9px] text-gray-500 flex items-center gap-1 mt-0.5">
+                                                                                                <span className="font-medium text-gray-700">{m.dosage}</span>
+                                                                                                <span>|</span>
+                                                                                                <span className="font-medium text-gray-700">{m.frequency}</span>
+                                                                                                {m.route && <><span className="text-orange-500 font-bold px-1 rounded uppercase bg-orange-50 text-[8px] border border-orange-100">{m.route}</span></>}
+                                                                                            </div>
+                                                                                        </td>
+                                                                                        {dayTimes.map(timeStr => {
+                                                                                            const admin = dayHistory.find(h =>
+                                                                                                new Date(h.administeredAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) === timeStr &&
+                                                                                                (h.medicineId === m._id || h.medicineName === m.name)
+                                                                                            );
+                                                                                            return (
+                                                                                                <td key={timeStr} className="p-2 border-r text-center">
+                                                                                                    {admin ? (
+                                                                                                        <div className="inline-flex flex-col items-center justify-center p-1 rounded-md bg-green-50 border border-green-200 shadow-sm group relative cursor-help">
+                                                                                                            <span className="font-black text-[8px] text-green-700 uppercase tracking-tighter">Given</span>
+                                                                                                            <span className="text-[7px] text-green-600 leading-none">{admin.nurse?.name?.split(' ')[0]}</span>
+                                                                                                            {admin.remarks && (
+                                                                                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 bg-gray-900 border border-gray-700 text-white p-2 rounded-lg text-[9px] hidden group-hover:block z-50 shadow-2xl backdrop-blur-sm">
+                                                                                                                    <div className="font-bold text-blue-300 mb-1 border-b border-gray-700 pb-1">Remark:</div>
+                                                                                                                    {admin.remarks}
+                                                                                                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                                                                                                                </div>
+                                                                                                            )}
+                                                                                                        </div>
+                                                                                                    ) : <span className="text-gray-200">-</span>}
+                                                                                                </td>
+                                                                                            );
+                                                                                        })}
+                                                                                        <td className="p-2 text-center bg-green-50/20">
+                                                                                            {!isReadOnly && (
+                                                                                                <button
+                                                                                                    onClick={() => {
+                                                                                                        setAdminForm({
+                                                                                                            ...adminForm,
+                                                                                                            prescriptionId: p._id,
+                                                                                                            medicineId: m._id || m.name,
+                                                                                                            medicineName: m.name,
+                                                                                                            dosage: m.dosage || '',
+                                                                                                            date: new Date().toISOString().split('T')[0],
+                                                                                                            time: new Date().toTimeString().slice(0, 5),
+                                                                                                            remarks: ''
+                                                                                                        });
+                                                                                                        setShowDrugAdminModal(true);
+                                                                                                    }}
+                                                                                                    className="w-6 h-6 flex items-center justify-center mx-auto bg-green-600 text-white rounded-md hover:bg-green-700 transition hover:scale-110 shadow-sm"
+                                                                                                    title="Record Dose"
+                                                                                                >
+                                                                                                    <FaPlus size={8} />
+                                                                                                </button>
+                                                                                            )}
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                )))}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    });
+                                                })()}
+                                            </div>
+                                        )}
+                                        <div className="p-3 bg-gray-50/80 text-[10px] text-gray-500 flex items-center gap-2 border-t border-blue-100 italic">
+                                            <FaClock className="text-blue-400" /> Compact observation chart. Only dispensed medications are displayed.
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Assign Physician */}
                             <div className="mb-6">
                                 <label className="block text-gray-700 mb-2 font-semibold">
@@ -947,136 +1292,7 @@ const NurseTriage = () => {
                                 </select>
                             </div>
 
-                            {/* Vitals */}
-                            <div className="mb-6">
-                                <h4 className="font-bold text-lg mb-3 flex items-center gap-2">
-                                    <FaHeartbeat className="text-red-600" />
-                                    {editingVitalId ? 'Edit Vital Signs' : 'Record New Vital Signs'}
-                                </h4>
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                    <div>
-                                        <label className="block text-sm text-gray-600 mb-1">Temperature (Â°C)</label>
-                                        <input
-                                            type="number"
-                                            step="0.1"
-                                            className="w-full border p-2 rounded"
-                                            value={vitals.temperature}
-                                            onChange={(e) => setVitals({ ...vitals, temperature: e.target.value })}
-                                            placeholder="37.0"
-                                            disabled={isReadOnly}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm text-gray-600 mb-1">Blood Pressure (mmHg)</label>
-                                        <input
-                                            type="text"
-                                            className="w-full border p-2 rounded"
-                                            value={vitals.bloodPressure}
-                                            onChange={(e) => setVitals({ ...vitals, bloodPressure: e.target.value })}
-                                            placeholder="120/80"
-                                            disabled={isReadOnly}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm text-gray-600 mb-1">Heart Rate (bpm)</label>
-                                        <input
-                                            type="number"
-                                            className="w-full border p-2 rounded"
-                                            value={vitals.heartRate}
-                                            onChange={(e) => setVitals({ ...vitals, heartRate: e.target.value })}
-                                            placeholder="72"
-                                            disabled={isReadOnly}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm text-gray-600 mb-1">Respiratory Rate</label>
-                                        <input
-                                            type="number"
-                                            className="w-full border p-2 rounded"
-                                            value={vitals.respiratoryRate}
-                                            onChange={(e) => setVitals({ ...vitals, respiratoryRate: e.target.value })}
-                                            placeholder="16"
-                                            disabled={isReadOnly}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm text-gray-600 mb-1">SpO2 (%)</label>
-                                        <input
-                                            type="number"
-                                            className="w-full border p-2 rounded"
-                                            value={vitals.spo2}
-                                            onChange={(e) => setVitals({ ...vitals, spo2: e.target.value })}
-                                            placeholder="98"
-                                            disabled={isReadOnly}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm text-gray-600 mb-1">Weight (kg)</label>
-                                        <input
-                                            type="number"
-                                            step="0.1"
-                                            className="w-full border p-2 rounded"
-                                            value={vitals.weight}
-                                            onChange={(e) => {
-                                                const newWeight = e.target.value;
-                                                setVitals({
-                                                    ...vitals,
-                                                    weight: newWeight,
-                                                    bmi: calculateBMI(newWeight, vitals.height)
-                                                });
-                                            }}
-                                            placeholder="70.5"
-                                            disabled={isReadOnly}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm text-gray-600 mb-1">Height (cm)</label>
-                                        <input
-                                            type="number"
-                                            step="0.1"
-                                            className="w-full border p-2 rounded"
-                                            value={vitals.height}
-                                            onChange={(e) => {
-                                                const newHeight = e.target.value;
-                                                setVitals({
-                                                    ...vitals,
-                                                    height: newHeight,
-                                                    bmi: calculateBMI(vitals.weight, newHeight)
-                                                });
-                                            }}
-                                            placeholder="175"
-                                            disabled={isReadOnly}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm text-gray-600 mb-1">BMI (kg/m)</label>
-                                        <input
-                                            type="text"
-                                            className={`w-full border p-2 rounded font-semibold ${vitals.bmi ? (
-                                                parseFloat(vitals.bmi) < 18.5 ? 'bg-yellow-50 text-yellow-700 border-yellow-300' :
-                                                    parseFloat(vitals.bmi) < 25 ? 'bg-green-50 text-green-700 border-green-300' :
-                                                        parseFloat(vitals.bmi) < 30 ? 'bg-orange-50 text-orange-600 border-orange-300' :
-                                                            parseFloat(vitals.bmi) < 35 ? 'bg-orange-100 text-orange-800 border-orange-400' :
-                                                                parseFloat(vitals.bmi) < 40 ? 'bg-red-50 text-red-600 border-red-300' :
-                                                                    parseFloat(vitals.bmi) < 50 ? 'bg-red-100 text-red-800 border-red-400' :
-                                                                        'bg-purple-100 text-purple-800 border-purple-400'
-                                            ) : ''
-                                                }`}
-                                            value={vitals.bmi ? `${vitals.bmi} ${parseFloat(vitals.bmi) < 18.5 ? '(Underweight)' :
-                                                parseFloat(vitals.bmi) < 25 ? '(Normal)' :
-                                                    parseFloat(vitals.bmi) < 30 ? '(Overweight)' :
-                                                        parseFloat(vitals.bmi) < 35 ? '(Grade I Obese)' :
-                                                            parseFloat(vitals.bmi) < 40 ? '(Grade II Obese)' :
-                                                                parseFloat(vitals.bmi) < 50 ? '(Morbidly Obese)' :
-                                                                    '(Super Obese)'
-                                                }` : ''}
-                                            placeholder="Auto-calculated"
-                                            disabled
-                                            readOnly
-                                        />
-                                    </div>
-                                </div>
-                            </div>
+                            {/* Vitals Modal moved below */}
 
                             {/* Nursing Charges - Button to open modal */}
                             <div className="mb-6">
@@ -1088,10 +1304,22 @@ const NurseTriage = () => {
                                         {!isReadOnly && (
                                             <>
                                                 <button
+                                                    onClick={() => navigate(`/patient/${selectedPatient?._id}`)}
+                                                    className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700 flex items-center gap-2 text-sm shadow-sm transition-all"
+                                                >
+                                                    <FaHistory /> View Clinical History
+                                                </button>
+                                                <button
                                                     onClick={() => setShowChargesModal(true)}
                                                     className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center gap-2 text-sm"
                                                 >
                                                     <FaMoneyBillWave /> Add Charge
+                                                </button>
+                                                <button
+                                                    onClick={() => setShowVitalsModal(true)}
+                                                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 flex items-center gap-2 text-sm"
+                                                >
+                                                    <FaHeartbeat /> Add Vital Sign
                                                 </button>
                                                 <button
                                                     onClick={() => setShowNurseNoteModal(true)}
@@ -1226,29 +1454,15 @@ const NurseTriage = () => {
                             )}
 
                             <div className="flex gap-4 mt-6">
-                                {editingVitalId && (
-                                    <button
-                                        onClick={handleCancelEdit}
-                                        className="bg-gray-500 text-white px-6 py-3 rounded hover:bg-gray-600 font-bold"
-                                    >
-                                        Cancel Edit
-                                    </button>
-                                )}
                                 <button
                                     onClick={async () => {
                                         if (isReadOnly) return;
-                                        // First record/update vitals if any are entered
-                                        const hasVitals = vitals.temperature || vitals.bloodPressure || vitals.heartRate || vitals.weight || vitals.respiratoryRate || vitals.height || vitals.spo2;
-                                        if (hasVitals) {
-                                            await handleRecordVitals();
-                                        }
-                                        // Then finish triage
                                         await handleFinishTriage();
                                     }}
                                     disabled={isReadOnly}
                                     className={`flex-1 px-6 py-3 rounded font-bold flex items-center justify-center gap-2 ${isReadOnly ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 text-white'}`}
                                 >
-                                    <FaCheckCircle /> {isReadOnly ? 'Encounter Completed' : (editingVitalId ? 'Update Vitals & Send to Doctor' : 'Record Vitals & Send to Doctor')}
+                                    <FaCheckCircle /> {isReadOnly ? 'Encounter Completed' : 'Finish Triage & Send to Doctor'}
                                 </button>
                             </div>
                         </div>
@@ -1275,7 +1489,7 @@ const NurseTriage = () => {
                                     }}
                                     className="text-white hover:text-gray-200 text-2xl"
                                 >
-                                    Ã—
+                                    Ãƒâ€”
                                 </button>
                             </div>
 
@@ -1376,7 +1590,7 @@ const NurseTriage = () => {
                                     onClick={() => setShowNurseNoteModal(false)}
                                     className="text-white hover:text-gray-200 text-2xl"
                                 >
-                                    Ã—
+                                    Ãƒâ€”
                                 </button>
                             </div>
 
@@ -1455,7 +1669,7 @@ const NurseTriage = () => {
                         <div className="p-6">
                             <div className="mb-4 bg-purple-50 p-3 rounded">
                                 <p className="font-bold">{selectedPatient?.name}</p>
-                                <p className="text-sm">Converting Outpatient encounter to Inpatient admission.</p>
+                                <p className="text-sm">Converting {encounterToConvert?.type} encounter to Inpatient admission.</p>
                             </div>
 
                             <div className="mb-4">
@@ -1498,7 +1712,7 @@ const NurseTriage = () => {
                                 <div className="mb-6 p-3 bg-blue-50 rounded text-sm text-blue-800 border border-blue-100">
                                     <p className="font-bold">Provider Scheme: {selectedPatient.provider}</p>
                                     <p>
-                                        Daily Rate: â‚¦{wards.find(w => w._id === selectedWard)?.rates?.[selectedPatient.provider] ||
+                                        Daily Rate: Ã¢â€šÂ¦{wards.find(w => w._id === selectedWard)?.rates?.[selectedPatient.provider] ||
                                             wards.find(w => w._id === selectedWard)?.rates?.Standard ||
                                             wards.find(w => w._id === selectedWard)?.dailyRate || 0}
                                     </p>
@@ -1524,8 +1738,204 @@ const NurseTriage = () => {
                     </div>
                 </div>
             )}
+            {/* Vitals Modal */}
+            {showVitalsModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+                    <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full border-t-4 border-red-600 overflow-y-auto max-h-[90vh]">
+                        <div className="p-4 border-b flex justify-between items-center bg-red-50 sticky top-0 z-10">
+                            <h3 className="font-bold text-xl text-red-800 flex items-center gap-2">
+                                <FaHeartbeat /> {editingVitalId ? 'Edit Vitals' : 'Record New Vitals'}
+                            </h3>
+                            <button onClick={handleCancelEdit} className="text-2xl text-gray-400 hover:text-gray-600">&times;</button>
+                        </div>
+                        <div className="p-6">
+                            <div className="grid grid-cols-2 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">Temperature (Â°C)</label>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        className="w-full border p-3 rounded focus:ring-2 focus:ring-red-300 outline-none"
+                                        value={vitals.temperature}
+                                        onChange={(e) => setVitals({ ...vitals, temperature: e.target.value })}
+                                        placeholder="37.0"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">Blood Pressure (mmHg)</label>
+                                    <input
+                                        type="text"
+                                        className="w-full border p-3 rounded focus:ring-2 focus:ring-red-300 outline-none"
+                                        value={vitals.bloodPressure}
+                                        onChange={(e) => setVitals({ ...vitals, bloodPressure: e.target.value })}
+                                        placeholder="120/80"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">Heart Rate (bpm)</label>
+                                    <input
+                                        type="number"
+                                        className="w-full border p-3 rounded focus:ring-2 focus:ring-red-300 outline-none"
+                                        value={vitals.heartRate}
+                                        onChange={(e) => setVitals({ ...vitals, heartRate: e.target.value })}
+                                        placeholder="72"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">Respiratory Rate</label>
+                                    <input
+                                        type="number"
+                                        className="w-full border p-3 rounded focus:ring-2 focus:ring-red-300 outline-none"
+                                        value={vitals.respiratoryRate}
+                                        onChange={(e) => setVitals({ ...vitals, respiratoryRate: e.target.value })}
+                                        placeholder="16"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">SpO2 (%)</label>
+                                    <input
+                                        type="number"
+                                        className="w-full border p-3 rounded focus:ring-2 focus:ring-red-300 outline-none"
+                                        value={vitals.spo2}
+                                        onChange={(e) => setVitals({ ...vitals, spo2: e.target.value })}
+                                        placeholder="98"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">Weight (kg)</label>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        className="w-full border p-3 rounded focus:ring-2 focus:ring-red-300 outline-none"
+                                        value={vitals.weight}
+                                        onChange={(e) => {
+                                            const newWeight = e.target.value;
+                                            setVitals({
+                                                ...vitals,
+                                                weight: newWeight,
+                                                bmi: calculateBMI(newWeight, vitals.height)
+                                            });
+                                        }}
+                                        placeholder="70.5"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">Height (cm)</label>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        className="w-full border p-3 rounded focus:ring-2 focus:ring-red-300 outline-none"
+                                        value={vitals.height}
+                                        onChange={(e) => {
+                                            const newHeight = e.target.value;
+                                            setVitals({
+                                                ...vitals,
+                                                height: newHeight,
+                                                bmi: calculateBMI(vitals.weight, newHeight)
+                                            });
+                                        }}
+                                        placeholder="175"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">BMI (kg/mÂ²)</label>
+                                    <input
+                                        type="text"
+                                        className={`w-full border p-3 rounded font-bold ${vitals.bmi ? 'bg-gray-100' : ''}`}
+                                        value={vitals.bmi || ''}
+                                        placeholder="Auto-calculated"
+                                        readOnly
+                                        disabled
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-4 bg-gray-50 border-t flex justify-end gap-3 sticky bottom-0 z-10">
+                            <button
+                                onClick={handleCancelEdit}
+                                className="px-6 py-2 text-gray-600 hover:bg-gray-200 rounded font-semibold transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleRecordVitals}
+                                className="px-6 py-2 bg-red-600 text-white rounded font-bold hover:bg-red-700 shadow-md flex items-center gap-2 transition"
+                            >
+                                <FaHeartbeat /> {editingVitalId ? 'Update Vitals' : 'Save Vitals'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Drug Administration Modal */}
+            {showDrugAdminModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+                    <div className="bg-white rounded-lg shadow-2xl max-w-md w-full border-t-4 border-green-600">
+                        <div className="p-4 border-b flex justify-between items-center bg-green-50">
+                            <h3 className="font-bold text-xl text-green-800 flex items-center gap-2">
+                                <FaNotesMedical /> Record Administration
+                            </h3>
+                            <button onClick={() => setShowDrugAdminModal(false)} className="text-2xl text-gray-400 hover:text-gray-600">&times;</button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="bg-blue-50 p-3 rounded border border-blue-100">
+                                <p className="text-xs text-blue-600 font-semibold uppercase tracking-wider">Medication</p>
+                                <p className="font-bold text-lg text-blue-900">{adminForm.medicineName}</p>
+                                <p className="text-sm text-blue-700">Dosage: {adminForm.dosage}</p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">Date Given</label>
+                                    <input
+                                        type="date"
+                                        className="w-full border p-2 rounded focus:ring-2 focus:ring-green-300 outline-none"
+                                        value={adminForm.date}
+                                        onChange={(e) => setAdminForm({ ...adminForm, date: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">Time Given</label>
+                                    <input
+                                        type="time"
+                                        className="w-full border p-2 rounded focus:ring-2 focus:ring-green-300 outline-none"
+                                        value={adminForm.time}
+                                        onChange={(e) => setAdminForm({ ...adminForm, time: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">Observation Notes</label>
+                                <textarea
+                                    className="w-full border p-2 rounded focus:ring-2 focus:ring-green-300 outline-none"
+                                    rows="3"
+                                    placeholder="e.g. Patient took medicine without difficulty..."
+                                    value={adminForm.remarks}
+                                    onChange={(e) => setAdminForm({ ...adminForm, remarks: e.target.value })}
+                                ></textarea>
+                            </div>
+                        </div>
+                        <div className="p-4 bg-gray-50 border-t flex justify-end gap-3 rounded-b-lg">
+                            <button
+                                onClick={() => setShowDrugAdminModal(false)}
+                                className="px-5 py-2 text-gray-600 hover:bg-gray-200 rounded font-semibold transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleRecordDrugAdmin}
+                                className="px-5 py-2 bg-green-600 text-white rounded font-bold hover:bg-green-700 shadow-md flex items-center gap-2 transition"
+                            >
+                                <FaPlus /> Save Record
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </Layout >
     );
 };
 
 export default NurseTriage;
+

@@ -10,6 +10,10 @@ import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import LoadingOverlay from '../components/loadingOverlay';
 import RegisterPatientModal from '../components/RegisterPatientModal';
+import { formatAge } from '../utils/patientUtils';
+import { FaIdCard } from 'react-icons/fa';
+import PatientIDCard from '../components/PatientIDCard';
+import useHospitalSettings from '../hooks/useHospitalSettings';
 
 const PatientManagement = () => {
     const [loading, setLoading] = useState(false);
@@ -18,6 +22,8 @@ const PatientManagement = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    const [filterProvider, setFilterProvider] = useState('');
+    const [filterHMO, setFilterHMO] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const PATIENTS_PER_PAGE = 5;
     const [selectedPatient, setSelectedPatient] = useState(null);
@@ -26,7 +32,8 @@ const PatientManagement = () => {
     const [showEditPatientModal, setShowEditPatientModal] = useState(false);
     const [showRegisterPatientModal, setShowRegisterPatientModal] = useState(false);
     const [editPatient, setEditPatient] = useState(null);
-    const [hmos, setHMOs] = useState([]);
+    const [hmos, setHmos] = useState([]);
+    const [familyFiles, setFamilyFiles] = useState([]);
     const { user } = useContext(AuthContext);
     const { backendUrl } = useContext(AppContext);
     const navigate = useNavigate();
@@ -44,7 +51,68 @@ const PatientManagement = () => {
     const [availableBeds, setAvailableBeds] = useState([]);
     const [selectedWard, setSelectedWard] = useState('');
     const [selectedBed, setSelectedBed] = useState('');
+
+    // Card Modal State
+    const [showCardModal, setShowCardModal] = useState(false);
+    const [cardPatient, setCardPatient] = useState(null);
+    const { settings: hospitalSettings } = useHospitalSettings();
+
+    const handlePrintCard = () => {
+        const frontContent = document.getElementById(`patient-card-front-${cardPatient._id}`);
+        const backContent = document.getElementById(`patient-card-back-${cardPatient._id}`);
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Patient ID Card - ${cardPatient.name}</title>
+                    <link rel="preconnect" href="https://fonts.googleapis.com">
+                    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+                    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+                    <style>
+                        body { 
+                            margin: 0; 
+                            padding: 20px; 
+                            font-family: 'Inter', sans-serif; 
+                            display: flex; 
+                            flex-direction: column; 
+                            align-items: center; 
+                            gap: 20px; 
+                        }
+                        @media print {
+                            @page { size: auto; margin: 0; }
+                            body { margin: 20px; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                            .no-print { display: none; }
+                            div[id^="patient-card"] { 
+                                margin-bottom: 20px !important; 
+                                box-shadow: none !important; 
+                                break-inside: avoid;
+                                border: none !important;
+                                -webkit-print-color-adjust: exact !important;
+                                print-color-adjust: exact !important;
+                            }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div style="margin-bottom: 20px;">
+                        ${frontContent.outerHTML}
+                    </div>
+                    <div style="margin-bottom: 20px;">
+                        ${backContent.outerHTML}
+                    </div>
+                    <script>
+                        window.onload = () => {
+                            window.print();
+                            window.onafterprint = () => window.close();
+                        };
+                    </script>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+    };
     const [pendingEncounterPatient, setPendingEncounterPatient] = useState(null);
+    const [isANC, setIsANC] = useState(false);
 
     // Watch for pending encounter patient and register modal closing
     useEffect(() => {
@@ -62,9 +130,10 @@ const PatientManagement = () => {
     }, [pendingEncounterPatient, showRegisterPatientModal]);
 
     useEffect(() => {
-        if (user && (user.role === 'admin' || user.role === 'super_admin' || user.role === 'receptionist')) {
+        if (user && (user.role === 'admin' || user.role === 'super_admin' || user.role === 'receptionist' || user.role === 'readonly_admin')) {
             fetchPatients();
             fetchHMOs();
+            fetchFamilyFiles();
             fetchClinics();
             fetchCharges();
             fetchWards();
@@ -82,7 +151,47 @@ const PatientManagement = () => {
 
     useEffect(() => {
         filterPatients();
-    }, [searchTerm, startDate, endDate, patients]);
+    }, [searchTerm, startDate, endDate, patients, filterProvider, filterHMO]);
+
+    const calculateAge = (dob) => {
+        if (!dob) return '';
+        const today = new Date();
+        const birthDate = new Date(dob);
+        let years = today.getFullYear() - birthDate.getFullYear();
+        let months = today.getMonth() - birthDate.getMonth();
+
+        if (months < 0 || (months === 0 && today.getDate() < birthDate.getDate())) {
+            years--;
+            months += 12;
+        }
+
+        if (years > 0) {
+            return years.toString();
+        } else {
+            return months > 0 ? `0.${months}` : '0';
+        }
+    };
+
+    const calculateDOBFromAge = (age) => {
+        if (!age) return '';
+        const today = new Date();
+        const birthYear = today.getFullYear() - parseInt(age);
+        const dob = new Date(birthYear, today.getMonth(), today.getDate());
+        return dob.toISOString().split('T')[0];
+    };
+
+    const handleEditChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        if (name === 'dateOfBirth') {
+            const age = calculateAge(value);
+            setEditPatient({ ...editPatient, dateOfBirth: value, age: age });
+        } else if (name === 'age') {
+            const dob = calculateDOBFromAge(value);
+            setEditPatient({ ...editPatient, age: value, dateOfBirth: dob });
+        } else {
+            setEditPatient({ ...editPatient, [name]: type === 'checkbox' ? checked : value });
+        }
+    };
 
     const fetchPatients = async () => {
         try {
@@ -103,9 +212,21 @@ const PatientManagement = () => {
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const { data } = await axios.get(`${backendUrl}/api/hmos?active=true`, config);
-            setHMOs(data);
+            setHmos(data);
         } catch (error) {
             console.error('Error fetching HMOs:', error);
+        }
+    };
+
+    const fetchFamilyFiles = async () => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get(`${backendUrl}/api/family-files`, config);
+            if (Array.isArray(data)) {
+                setFamilyFiles(data.filter(f => f.active !== false));
+            }
+        } catch (error) {
+            console.error('Error fetching family files:', error);
         }
     };
 
@@ -148,6 +269,7 @@ const PatientManagement = () => {
         setSelectedCharges([]);
         setSelectedWard('');
         setSelectedBed('');
+        setIsANC(false);
     };
 
     const handleChargeToggle = (chargeId) => {
@@ -158,8 +280,8 @@ const PatientManagement = () => {
 
     const handleCreateEncounter = async () => {
         if (!encounterPatient) return;
-        if (encounterType !== 'External Investigation' && encounterType !== 'Inpatient' && selectedCharges.length === 0) {
-            toast.error('Please select at least one charge');
+        if (!isANC && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && selectedCharges.length === 0) {
+            toast.error('Please select at least one charge, or check ANC to skip charges');
             return;
         }
         try {
@@ -175,7 +297,8 @@ const PatientManagement = () => {
                 reasonForVisit,
                 encounterStatus: 'registered',
                 ward: encounterType === 'Inpatient' ? selectedWard : undefined,
-                bed: encounterType === 'Inpatient' ? selectedBed : undefined
+                bed: encounterType === 'Inpatient' ? selectedBed : undefined,
+                isANC: isANC
             };
             const visitResponse = await axios.post(`${backendUrl}/api/visits`, visitData, config);
             for (const chargeId of selectedCharges) {
@@ -188,9 +311,9 @@ const PatientManagement = () => {
                 }, config);
             }
             const total = charges.filter(c => selectedCharges.includes(c._id)).reduce((s, c) => s + c.basePrice, 0);
-            if (encounterType !== 'External Investigation' && encounterType !== 'Inpatient') {
+            if (!['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType)) {
                 await axios.put(`${backendUrl}/api/visits/${visitResponse.data._id}`,
-                    { encounterStatus: total > 0 ? 'payment_pending' : 'in_nursing' }, config);
+                    { encounterStatus: isANC ? 'in_nursing' : (total > 0 ? 'payment_pending' : 'in_nursing'), isANC: isANC || undefined }, config);
             }
             toast.success('Encounter created successfully!');
             closeEncounterModal();
@@ -222,6 +345,20 @@ const PatientManagement = () => {
             const end = new Date(endDate);
             end.setHours(23, 59, 59, 999);
             filtered = filtered.filter(p => new Date(p.createdAt) <= end);
+        }
+
+        // Provider filter
+        if (filterProvider) {
+            if (filterProvider === 'Standard') {
+                filtered = filtered.filter(p => !p.provider || p.provider === 'Standard');
+            } else {
+                filtered = filtered.filter(p => p.provider === filterProvider);
+            }
+        }
+
+        // HMO filter
+        if (['Retainership', 'NHIA'].includes(filterProvider) && filterHMO) {
+            filtered = filtered.filter(p => p.hmo === filterHMO);
         }
 
         // Sort: newest first
@@ -332,7 +469,7 @@ const PatientManagement = () => {
         toast.success('Patient list exported successfully!');
     };
 
-    if (user?.role !== 'admin' && user?.role !== 'super_admin' && user?.role !== 'receptionist') {
+    if (user?.role !== 'admin' && user?.role !== 'super_admin' && user?.role !== 'receptionist' && user?.role !== 'readonly_admin') {
         return (
             <Layout>
                 <div className="bg-red-50 border border-red-200 p-6 rounded">
@@ -390,13 +527,54 @@ const PatientManagement = () => {
                             />
                         </div>
                     </div>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+                        <div>
+                            <label className="block text-sm font-semibold mb-1">Provider Type</label>
+                            <select
+                                className="w-full border p-2 rounded"
+                                value={filterProvider}
+                                onChange={(e) => {
+                                    setFilterProvider(e.target.value);
+                                    setFilterHMO('');
+                                }}
+                            >
+                                <option value="">All Providers</option>
+                                <option value="Standard">Standard Patient</option>
+                                <option value="Retainership">Retainership</option>
+                                <option value="NHIA">NHIA</option>
+                                <option value="KSCHMA">State Insurance</option>
+                            </select>
+                        </div>
+                        {(filterProvider === 'Retainership' || filterProvider === 'NHIA') && (
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-semibold mb-1">HMO</label>
+                                <select
+                                    className="w-full border p-2 rounded"
+                                    value={filterHMO}
+                                    onChange={(e) => setFilterHMO(e.target.value)}
+                                >
+                                    <option value="">All HMOs</option>
+                                    {hmos
+                                        .filter(hmo => hmo.category === filterProvider)
+                                        .map(hmo => (
+                                            <option key={hmo._id} value={hmo.name}>
+                                                {hmo.name}
+                                            </option>
+                                        ))
+                                    }
+                                </select>
+                            </div>
+                        )}
+                    </div>
                     <div className="mt-4 flex gap-2">
-                        <button
-                            onClick={() => setShowRegisterPatientModal(true)}
-                            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                        >
-                            <FaUserInjured /> Register Patient
-                        </button>
+                        {user.role !== 'readonly_admin' && (
+                            <button
+                                onClick={() => setShowRegisterPatientModal(true)}
+                                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                            >
+                                <FaUserInjured /> Register Patient
+                            </button>
+                        )}
                         <button
                             onClick={exportToExcel}
                             className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
@@ -408,6 +586,8 @@ const PatientManagement = () => {
                                 setSearchTerm('');
                                 setStartDate('');
                                 setEndDate('');
+                                setFilterProvider('');
+                                setFilterHMO('');
                             }}
                             className="bg-gray-400 text-white px-6 py-2 rounded-lg hover:bg-gray-500"
                         >
@@ -429,13 +609,13 @@ const PatientManagement = () => {
                     <div className="bg-white p-6 rounded-lg shadow">
                         <p className="text-gray-600 text-sm font-semibold mb-2">Male Patients</p>
                         <p className="text-3xl font-bold text-purple-600">
-                            {patients.filter(p => p.gender?.toLowerCase() === 'male').length}
+                            {filteredPatients.filter(p => p.gender?.toLowerCase() === 'male').length}
                         </p>
                     </div>
                     <div className="bg-white p-6 rounded-lg shadow">
                         <p className="text-gray-600 text-sm font-semibold mb-2">Female Patients</p>
                         <p className="text-3xl font-bold text-pink-600">
-                            {patients.filter(p => p.gender?.toLowerCase() === 'female').length}
+                            {filteredPatients.filter(p => p.gender?.toLowerCase() === 'female').length}
                         </p>
                     </div>
                 </div>
@@ -449,6 +629,7 @@ const PatientManagement = () => {
                                 <th className="p-4 text-left">Name</th>
                                 <th className="p-4 text-left">Age/Gender</th>
                                 <th className="p-4 text-left">Phone</th>
+                                <th className="p-4 text-left">Provider</th>
                                 <th className="p-4 text-left">Registered</th>
                                 <th className="p-4 text-left">Actions</th>
                             </tr>
@@ -461,9 +642,25 @@ const PatientManagement = () => {
                                         <td className="p-4 font-semibold text-blue-600">{patient.mrn || 'N/A'}</td>
                                         <td className="p-4 font-semibold">{patient.name}</td>
                                         <td className="p-4">
-                                            {patient.age || 'N/A'} / {patient.gender || 'N/A'}
+                                            {formatAge(patient.age)} / {patient.gender || 'N/A'}
                                         </td>
                                         <td className="p-4 text-gray-600">{patient.contact || 'N/A'}</td>
+                                        <td className="p-4">
+                                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${patient.provider === 'Standard' ? 'bg-gray-100 text-gray-800' : 'bg-blue-100 text-blue-800'
+                                                }`}>
+                                                {patient.provider || 'Standard'}
+                                            </span>
+                                            {patient.hmo && (
+                                                <div className="text-[10px] text-gray-500 mt-1 italic line-clamp-1 max-w-[120px]">
+                                                    HMO: {patient.hmo}
+                                                </div>
+                                            )}
+                                            {patient.familyFile && (
+                                                <div className="text-[10px] text-green-600 mt-1 italic font-semibold line-clamp-1 max-w-[120px]">
+                                                    Family: {typeof patient.familyFile === 'object' ? patient.familyFile.familyName : 'Linked'}
+                                                </div>
+                                            )}
+                                        </td>
                                         <td className="p-4 text-sm text-gray-600">
                                             {new Date(patient.createdAt).toLocaleDateString()}
                                         </td>
@@ -486,16 +683,22 @@ const PatientManagement = () => {
                                                 >
                                                     <FaHospital />
                                                 </button>
-                                                <button
-                                                    onClick={() => {
-                                                        setEditPatient(patient);
-                                                        setShowEditPatientModal(true);
-                                                    }}
-                                                    className="text-green-600 hover:text-green-800"
-                                                    title="Edit Patient"
-                                                >
-                                                    <FaEdit />
-                                                </button>
+                                                {user.role !== 'readonly_admin' && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setEditPatient({
+                                                                ...patient,
+                                                                isFamilyMember: !!patient.familyFile,
+                                                                familyFileId: typeof patient.familyFile === 'object' ? patient.familyFile?._id : (patient.familyFile || '')
+                                                            });
+                                                            setShowEditPatientModal(true);
+                                                        }}
+                                                        className="text-green-600 hover:text-green-800"
+                                                        title="Edit Patient"
+                                                    >
+                                                        <FaEdit />
+                                                    </button>
+                                                )}
                                                 {(user.role === 'admin' || user.role === 'super_admin') && (
                                                     <button
                                                         onClick={() => handleDeletePatient(patient._id)}
@@ -505,6 +708,16 @@ const PatientManagement = () => {
                                                         <FaTrash />
                                                     </button>
                                                 )}
+                                                <button
+                                                    onClick={() => {
+                                                        setCardPatient(patient);
+                                                        setShowCardModal(true);
+                                                    }}
+                                                    className="text-orange-600 hover:text-orange-800"
+                                                    title="Generate card"
+                                                >
+                                                    <FaIdCard />
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>
@@ -604,9 +817,10 @@ const PatientManagement = () => {
                                             </div>
                                             <div className="flex gap-2 items-center">
                                                 <select
+                                                    disabled={user.role === 'readonly_admin'}
                                                     value={encounter.encounterStatus}
                                                     onChange={(e) => handleUpdateEncounterStatus(encounter._id, e.target.value)}
-                                                    className="border p-1 rounded text-sm"
+                                                    className="border p-1 rounded text-sm disabled:opacity-50 disabled:bg-gray-100"
                                                 >
                                                     <option value="registered">Registered</option>
                                                     <option value="admitted">Admitted</option>
@@ -725,14 +939,64 @@ const PatientManagement = () => {
                         </div>
 
                         <form onSubmit={handleUpdatePatient} className="space-y-4">
+                            {/* Family File Section */}
+                            <div className="bg-blue-50 p-4 rounded border border-blue-100">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <input
+                                        type="checkbox"
+                                        id="editIsFamilyMember"
+                                        checked={editPatient.isFamilyMember}
+                                        onChange={(e) => setEditPatient({ ...editPatient, isFamilyMember: e.target.checked })}
+                                        className="w-5 h-5 text-blue-600"
+                                    />
+                                    <label htmlFor="editIsFamilyMember" className="font-bold text-blue-800 cursor-pointer flex items-center gap-2">
+                                        Belong to Family File?
+                                    </label>
+                                </div>
+
+                                {editPatient.isFamilyMember && (
+                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+                                        <div className="md:col-span-3">
+                                            <label className="block text-sm font-semibold text-blue-700 mb-1">Select Family File *</label>
+                                            <select
+                                                required={editPatient.isFamilyMember}
+                                                value={editPatient.familyFileId}
+                                                onChange={(e) => setEditPatient({ ...editPatient, familyFileId: e.target.value })}
+                                                className="w-full border p-2 rounded bg-white shadow-sm focus:ring-2 focus:ring-blue-500"
+                                            >
+                                                <option value="">-- Choose Family --</option>
+                                                {familyFiles.length === 0 ? (
+                                                    <option disabled>No families found</option>
+                                                ) : (
+                                                    familyFiles.map(file => (
+                                                        <option key={file._id} value={file._id} disabled={file.type === 'Family of 5' && file.memberCount >= 5 && (typeof editPatient.familyFile === 'object' ? editPatient.familyFile?._id : editPatient.familyFile) !== file._id}>
+                                                            {file.familyName} ({file.fileNumber}) - {file.memberCount}/{file.type === 'Family of 5' ? '5' : '∞'}
+                                                        </option>
+                                                    ))
+                                                )}
+                                            </select>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={fetchFamilyFiles}
+                                            className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 text-sm h-[42px] flex items-center justify-center"
+                                            title="Refresh List"
+                                        >
+                                            ↻ Refresh
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-semibold mb-1">Name</label>
                                     <input
                                         type="text"
                                         className="w-full border p-2 rounded"
+                                        name="name"
                                         value={editPatient.name}
-                                        onChange={(e) => setEditPatient({ ...editPatient, name: e.target.value })}
+                                        onChange={handleEditChange}
                                         required
                                     />
                                 </div>
@@ -747,20 +1011,43 @@ const PatientManagement = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold mb-1">Age</label>
+                                    <label className="block text-sm font-semibold mb-1">Date of Birth</label>
+                                    <input
+                                        type="date"
+                                        name="dateOfBirth"
+                                        className="w-full border p-2 rounded focus:ring-2 focus:ring-green-500"
+                                        value={editPatient.dateOfBirth ? new Date(editPatient.dateOfBirth).toISOString().split('T')[0] : ''}
+                                        onChange={handleEditChange}
+                                        max={new Date().toISOString().split('T')[0]}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold mb-1">
+                                        Age *
+                                        {editPatient.age && (
+                                            <span className="ml-2 text-[10px] text-blue-600 italic">
+                                                {formatAge(editPatient.age)}
+                                            </span>
+                                        )}
+                                    </label>
                                     <input
                                         type="number"
-                                        className="w-full border p-2 rounded"
+                                        name="age"
+                                        className="w-full border p-2 rounded focus:ring-2 focus:ring-green-500"
                                         value={editPatient.age || ''}
-                                        onChange={(e) => setEditPatient({ ...editPatient, age: e.target.value })}
+                                        onChange={handleEditChange}
+                                        required
+                                        min="0"
+                                        step="0.01"
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-semibold mb-1">Gender</label>
                                     <select
                                         className="w-full border p-2 rounded"
+                                        name="gender"
                                         value={editPatient.gender || ''}
-                                        onChange={(e) => setEditPatient({ ...editPatient, gender: e.target.value })}
+                                        onChange={handleEditChange}
                                     >
                                         <option value="">Select</option>
                                         <option value="male">Male</option>
@@ -772,19 +1059,22 @@ const PatientManagement = () => {
                                     <label className="block text-sm font-semibold mb-1">Phone</label>
                                     <input
                                         type="text"
+                                        name="contact"
                                         className="w-full border p-2 rounded"
                                         value={editPatient.contact || ''}
-                                        onChange={(e) => setEditPatient({ ...editPatient, contact: e.target.value })}
+                                        onChange={handleEditChange}
                                     />
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-sm font-semibold mb-1">Address</label>
+                                <label className="block text-sm font-semibold mb-1">Address *</label>
                                 <textarea
                                     className="w-full border p-2 rounded"
                                     rows="2"
+                                    name="address"
                                     value={editPatient.address || ''}
-                                    onChange={(e) => setEditPatient({ ...editPatient, address: e.target.value })}
+                                    onChange={handleEditChange}
+                                    required
                                 />
                             </div>
 
@@ -796,8 +1086,9 @@ const PatientManagement = () => {
                                         <label className="block text-sm font-semibold mb-1">Provider</label>
                                         <select
                                             className="w-full border p-2 rounded"
+                                            name="provider"
                                             value={editPatient.provider || 'Standard'}
-                                            onChange={(e) => setEditPatient({ ...editPatient, provider: e.target.value })}
+                                            onChange={handleEditChange}
                                         >
                                             <option value="Standard">Standard</option>
                                             <option value="Retainership">Retainership</option>
@@ -814,8 +1105,9 @@ const PatientManagement = () => {
                                             </label>
                                             <select
                                                 className="w-full border p-2 rounded"
+                                                name="hmo"
                                                 value={editPatient.hmo || ''}
-                                                onChange={(e) => setEditPatient({ ...editPatient, hmo: e.target.value })}
+                                                onChange={handleEditChange}
                                                 required={editPatient.provider === 'Retainership' || editPatient.provider === 'NHIA' || editPatient.provider === 'KSCHMA'}
                                             >
                                                 <option value="">Select HMO *</option>
@@ -846,8 +1138,9 @@ const PatientManagement = () => {
                                             <input
                                                 type="text"
                                                 className="w-full border p-2 rounded"
+                                                name="insuranceNumber"
                                                 value={editPatient.insuranceNumber || ''}
-                                                onChange={(e) => setEditPatient({ ...editPatient, insuranceNumber: e.target.value })}
+                                                onChange={handleEditChange}
                                                 required
                                             />
                                         </div>
@@ -864,8 +1157,9 @@ const PatientManagement = () => {
                                         <input
                                             type="text"
                                             className="w-full border p-2 rounded"
+                                            name="emergencyContactName"
                                             value={editPatient.emergencyContactName || ''}
-                                            onChange={(e) => setEditPatient({ ...editPatient, emergencyContactName: e.target.value })}
+                                            onChange={handleEditChange}
                                         />
                                     </div>
                                     <div>
@@ -873,8 +1167,9 @@ const PatientManagement = () => {
                                         <input
                                             type="text"
                                             className="w-full border p-2 rounded"
+                                            name="emergencyContactPhone"
                                             value={editPatient.emergencyContactPhone || ''}
-                                            onChange={(e) => setEditPatient({ ...editPatient, emergencyContactPhone: e.target.value })}
+                                            onChange={handleEditChange}
                                         />
                                     </div>
                                 </div>
@@ -943,7 +1238,7 @@ const PatientManagement = () => {
                                     </div>
                                     <div>
                                         <p className="text-sm text-gray-600">Age</p>
-                                        <p className="font-semibold">{encounterPatient.age} years</p>
+                                        <p className="font-semibold">{formatAge(encounterPatient.age)}</p>
                                     </div>
                                     <div>
                                         <p className="text-sm text-gray-600">Gender</p>
@@ -966,7 +1261,8 @@ const PatientManagement = () => {
                                     <option value="Inpatient">Inpatient</option>
                                     <option value="Emergency">Emergency</option>
                                     <option value="Follow-up">Follow-up</option>
-                                    <option value="External Investigation">External Investigation</option>
+                                    <option value="External Lab/Radiology">External Lab/Radiology</option>
+                                    <option value="External Pharmacy">External Pharmacy</option>
                                     <option value="Consultation">Consultation</option>
                                 </select>
                             </div>
@@ -998,6 +1294,26 @@ const PatientManagement = () => {
                                     value={reasonForVisit}
                                     onChange={(e) => setReasonForVisit(e.target.value)}
                                 />
+                            </div>
+
+                            {/* ANC Checkbox */}
+                            <div className="mb-6">
+                                <label className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${isANC ? 'bg-pink-50 border-pink-400' : 'bg-gray-50 border-gray-200 hover:border-pink-300'
+                                    }`}>
+                                    <input
+                                        type="checkbox"
+                                        checked={isANC}
+                                        onChange={(e) => {
+                                            setIsANC(e.target.checked);
+                                            if (e.target.checked) setSelectedCharges([]);
+                                        }}
+                                        className="w-5 h-5 accent-pink-600"
+                                    />
+                                    <div>
+                                        <p className="font-bold text-pink-700 text-sm">🤰 Antenatal Care (ANC) Visit</p>
+                                        <p className="text-xs text-pink-500 mt-0.5">Check for ANC patients — no charges now. Uncheck when doctor consultation charges are needed.</p>
+                                    </div>
+                                </label>
                             </div>
 
                             {/* Inpatient Ward/Bed */}
@@ -1043,7 +1359,7 @@ const PatientManagement = () => {
                             )}
 
                             {/* Charges */}
-                            {encounterType !== 'External Investigation' && encounterType !== 'Inpatient' && (
+                            {!isANC && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && (
                                 <div className="mb-6">
                                     <label className="block text-gray-700 font-semibold mb-2">
                                         Consultation Charges <span className="text-red-500">*</span>
@@ -1079,10 +1395,10 @@ const PatientManagement = () => {
                             <div className="flex gap-3 pt-4 border-t">
                                 <button
                                     onClick={handleCreateEncounter}
-                                    disabled={loading}
+                                    disabled={loading || (!isANC && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && selectedCharges.length === 0)}
                                     className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:bg-gray-400 flex items-center justify-center gap-2"
                                 >
-                                    <FaCalendarCheck /> {loading ? 'Creating...' : 'Create Encounter'}
+                                    <FaCalendarCheck /> {loading ? 'Creating...' : (isANC ? '🤰 Create ANC Encounter' : 'Create Encounter')}
                                 </button>
                                 <button
                                     onClick={closeEncounterModal}
@@ -1091,6 +1407,65 @@ const PatientManagement = () => {
                                     Cancel
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Patient Card Modal */}
+            {showCardModal && cardPatient && (
+                <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60] p-4">
+                    <div className="bg-white rounded-xl shadow-2xl overflow-hidden max-w-md w-full relative">
+                        <div className="bg-gradient-to-r from-orange-500 to-red-600 p-4 flex justify-between items-center text-white">
+                            <h3 className="text-xl font-bold flex items-center gap-2">
+                                <FaIdCard /> Patient ID Card
+                            </h3>
+                            <button
+                                onClick={() => {
+                                    setShowCardModal(false);
+                                    setCardPatient(null);
+                                }}
+                                className="hover:bg-white/20 rounded-full p-1 transition-colors"
+                            >
+                                <FaTimes size={24} />
+                            </button>
+                        </div>
+
+                        <div className="p-10 flex flex-col items-center justify-center bg-gray-50 max-h-[85vh] overflow-y-auto w-full pb-16">
+                            <div className="flex flex-col gap-10 items-center w-full mt-10">
+                                <div className="w-full flex flex-col items-center">
+                                    <p className="text-center text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 px-3 py-1 bg-gray-200 rounded-full">Front View</p>
+                                    <div className="bg-white p-2 rounded-xl shadow-lg transform hover:scale-[1.02] transition-transform duration-300">
+                                        <PatientIDCard patient={cardPatient} settings={hospitalSettings} side="front" />
+                                    </div>
+                                </div>
+                                <div className="w-full flex flex-col items-center mt-4">
+                                    <p className="text-center text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 px-3 py-1 bg-gray-200 rounded-full">Back View</p>
+                                    <div className="bg-white p-2 rounded-xl shadow-lg transform hover:scale-[1.02] transition-transform duration-300">
+                                        <PatientIDCard patient={cardPatient} settings={hospitalSettings} side="back" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="w-full flex gap-3 mt-10">
+                                <button
+                                    onClick={handlePrintCard}
+                                    className="flex-1 bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2"
+                                >
+                                    <FaDownload /> Print ID Card
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setShowCardModal(false);
+                                        setCardPatient(null);
+                                    }}
+                                    className="flex-1 bg-gray-200 text-gray-800 font-bold py-3 rounded-lg hover:bg-gray-300 transition"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                            <p className="mt-4 text-xs text-gray-500 text-center">
+                                Tip: For best results, print on high-quality PVC cards or heavy cardstock.
+                            </p>
                         </div>
                     </div>
                 </div>

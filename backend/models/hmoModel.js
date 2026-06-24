@@ -15,7 +15,21 @@ const hmoSchema = mongoose.Schema({
         type: String,
         required: true,
         enum: ['Private', 'NHIA', 'State Scheme', 'Retainership', 'Other'],
-        default: 'Private'
+        default: 'Retainership'
+    },
+    // Retainership-specific fields
+    retainershipType: {
+        type: String,
+        enum: ['Family', 'Corporate', ''],
+        default: ''
+    },
+    registrationChargeRef: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Charge'
+    },
+    registrationCharge: {
+        type: Number,
+        default: 0
     },
     description: {
         type: String
@@ -32,6 +46,14 @@ const hmoSchema = mongoose.Schema({
     },
     contactEmail: {
         type: String
+    },
+    paymentStatus: {
+        type: String,
+        enum: ['pending', 'paid'],
+        default: 'pending'
+    },
+    paidAt: {
+        type: Date
     }
 }, {
     timestamps: true,

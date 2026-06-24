@@ -1,0 +1,7 @@
+
+> backend@1.0.0 start
+> node server.js
+
+[dotenv@17.2.3] injecting env (3) from .env -- tip: 🗂️ backup and recover secrets: https://dotenvx.com/ops
+Server running on port 5000
+MongoDB Connected: ac-fo1tdtl-shard-00-00.qzdf90r.mongodb.net

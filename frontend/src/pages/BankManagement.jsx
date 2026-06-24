@@ -23,7 +23,7 @@ const BankManagement = () => {
     });
 
     useEffect(() => {
-        if (user && (user.role === 'admin' || user.role === 'super_admin')) {
+        if (user && (user.role === 'admin' || user.role === 'super_admin' || user.role === 'readonly_admin')) {
             fetchBanks();
         }
     }, [user]);
@@ -131,7 +131,7 @@ const BankManagement = () => {
         });
     };
 
-    if (user?.role !== 'admin' && user?.role !== 'super_admin') {
+    if (user?.role !== 'admin' && user?.role !== 'super_admin' && user?.role !== 'readonly_admin') {
         return (
             <Layout>
                 <div className="bg-red-50 border border-red-200 p-6 rounded">
@@ -154,12 +154,14 @@ const BankManagement = () => {
                         </h1>
                         <p className="text-gray-600 mt-2">Manage hospital bank accounts</p>
                     </div>
-                    <button
-                        onClick={() => openModal()}
-                        className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center gap-2"
-                    >
-                        <FaPlus /> Add Bank Account
-                    </button>
+                    {user?.role !== 'readonly_admin' && (
+                        <button
+                            onClick={() => openModal()}
+                            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center gap-2"
+                        >
+                            <FaPlus /> Add Bank Account
+                        </button>
+                    )}
                 </div>
 
                 {/* Banks List */}
@@ -203,31 +205,35 @@ const BankManagement = () => {
                                             </span>
                                         </td>
                                         <td className="p-4">
-                                            <div className="flex gap-2">
-                                                {!bank.isDefault && (
+                                            {user?.role !== 'readonly_admin' ? (
+                                                <div className="flex gap-2">
+                                                    {!bank.isDefault && (
+                                                        <button
+                                                            onClick={() => handleSetDefault(bank._id)}
+                                                            className="text-yellow-600 hover:text-yellow-800"
+                                                            title="Set as default"
+                                                        >
+                                                            <FaStar />
+                                                        </button>
+                                                    )}
                                                     <button
-                                                        onClick={() => handleSetDefault(bank._id)}
-                                                        className="text-yellow-600 hover:text-yellow-800"
-                                                        title="Set as default"
+                                                        onClick={() => openModal(bank)}
+                                                        className="text-blue-600 hover:text-blue-800"
+                                                        title="Edit"
                                                     >
-                                                        <FaStar />
+                                                        <FaEdit />
                                                     </button>
-                                                )}
-                                                <button
-                                                    onClick={() => openModal(bank)}
-                                                    className="text-blue-600 hover:text-blue-800"
-                                                    title="Edit"
-                                                >
-                                                    <FaEdit />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(bank._id)}
-                                                    className="text-red-600 hover:text-red-800"
-                                                    title="Delete"
-                                                >
-                                                    <FaTrash />
-                                                </button>
-                                            </div>
+                                                    <button
+                                                        onClick={() => handleDelete(bank._id)}
+                                                        className="text-red-600 hover:text-red-800"
+                                                        title="Delete"
+                                                    >
+                                                        <FaTrash />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <span className="text-gray-400 text-xs font-semibold">Read Only</span>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}

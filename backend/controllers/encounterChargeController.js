@@ -132,10 +132,20 @@ const getEncounterCharges = async (req, res) => {
 // @access  Private
 const getPatientCharges = async (req, res) => {
     try {
-        const { status } = req.query;
+        const { status, startDate, endDate } = req.query;
         const filter = { patient: req.params.patientId };
 
         if (status) filter.status = status;
+
+        if (startDate || endDate) {
+            filter.createdAt = {};
+            if (startDate) filter.createdAt.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                filter.createdAt.$lte = end;
+            }
+        }
 
         const charges = await EncounterCharge.find(filter)
             .populate('charge')
@@ -228,7 +238,7 @@ const deleteEncounterCharge = async (req, res) => {
             return res.status(400).json({ message: 'Cannot delete a processed charge' });
         }
 
-        await charge.remove();
+        await charge.deleteOne();
         res.json({ message: 'Charge removed' });
     } catch (error) {
         res.status(500).json({ message: error.message });

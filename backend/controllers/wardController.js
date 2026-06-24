@@ -50,7 +50,7 @@ const createWard = async (req, res) => {
 // @access  Private
 const getWards = async (req, res) => {
     try {
-        const wards = await Ward.find({});
+        const wards = await Ward.find({}).populate('beds.occupiedBy', 'name mrn');
         res.json(wards);
     } catch (error) {
         res.status(500).json({ message: error.message });

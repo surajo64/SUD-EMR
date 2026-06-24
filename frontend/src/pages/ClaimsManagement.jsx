@@ -496,7 +496,7 @@ const ClaimsManagement = () => {
         return classes[status] || 'bg-gray-100 text-gray-800';
     };
 
-    if (user?.role !== 'admin' && user?.role !== 'super_admin') {
+    if (user?.role !== 'admin' && user?.role !== 'super_admin' && user?.role !== 'cashier' && user?.role !== 'readonly_admin') {
         return (
             <Layout>
                 <div className="bg-red-50 border border-red-200 p-6 rounded">
@@ -776,15 +776,16 @@ const ClaimsManagement = () => {
                             )}
                         </div>
 
-                        {/* Actions */}
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => setShowStatusModal(true)}
-                                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center gap-2"
-                            >
-                                <FaCheck /> Update Status
-                            </button>
-                        </div>
+                        {user.role !== 'readonly_admin' && (
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setShowStatusModal(true)}
+                                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center gap-2"
+                                >
+                                    <FaCheck /> Update Status
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

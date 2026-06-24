@@ -4,7 +4,7 @@ const chargeSchema = mongoose.Schema({
     name: { type: String, required: true }, // e.g., "Consultation Fee", "CBC", "X-Ray Chest"
     type: {
         type: String,
-        enum: ['consultation', 'lab', 'radiology', 'drugs', 'nursing', 'labour', 'theatre', 'other'],
+        enum: ['consultation', 'lab', 'radiology', 'drugs', 'family', 'nursing', 'labour', 'theatre', 'retainership', 'other'],
         required: true
     },
     // Multi-tier pricing

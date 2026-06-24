@@ -41,10 +41,13 @@ app.use('/api/drug-transfers', require('./routes/drugTransferRoutes'));
 app.use('/api/drug-disposals', require('./routes/drugDisposalRoutes'));
 app.use('/api/referrals', require('./routes/referralRoutes'));
 app.use('/api/hmos', require('./routes/hmoRoutes'));
+app.use('/api/family-files', require('./routes/familyFileRoutes'));
 app.use('/api/claims', require('./routes/claimRoutes'));
 app.use('/api/hmo-transactions', require('./routes/hmoTransactionRoutes'));
 app.use('/api/banks', require('./routes/bankRoutes'));
 app.use('/api/settings', require('./routes/settingRoutes'));
+app.use('/api/drug-administration', require('./routes/drugAdministrationRoutes'));
+app.use('/api/financials', require('./routes/financialRoutes'));
 
 
 

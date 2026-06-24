@@ -6,19 +6,24 @@ const {
     updatePatient,
     deletePatient,
     addDeposit,
+    refundDeposit,
     getDepositBalance,
-    getRecentPatients
+    getRecentPatients,
+    getPatientById
 } = require('../controllers/patientController');
-const { protect, admin } = require('../middleware/authMiddleware');
+const { protect, admin, checkNotReadOnly } = require('../middleware/authMiddleware');
 
 router.route('/recent').get(protect, getRecentPatients);
-router.route('/').post(protect, registerPatient).get(protect, getPatients);
+router.route('/').post(protect, checkNotReadOnly, registerPatient).get(protect, getPatients);
 router.route('/:id')
-    .put(protect, updatePatient)
-    .delete(protect, admin, deletePatient);
+    .get(protect, getPatientById)
+    .put(protect, checkNotReadOnly, updatePatient)
+    .delete(protect, admin, checkNotReadOnly, deletePatient);
 
 router.route('/:id/deposit')
-    .post(protect, addDeposit)
+    .post(protect, checkNotReadOnly, addDeposit)
     .get(protect, getDepositBalance);
+
+router.route('/:id/refund').post(protect, admin, checkNotReadOnly, refundDeposit);
 
 module.exports = router;

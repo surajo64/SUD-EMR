@@ -5,7 +5,7 @@ const Visit = require('../models/visitModel');
 // @route   POST /api/visits
 // @access  Private
 const createVisit = async (req, res) => {
-    const { patientId, appointmentId, type, clinic, encounterType, reasonForVisit, ward, bed } = req.body;
+    const { patientId, appointmentId, type, clinic, encounterType, reasonForVisit, ward, bed, isANC } = req.body;
 
     // Check for existing visit today
     const startOfDay = new Date();
@@ -61,9 +61,13 @@ const createVisit = async (req, res) => {
         admissionDate: type === 'Inpatient' ? new Date() : undefined,
         ward: type === 'Inpatient' ? ward : undefined,
         bed: type === 'Inpatient' ? bed : undefined,
-        paymentValidated: type === 'External Investigation',
-        encounterStatus: type === 'External Investigation' ? 'awaiting_services' : (type === 'Inpatient' ? 'admitted' : (req.body.encounterStatus || 'registered')),
-        reasonForVisit
+        paymentValidated: ['External Investigation', 'External Pharmacy', 'External Lab/Radiology'].includes(type),
+        encounterStatus: ['External Investigation', 'External Pharmacy', 'External Lab/Radiology'].includes(type) 
+            ? 'awaiting_services' 
+            : (type === 'Inpatient' ? 'admitted' : (req.body.encounterStatus || 'registered')),
+        status: type === 'Inpatient' ? 'Admitted' : 'In Progress',
+        reasonForVisit,
+        isANC: !!isANC
     });
 
     // Apply Initial Ward Charge for Inpatient
@@ -103,8 +107,44 @@ const createVisit = async (req, res) => {
 // @route   GET /api/visits
 // @access  Private
 const getVisits = async (req, res) => {
-    const visits = await Visit.find({})
-        .populate('patient', 'name')
+    const { type, encounterStatus, status, patient, today: isToday } = req.query;
+    let query = {};
+    if (type) query.type = type;
+    if (status) query.status = status;
+    if (patient && patient !== 'undefined') query.patient = patient;
+    
+    if (isToday === 'true') {
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date();
+        endOfDay.setHours(23, 59, 59, 999);
+        query.createdAt = { $gte: startOfDay, $lte: endOfDay };
+        
+        // When asking for today's patients, usually we mean active ones
+        // Exclude terminal statuses unless explicitly requested
+        if (!encounterStatus) {
+            query.encounterStatus = { $nin: ['completed', 'discharged', 'cancelled'] };
+        }
+    }
+
+    if (encounterStatus) {
+        if (encounterStatus.includes(',')) {
+            query.encounterStatus = { $in: encounterStatus.split(',') };
+        } else {
+            query.encounterStatus = encounterStatus;
+        }
+    }
+
+    if (req.query.excludeStatus) {
+        if (req.query.excludeStatus.includes(',')) {
+            query.encounterStatus = { ...query.encounterStatus, $nin: req.query.excludeStatus.split(',') };
+        } else {
+            query.encounterStatus = { ...query.encounterStatus, $ne: req.query.excludeStatus };
+        }
+    }
+
+    const visits = await Visit.find(query)
+        .populate('patient', 'name mrn age gender contact')
         .populate('doctor', 'name')
         .populate('clinic', 'name department')
         .populate('ward', 'name dailyRate');
@@ -117,7 +157,7 @@ const getVisits = async (req, res) => {
 const updateVisit = async (req, res) => {
     const {
         chiefComplaint, historyOfIllness, diagnosis, status, dischargeDate,
-        encounterStatus, paymentValidated, receiptNumber, consultingPhysician, nursingNotes,
+        encounterStatus, paymentValidated, receiptNumber, consultingPhysician, nursingNotes, isANC,
         subjective, objective, assessment, plan,
         // New structured clinical documentation fields
         presentingComplaints,
@@ -177,6 +217,7 @@ const updateVisit = async (req, res) => {
         if (receiptNumber) visit.receiptNumber = receiptNumber;
         if (consultingPhysician) visit.consultingPhysician = consultingPhysician;
         if (nursingNotes) visit.nursingNotes = nursingNotes;
+        if (isANC !== undefined) visit.isANC = !!isANC;
 
         // Structured Clinical Documentation Fields
         if (presentingComplaints !== undefined) visit.presentingComplaints = presentingComplaints;
@@ -346,6 +387,7 @@ const convertToInpatient = async (req, res) => {
         // 2. Update Visit
         visit.type = 'Inpatient';
         visit.encounterType = 'Inpatient';
+        visit.status = 'Admitted';
         visit.ward = ward;
         visit.bed = bed;
         visit.admissionDate = new Date();
@@ -381,6 +423,107 @@ const convertToInpatient = async (req, res) => {
         }
 
         res.json(updatedVisit);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Change encounter type (e.g. from External to Outpatient/Inpatient)
+// @route   PUT /api/visits/:id/change-type
+// @access  Private (Receptionist/Admin)
+const changeEncounterType = async (req, res) => {
+    const { type, encounterType, clinic, ward, bed, reasonForVisit } = req.body;
+
+    try {
+        const visit = await Visit.findById(req.params.id);
+
+        if (!visit) {
+            return res.status(404).json({ message: 'Visit not found' });
+        }
+
+        const oldType = visit.type;
+        const isCurrentlyExternal = ['External Investigation', 'External Pharmacy', 'External Lab/Radiology'].includes(oldType);
+        const isNewTypeExternal = ['External Investigation', 'External Pharmacy', 'External Lab/Radiology'].includes(type);
+
+        // 1. Handle Ward/Bed if switching TO Inpatient
+        if (type === 'Inpatient' && oldType !== 'Inpatient') {
+            if (!ward || !bed) {
+                return res.status(400).json({ message: 'Ward and Bed are required for Inpatient admission' });
+            }
+
+            const Ward = require('../models/wardModel');
+            const wardDoc = await Ward.findById(ward);
+
+            if (!wardDoc) {
+                return res.status(404).json({ message: 'Ward not found' });
+            }
+
+            const bedIndex = wardDoc.beds.findIndex(b => b.number === bed);
+            if (bedIndex === -1) {
+                return res.status(404).json({ message: 'Bed not found in ward' });
+            }
+
+            if (wardDoc.beds[bedIndex].isOccupied) {
+                return res.status(400).json({ message: 'Selected bed is already occupied' });
+            }
+
+            // Occupy Bed
+            wardDoc.beds[bedIndex].isOccupied = true;
+            wardDoc.beds[bedIndex].occupiedBy = visit.patient;
+            await wardDoc.save();
+
+            visit.ward = ward;
+            visit.bed = bed;
+            visit.admissionDate = new Date();
+            
+            // Generate Initial Bed Charge
+            const Patient = require('../models/patientModel');
+            const patient = await Patient.findById(visit.patient);
+            let dailyFee = wardDoc.dailyRate;
+            if (patient && patient.provider && wardDoc.rates && wardDoc.rates[patient.provider]) {
+                dailyFee = wardDoc.rates[patient.provider];
+            } else if (wardDoc.rates && wardDoc.rates.Standard) {
+                dailyFee = wardDoc.rates.Standard;
+            }
+
+            if (dailyFee > 0) {
+                const EncounterCharge = require('../models/encounterChargeModel');
+                await EncounterCharge.create({
+                    encounter: visit._id,
+                    patient: visit.patient,
+                    itemType: 'Daily Bed Fee',
+                    itemName: `Initial Ward Charge - ${wardDoc.name} (${patient.provider || 'Standard'})`,
+                    cost: dailyFee,
+                    quantity: 1,
+                    totalAmount: dailyFee,
+                    status: 'pending',
+                    addedBy: req.user._id
+                });
+            }
+        }
+
+        // 2. Update Basic Fields
+        visit.type = type;
+        visit.encounterType = encounterType || type;
+        if (clinic) visit.clinic = clinic;
+        if (reasonForVisit) visit.reasonForVisit = reasonForVisit;
+
+        // 3. Update Status Logic
+        // If moving from External to Standard, reset payment and transition status
+        if (isCurrentlyExternal && !isNewTypeExternal) {
+            visit.paymentValidated = false;
+            visit.encounterStatus = (type === 'Inpatient') ? 'admitted' : 'payment_pending';
+            if (type === 'Inpatient') visit.status = 'Admitted';
+        } else if (!isCurrentlyExternal && isNewTypeExternal) {
+            visit.paymentValidated = true;
+            visit.encounterStatus = 'awaiting_services';
+        } else if (type === 'Inpatient' && oldType !== 'Inpatient') {
+             visit.encounterStatus = 'admitted';
+             visit.status = 'Admitted';
+        }
+
+        const updatedVisit = await visit.save();
+        res.json(updatedVisit);
 
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -395,5 +538,7 @@ module.exports = {
     deleteVisit,
     getVisitsByPatient,
     addNote,
-    convertToInpatient
+    convertToInpatient,
+    changeEncounterType
 };
+

@@ -8,13 +8,17 @@ const {
     validateReceipt,
     getReceiptByNumber,
     reverseReceipt,
-    getReceiptsWithClaimStatus
+    getReceiptsWithClaimStatus,
+    createFamilyFileReceipt,
+    createHMOReceipt
 } = require('../controllers/receiptController');
 const { protect } = require('../middleware/authMiddleware');
 
 router.route('/with-claim-status').get(protect, getReceiptsWithClaimStatus);
 router.route('/').post(protect, createReceipt).get(protect, getReceipts);
 router.route('/encounter').post(protect, createReceiptForCharges);
+router.route('/family-file').post(protect, createFamilyFileReceipt);
+router.route('/hmo-registration').post(protect, createHMOReceipt);
 router.route('/validate').post(protect, validateReceipt);
 router.route('/number/:receiptNumber').get(protect, getReceiptByNumber);
 router.route('/:id/reverse').post(protect, reverseReceipt);

@@ -6,6 +6,9 @@ const Visit = require('../models/visitModel');
 const Patient = require('../models/patientModel');
 const Receipt = require('../models/receiptModel');
 const User = require('../models/userModel');
+const VitalSign = require('../models/vitalSignModel');
+const Clinic = require('../models/clinicModel');
+const Ward = require('../models/wardModel');
 
 // @desc    Get lab revenue report by date range
 // @route   GET /api/reports/lab-revenue?startDate=&endDate=
@@ -22,32 +25,133 @@ const getLabRevenue = async (req, res) => {
             createdAt: { $gte: start, $lte: end }
         })
             .populate('patient', 'name mrn')
-            .populate('charge')
+            .populate({
+                path: 'charge',
+                populate: [
+                    { path: 'receipt' },
+                    { path: 'addedBy', select: 'name role' }
+                ]
+            })
+            .populate('visit', 'type')
             .sort({ createdAt: -1 });
 
-        const totalTests = labOrders.length;
-        const completedTests = labOrders.filter(o => o.status === 'completed').length;
-        const paidTests = labOrders.filter(o => o.charge?.status === 'paid').length;
+        // --- NEW: Include Standalone Lab Charges (if any) ---
+        const standaloneCharges = await EncounterCharge.find({
+            $or: [
+                { department: 'Lab' },
+                { itemType: 'Lab' }
+            ],
+            createdAt: { $gte: start, $lte: end },
+            _id: { $nin: labOrders.map(o => o.charge?._id).filter(id => id) }
+        })
+            .populate('patient', 'name mrn')
+            .populate('receipt')
+            .populate('addedBy', 'name role');
 
-        const totalRevenue = labOrders
+        const totalTests = labOrders.length + standaloneCharges.length;
+        const completedTests = labOrders.filter(o => o.status === 'completed').length;
+        const paidTests = labOrders.filter(o => o.charge?.status === 'paid').length + standaloneCharges.filter(c => c.status === 'paid').length;
+
+        const orderRevenue = labOrders
             .filter(o => o.charge?.status === 'paid')
             .reduce((sum, o) => sum + (o.charge?.totalAmount || 0), 0);
 
+        const standaloneRevenue = standaloneCharges
+            .filter(c => c.status === 'paid')
+            .reduce((sum, c) => sum + (c.totalAmount || 0), 0);
+
+        const totalRevenue = orderRevenue + standaloneRevenue;
+
         const pendingRevenue = labOrders
             .filter(o => o.charge?.status === 'pending')
-            .reduce((sum, o) => sum + (o.charge?.totalAmount || 0), 0);
+            .reduce((sum, o) => sum + (o.charge?.totalAmount || 0), 0) +
+            standaloneCharges.filter(c => c.status === 'pending').reduce((sum, c) => sum + (c.totalAmount || 0), 0);
+
+        // Identify External Revenue
+        const isExternal = (o_or_c) => {
+            const visitType = o_or_c.visit?.type || (o_or_c.encounter?.type);
+            return ['External Lab', 'External Investigation', 'External Lab/Radiology'].includes(visitType) ||
+                o_or_c.patient?.name?.startsWith('LAB-') ||
+                !o_or_c.visit; // Standalone charges might not have a visit in some contexts
+        };
+
+        const externalOrders = labOrders.filter(o => isExternal(o) && o.charge?.status === 'paid');
+        const externalStandalone = standaloneCharges.filter(c => c.status === 'paid'); // Most standalone are external POS
+
+        const externalRevenue = externalOrders.reduce((sum, o) => sum + (o.charge?.totalAmount || 0), 0) +
+            externalStandalone.reduce((sum, c) => sum + (c.totalAmount || 0), 0);
+
+        const externalDetails = [
+            ...externalOrders.map(o => ({
+                id: o._id,
+                createdAt: o.createdAt,
+                patient: o.patient || { name: 'Walk-in' },
+                testName: o.testName,
+                amount: o.charge?.totalAmount || 0,
+                cashier: o.charge?.addedBy || { name: 'System', role: 'cashier' },
+                status: o.charge?.status || 'paid'
+            })),
+            ...externalStandalone.map(c => ({
+                id: c._id,
+                createdAt: c.createdAt,
+                patient: c.patient || { name: 'Walk-in' },
+                testName: c.itemName || 'Lab Test',
+                amount: c.totalAmount || 0,
+                cashier: c.addedBy || { name: 'System', role: 'cashier' },
+                status: c.status || 'paid'
+            }))
+        ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+        // Calculate pending revenue breakdown
+        let pendingInsuranceRevenue = 0;
+        let pendingPatientRevenue = 0;
+
+        [...labOrders, ...standaloneCharges].forEach(item => {
+            const c = item.charge || item; // o.charge or the standalone charge itself
+            if (c?.status === 'pending') {
+                if (c.hmoPortion !== undefined || c.patientPortion !== undefined) {
+                    pendingInsuranceRevenue += (c.hmoPortion || 0);
+                    pendingPatientRevenue += (c.patientPortion || 0);
+                } else {
+                    pendingPatientRevenue += (c.totalAmount || 0);
+                }
+            }
+        });
+
+        // Calculate Pending HMO Amount
+        let pendingHMOAmount = 0;
+        const paidInsuranceCharges = [...labOrders.map(o => o.charge), ...standaloneCharges]
+            .filter(c => c?.status === 'paid' && c?.receipt?.paymentMethod === 'insurance');
+
+        if (paidInsuranceCharges.length > 0) {
+            const Claim = require('../models/claimModel');
+            const insuranceEncIds = [...new Set(paidInsuranceCharges.map(c =>
+                (c.encounter?._id || c.encounter)?.toString()
+            ).filter(id => id))];
+
+            if (insuranceEncIds.length > 0) {
+                const unpaidClaims = await Claim.find({
+                    encounter: { $in: insuranceEncIds },
+                    status: { $ne: 'paid' }
+                });
+
+                const unpaidClaimEncounters = new Set(unpaidClaims.map(c => c.encounter.toString()));
+
+                pendingHMOAmount = paidInsuranceCharges
+                    .filter(c => {
+                        const encId = (c.encounter?._id || c.encounter)?.toString();
+                        return encId && unpaidClaimEncounters.has(encId);
+                    })
+                    .reduce((sum, c) => sum + (c.hmoPortion || 0), 0);
+            }
+        }
 
         // Group by test type
         const byTestType = {};
         labOrders.forEach(order => {
             const testName = order.testName;
             if (!byTestType[testName]) {
-                byTestType[testName] = {
-                    count: 0,
-                    revenue: 0,
-                    paid: 0,
-                    pending: 0
-                };
+                byTestType[testName] = { count: 0, revenue: 0, paid: 0, pending: 0 };
             }
             byTestType[testName].count++;
             if (order.charge?.status === 'paid') {
@@ -57,6 +161,17 @@ const getLabRevenue = async (req, res) => {
                 byTestType[testName].pending++;
             }
         });
+        standaloneCharges.forEach(c => {
+            const name = c.itemName || 'Lab Test';
+            if (!byTestType[name]) byTestType[name] = { count: 0, revenue: 0, paid: 0, pending: 0 };
+            byTestType[name].count++;
+            if (c.status === 'paid') {
+                byTestType[name].revenue += c.totalAmount;
+                byTestType[name].paid++;
+            } else {
+                byTestType[name].pending++;
+            }
+        });
 
         res.json({
             summary: {
@@ -64,10 +179,15 @@ const getLabRevenue = async (req, res) => {
                 completedTests,
                 paidTests,
                 totalRevenue,
+                externalRevenue,
                 pendingRevenue,
+                pendingInsuranceRevenue,
+                pendingPatientRevenue,
+                pendingHMOAmount,
                 dateRange: { start, end }
             },
             byTestType,
+            externalDetails,
             orders: labOrders
         });
     } catch (error) {
@@ -90,32 +210,133 @@ const getRadiologyRevenue = async (req, res) => {
             createdAt: { $gte: start, $lte: end }
         })
             .populate('patient', 'name mrn')
-            .populate('charge')
+            .populate({
+                path: 'charge',
+                populate: [
+                    { path: 'receipt' },
+                    { path: 'addedBy', select: 'name role' }
+                ]
+            })
+            .populate('visit', 'type')
             .sort({ createdAt: -1 });
 
-        const totalScans = radOrders.length;
-        const completedScans = radOrders.filter(o => o.status === 'completed').length;
-        const paidScans = radOrders.filter(o => o.charge?.status === 'paid').length;
+        // --- NEW: Include Standalone Radiology Charges (if any) ---
+        const standaloneCharges = await EncounterCharge.find({
+            $or: [
+                { department: 'Radiology' },
+                { itemType: 'Radiology' }
+            ],
+            createdAt: { $gte: start, $lte: end },
+            _id: { $nin: radOrders.map(o => o.charge?._id).filter(id => id) }
+        })
+            .populate('patient', 'name mrn')
+            .populate('receipt')
+            .populate('addedBy', 'name role');
 
-        const totalRevenue = radOrders
+        const totalScans = radOrders.length + standaloneCharges.length;
+        const completedScans = radOrders.filter(o => o.status === 'completed').length;
+        const paidScans = radOrders.filter(o => o.charge?.status === 'paid').length + standaloneCharges.filter(c => c.status === 'paid').length;
+
+        const orderRevenue = radOrders
             .filter(o => o.charge?.status === 'paid')
             .reduce((sum, o) => sum + (o.charge?.totalAmount || 0), 0);
 
+        const standaloneRevenue = standaloneCharges
+            .filter(c => c.status === 'paid')
+            .reduce((sum, c) => sum + (c.totalAmount || 0), 0);
+
+        const totalRevenue = orderRevenue + standaloneRevenue;
+
         const pendingRevenue = radOrders
             .filter(o => o.charge?.status === 'pending')
-            .reduce((sum, o) => sum + (o.charge?.totalAmount || 0), 0);
+            .reduce((sum, o) => sum + (o.charge?.totalAmount || 0), 0) +
+            standaloneCharges.filter(c => c.status === 'pending').reduce((sum, c) => sum + (c.totalAmount || 0), 0);
+
+        // Identify External Revenue
+        const isExternal = (o_or_c) => {
+            const visitType = o_or_c.visit?.type || (o_or_c.encounter?.type);
+            return ['External Radiology', 'External Investigation', 'External Lab/Radiology'].includes(visitType) ||
+                o_or_c.patient?.name?.startsWith('RAD-') ||
+                !o_or_c.visit;
+        };
+
+        const externalOrders = radOrders.filter(o => isExternal(o) && o.charge?.status === 'paid');
+        const externalStandalone = standaloneCharges.filter(c => c.status === 'paid');
+
+        const externalRevenue = externalOrders.reduce((sum, o) => sum + (o.charge?.totalAmount || 0), 0) +
+            externalStandalone.reduce((sum, c) => sum + (c.totalAmount || 0), 0);
+
+        const externalDetails = [
+            ...externalOrders.map(o => ({
+                id: o._id,
+                createdAt: o.createdAt,
+                patient: o.patient || { name: 'Walk-in' },
+                testName: o.testName || o.scanType,
+                amount: o.charge?.totalAmount || 0,
+                cashier: o.charge?.addedBy || { name: 'System', role: 'cashier' },
+                status: o.charge?.status || 'paid'
+            })),
+            ...externalStandalone.map(c => ({
+                id: c._id,
+                createdAt: c.createdAt,
+                patient: c.patient || { name: 'Walk-in' },
+                testName: c.itemName || 'Scan',
+                amount: c.totalAmount || 0,
+                cashier: c.addedBy || { name: 'System', role: 'cashier' },
+                status: c.status || 'paid'
+            }))
+        ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+        // Calculate pending revenue breakdown
+        let pendingInsuranceRevenue = 0;
+        let pendingPatientRevenue = 0;
+
+        [...radOrders, ...standaloneCharges].forEach(item => {
+            const c = item.charge || item;
+            if (c?.status === 'pending') {
+                if (c.hmoPortion !== undefined || c.patientPortion !== undefined) {
+                    pendingInsuranceRevenue += (c.hmoPortion || 0);
+                    pendingPatientRevenue += (c.patientPortion || 0);
+                } else {
+                    pendingPatientRevenue += (c.totalAmount || 0);
+                }
+            }
+        });
+
+        // Calculate Pending HMO Amount
+        let pendingHMOAmount = 0;
+        const paidInsuranceCharges = [...radOrders.map(o => o.charge), ...standaloneCharges]
+            .filter(c => c?.status === 'paid' && c?.receipt?.paymentMethod === 'insurance');
+
+        if (paidInsuranceCharges.length > 0) {
+            const Claim = require('../models/claimModel');
+            const insuranceEncIds = [...new Set(paidInsuranceCharges.map(c =>
+                (c.encounter?._id || c.encounter)?.toString()
+            ).filter(id => id))];
+
+            if (insuranceEncIds.length > 0) {
+                const unpaidClaims = await Claim.find({
+                    encounter: { $in: insuranceEncIds },
+                    status: { $ne: 'paid' }
+                });
+
+                const unpaidClaimEncounters = new Set(unpaidClaims.map(c => c.encounter.toString()));
+
+                pendingHMOAmount = paidInsuranceCharges
+                    .filter(c => {
+                        const encId = (c.encounter?._id || c.encounter)?.toString();
+                        return encId && unpaidClaimEncounters.has(encId);
+                    })
+                    .reduce((sum, c) => sum + (c.hmoPortion || 0), 0);
+            }
+        }
 
         // Group by scan type
         const byScanType = {};
         radOrders.forEach(order => {
             const scanType = order.scanType;
             if (!byScanType[scanType]) {
-                byScanType[scanType] = {
-                    count: 0,
-                    revenue: 0,
-                    paid: 0,
-                    pending: 0
-                };
+                byScanType[scanType] = { count: 0, revenue: 0, paid: 0, pending: 0 };
             }
             byScanType[scanType].count++;
             if (order.charge?.status === 'paid') {
@@ -125,6 +346,17 @@ const getRadiologyRevenue = async (req, res) => {
                 byScanType[scanType].pending++;
             }
         });
+        standaloneCharges.forEach(c => {
+            const name = c.itemName || 'Scan';
+            if (!byScanType[name]) byScanType[name] = { count: 0, revenue: 0, paid: 0, pending: 0 };
+            byScanType[name].count++;
+            if (c.status === 'paid') {
+                byScanType[name].revenue += c.totalAmount;
+                byScanType[name].paid++;
+            } else {
+                byScanType[name].pending++;
+            }
+        });
 
         res.json({
             summary: {
@@ -132,10 +364,15 @@ const getRadiologyRevenue = async (req, res) => {
                 completedScans,
                 paidScans,
                 totalRevenue,
+                externalRevenue,
                 pendingRevenue,
+                pendingInsuranceRevenue,
+                pendingPatientRevenue,
+                pendingHMOAmount,
                 dateRange: { start, end }
             },
             byScanType,
+            externalDetails,
             orders: radOrders
         });
     } catch (error) {
@@ -159,47 +396,110 @@ const getPharmacyRevenue = async (req, res) => {
         })
             .populate('patient', 'name mrn')
             .populate('doctor', 'name')
-            .populate('charge')
+            .populate({
+                path: 'charge',
+                populate: [
+                    { path: 'receipt' },
+                    { path: 'addedBy', select: 'name role' }
+                ]
+            })
             .sort({ createdAt: -1 });
+
+        // --- NEW: Include Standalone Pharmacy Charges (POS sales) ---
+        const standaloneCharges = await EncounterCharge.find({
+            $or: [
+                { itemType: 'Pharmacy' },
+                { itemType: 'Drug', visit: { $exists: true } }, // Standalone drugs
+                { department: 'Pharmacy' }
+            ],
+            createdAt: { $gte: start, $lte: end }
+        })
+            .populate('patient', 'name mrn')
+            .populate('addedBy', 'name role')
+            .populate('receipt');
 
         const totalPrescriptions = prescriptions.length;
         const dispensedPrescriptions = prescriptions.filter(p => p.status === 'dispensed').length;
-        const paidPrescriptions = prescriptions.filter(p => p.charge?.status === 'paid').length;
 
-        const totalRevenue = prescriptions
+        // Combine revenue from prescriptions and standalone charges
+        const prescriptionRevenue = prescriptions
             .filter(p => p.charge?.status === 'paid')
             .reduce((sum, p) => sum + (p.charge?.totalAmount || 0), 0);
 
-        const pendingRevenue = prescriptions
+        const standaloneRevenue = standaloneCharges
+            .filter(c => c.status === 'paid')
+            .reduce((sum, c) => sum + (c.totalAmount || 0), 0);
+
+        const totalRevenue = prescriptionRevenue + standaloneRevenue;
+
+        // External Revenue is usually all standalone POS sales
+        const externalRevenue = standaloneRevenue;
+        const externalDetails = standaloneCharges
+            .filter(c => c.status === 'paid')
+            .map(c => ({
+                id: c._id,
+                createdAt: c.createdAt,
+                patient: c.patient || { name: 'Walk-in' },
+                testName: c.itemName || 'Drug',
+                amount: c.totalAmount || 0,
+                cashier: c.addedBy || { name: 'System', role: 'cashier' },
+                status: c.status || 'paid'
+            }))
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+        // Pending revenue from both
+        const pendingPrescriptionRevenue = prescriptions
             .filter(p => p.charge?.status === 'pending')
             .reduce((sum, p) => sum + (p.charge?.totalAmount || 0), 0);
 
-        // Group by drug
+        const pendingStandaloneRevenue = standaloneCharges
+            .filter(c => c.status === 'pending')
+            .reduce((sum, c) => sum + (c.totalAmount || 0), 0);
+
+        const pendingRevenue = pendingPrescriptionRevenue + pendingStandaloneRevenue;
+
+        // Group by drug from both sources
         const byDrug = {};
         prescriptions.forEach(prescription => {
             prescription.medicines.forEach(med => {
-                if (!byDrug[med.name]) {
-                    byDrug[med.name] = {
-                        count: 0,
-                        totalQuantity: 0
-                    };
-                }
+                if (!byDrug[med.name]) byDrug[med.name] = { count: 0, totalQuantity: 0 };
                 byDrug[med.name].count++;
                 byDrug[med.name].totalQuantity += (med.quantity || 1);
             });
         });
 
+        standaloneCharges.forEach(charge => {
+            const drugName = charge.itemName || 'Drug';
+            if (!byDrug[drugName]) byDrug[drugName] = { count: 0, totalQuantity: 0 };
+            byDrug[drugName].count++;
+            byDrug[drugName].totalQuantity += (charge.quantity || 1);
+        });
+
+        // Convert standalone charges to a Prescription-like format for frontend display compatibility
+        const virtualPrescriptions = standaloneCharges.map(c => ({
+            _id: c._id,
+            patient: c.patient,
+            status: 'dispensed',
+            createdAt: c.createdAt,
+            charge: c,
+            medicines: [{ name: c.itemName, quantity: c.quantity }],
+            doctor: { name: 'Direct Sale' },
+            isStandalonePOS: true
+        }));
+
         res.json({
             summary: {
-                totalPrescriptions,
-                dispensedPrescriptions,
-                paidPrescriptions,
+                totalPrescriptions: totalPrescriptions + standaloneCharges.length,
+                dispensedPrescriptions: dispensedPrescriptions + standaloneCharges.length,
+                paidPrescriptions: (prescriptions.filter(p => p.charge?.status === 'paid').length) + (standaloneCharges.filter(c => c.status === 'paid').length),
                 totalRevenue,
+                externalRevenue,
                 pendingRevenue,
                 dateRange: { start, end }
             },
             byDrug,
-            prescriptions
+            externalDetails,
+            prescriptions: [...prescriptions, ...virtualPrescriptions].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
         });
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -496,13 +796,7 @@ const getOverallRevenue = async (req, res) => {
         }
 
         // Group by department - use same revenue logic as totalRevenue
-        const byDepartment = {
-            lab: { revenue: 0, count: 0 },
-            radiology: { revenue: 0, count: 0 },
-            pharmacy: { revenue: 0, count: 0 },
-            consultation: { revenue: 0, count: 0 },
-            other: { revenue: 0, count: 0 }
-        };
+        const byDepartment = {};
 
         // Create a set of encounter IDs with paid claims for quick lookup
         const paidClaimEncounterSet = new Set();
@@ -524,53 +818,90 @@ const getOverallRevenue = async (req, res) => {
         }
 
         paidCharges.forEach(charge => {
-            const type = charge.charge?.type || 'other';
-            const dept = type === 'drugs' ? 'pharmacy' : type;
+            let dept = 'other';
+            const type = charge.charge?.type;
+            const itemType = charge.itemType;
+            const department = charge.department;
 
-            if (byDepartment[dept]) {
-                byDepartment[dept].count++;
-
-                // Calculate revenue based on payment method
-                let chargeRevenue = 0;
-                if (charge.receipt?.paymentMethod === 'insurance') {
-                    // Insurance: add patient portion (if any)
-                    chargeRevenue += (charge.patientPortion || 0);
-
-                    // Insurance: add HMO portion only if claim is paid
-                    const encId = (charge.encounter?._id || charge.encounter)?.toString();
-                    if (encId && paidClaimEncounterSet.has(encId)) {
-                        chargeRevenue += (charge.hmoPortion || 0);
-                    }
-                } else if (charge.receipt) {
-                    // Non-insurance: add full amount
-                    chargeRevenue = charge.totalAmount;
-                }
-
-                byDepartment[dept].revenue += chargeRevenue;
-            } else {
-                byDepartment.other.count++;
-
-                // Same logic for 'other' department
-                let chargeRevenue = 0;
-                if (charge.receipt?.paymentMethod === 'insurance') {
-                    chargeRevenue += (charge.patientPortion || 0);
-                    const encId = (charge.encounter?._id || charge.encounter)?.toString();
-                    if (encId && paidClaimEncounterSet.has(encId)) {
-                        chargeRevenue += (charge.hmoPortion || 0);
-                    }
-                } else if (charge.receipt) {
-                    chargeRevenue = charge.totalAmount;
-                }
-
-                byDepartment.other.revenue += chargeRevenue;
+            if (type === 'drugs' || itemType === 'Pharmacy' || itemType === 'Drug' || department === 'Pharmacy') {
+                dept = 'pharmacy';
+            } else if (type) {
+                dept = type;
+            } else if (itemType) {
+                dept = itemType.toLowerCase();
+            } else if (department) {
+                dept = department.toLowerCase();
             }
+
+            if (!byDepartment[dept]) {
+                byDepartment[dept] = { revenue: 0, count: 0 };
+            }
+
+            byDepartment[dept].count++;
+
+            // Calculate revenue based on payment method
+            let chargeRevenue = 0;
+            if (charge.receipt?.paymentMethod === 'insurance') {
+                // Insurance: add patient portion (if any)
+                chargeRevenue += (charge.patientPortion || 0);
+
+                // Insurance: add HMO portion only if claim is paid
+                const encId = (charge.encounter?._id || charge.encounter)?.toString();
+                if (encId && paidClaimEncounterSet.has(encId)) {
+                    chargeRevenue += (charge.hmoPortion || 0);
+                }
+            } else if (charge.receipt) {
+                // Non-insurance: add full amount
+                chargeRevenue = charge.totalAmount;
+            }
+
+            byDepartment[dept].revenue += chargeRevenue;
         });
+
+        // --- NEW: Include Family Registration Receipts ---
+        const familyReceipts = await Receipt.find({
+            familyFile: { $exists: true },
+            createdAt: { $gte: start, $lte: end }
+        });
+
+        if (familyReceipts.length > 0) {
+            if (!byDepartment['family']) {
+                byDepartment['family'] = { revenue: 0, count: 0 };
+            }
+
+            familyReceipts.forEach(r => {
+                byDepartment['family'].count++;
+                byDepartment['family'].revenue += r.amountPaid;
+            });
+        }
+
+        const totalFamilyRevenue = familyReceipts.reduce((sum, r) => sum + r.amountPaid, 0);
+
+        // --- NEW: Include Retainership Registration Receipts ---
+        const retainershipReceipts = await Receipt.find({
+            hmo: { $exists: true },
+            createdAt: { $gte: start, $lte: end }
+        });
+
+        if (retainershipReceipts.length > 0) {
+            if (!byDepartment['retainership']) {
+                byDepartment['retainership'] = { revenue: 0, count: 0 };
+            }
+
+            retainershipReceipts.forEach(r => {
+                byDepartment['retainership'].count++;
+                byDepartment['retainership'].revenue += r.amountPaid;
+            });
+        }
+
+        const totalRetainershipRevenue = retainershipReceipts.reduce((sum, r) => sum + r.amountPaid, 0);
+        const finalTotalRevenue = totalRevenue + totalFamilyRevenue + totalRetainershipRevenue;
 
         res.json({
             summary: {
                 totalCharges,
                 paidCharges: paidChargesCount,
-                totalRevenue,
+                totalRevenue: finalTotalRevenue,
                 pendingRevenue,
                 pendingInsuranceRevenue,
                 pendingPatientRevenue,
@@ -772,26 +1103,106 @@ const getDashboardStats = async (req, res) => {
         const patientsThisWeek = await Visit.countDocuments({ createdAt: { $gte: thisWeek } });
         const patientsThisMonth = await Visit.countDocuments({ createdAt: { $gte: thisMonth } });
 
-        // Revenue
-        const revenueToday = await EncounterCharge.aggregate([
-            { $match: { createdAt: { $gte: today }, status: 'paid' } },
-            { $group: { _id: null, total: { $sum: '$totalAmount' } } }
-        ]);
+        // --- REVENUE CALCULATION (CASH BASIS) ---
+        // Fetch all paid charges for refined calculation
+        const allPaidCharges = await EncounterCharge.find({ status: 'paid' })
+            .populate('charge', 'type name')
+            .populate('receipt');
 
-        const revenueThisWeek = await EncounterCharge.aggregate([
-            { $match: { createdAt: { $gte: thisWeek }, status: 'paid' } },
-            { $group: { _id: null, total: { $sum: '$totalAmount' } } }
-        ]);
+        // Fetch all paid claims to identify collected HMO portions
+        const Claim = require('../models/claimModel');
+        const paidClaims = await Claim.find({ status: 'paid' });
+        const paidClaimsMap = new Map(paidClaims.map(c => [c.encounter.toString(), c]));
 
-        const revenueThisMonth = await EncounterCharge.aggregate([
-            { $match: { createdAt: { $gte: thisMonth }, status: 'paid' } },
-            { $group: { _id: null, total: { $sum: '$totalAmount' } } }
-        ]);
+        // Fetch other revenue sources
+        const familyReceipts = await Receipt.find({ familyFile: { $exists: true } });
+        const retainershipReceipts = await Receipt.find({ hmo: { $exists: true } });
 
-        const totalRevenue = await EncounterCharge.aggregate([
-            { $match: { status: 'paid' } },
-            { $group: { _id: null, total: { $sum: '$totalAmount' } } }
-        ]);
+        // Helper to check if a date is within a range
+        const isToday = (d) => d >= today;
+        const isThisWeek = (d) => d >= thisWeek;
+        const isThisMonth = (d) => d >= thisMonth;
+
+        // Process each charge to calculate its "collected" revenue
+        const processedCharges = allPaidCharges.map(charge => {
+            let collectedRevenue = 0;
+            if (charge.receipt?.paymentMethod === 'insurance') {
+                // Insurance: add patient portion
+                collectedRevenue += (charge.patientPortion || 0);
+
+                // Insurance: add HMO portion ONLY if claim is paid
+                const encId = (charge.encounter?._id || charge.encounter)?.toString();
+                const claim = paidClaimsMap.get(encId);
+                if (claim && claim.paidDate && new Date(charge.createdAt) <= new Date(claim.paidDate)) {
+                    collectedRevenue += (charge.hmoPortion || 0);
+                }
+            } else if (charge.receipt) {
+                // Non-insurance: add full amount
+                collectedRevenue = charge.totalAmount;
+            }
+
+            return {
+                ...charge.toObject(),
+                collectedRevenue,
+                date: new Date(charge.createdAt)
+            };
+        });
+
+        // Sum up totals
+        const revenue = {
+            today: 0,
+            thisWeek: 0,
+            thisMonth: 0,
+            total: 0
+        };
+
+        const revenueByDept = {};
+
+        processedCharges.forEach(c => {
+            const rev = c.collectedRevenue;
+            const date = c.date;
+
+            revenue.total += rev;
+            if (isToday(date)) revenue.today += rev;
+            if (isThisWeek(date)) revenue.thisWeek += rev;
+            if (isThisMonth(date)) revenue.thisMonth += rev;
+
+            // Dept breakdown (All Time)
+            const type = c.charge?.type || 'other';
+            const dept = type === 'drugs' ? 'pharmacy' : type;
+            if (!revenueByDept[dept]) revenueByDept[dept] = 0;
+            revenueByDept[dept] += rev;
+        });
+
+        // Add Family & Retainership revenue
+        familyReceipts.forEach(r => {
+            const rev = r.amountPaid;
+            const date = new Date(r.createdAt);
+            revenue.total += rev;
+            if (isToday(date)) revenue.today += rev;
+            if (isThisWeek(date)) revenue.thisWeek += rev;
+            if (isThisMonth(date)) revenue.thisMonth += rev;
+
+            if (!revenueByDept['family']) revenueByDept['family'] = 0;
+            revenueByDept['family'] += rev;
+        });
+
+        retainershipReceipts.forEach(r => {
+            const rev = r.amountPaid;
+            const date = new Date(r.createdAt);
+            revenue.total += rev;
+            if (isToday(date)) revenue.today += rev;
+            if (isThisWeek(date)) revenue.thisWeek += rev;
+            if (isThisMonth(date)) revenue.thisMonth += rev;
+
+            if (!revenueByDept['retainership']) revenueByDept['retainership'] = 0;
+            revenueByDept['retainership'] += rev;
+        });
+
+        const revenueByDepartmentArray = Object.entries(revenueByDept).map(([name, value]) => ({
+            name: name.charAt(0).toUpperCase() + name.slice(1),
+            revenue: value
+        }));
 
         // Active encounters
         const activeEncounters = await Visit.countDocuments({ encounterStatus: 'active' });
@@ -816,25 +1227,6 @@ const getDashboardStats = async (req, res) => {
                 }
             }
         ]);
-
-        // Revenue by Department (All Time)
-        const charges = await EncounterCharge.find({ status: 'paid' }).populate('charge', 'type');
-        const revenueByDepartment = {};
-
-        charges.forEach(c => {
-            const type = c.charge?.type || 'other';
-            const dept = type === 'drugs' ? 'pharmacy' : type; // Normalize 'drugs' to 'pharmacy'
-
-            if (!revenueByDepartment[dept]) {
-                revenueByDepartment[dept] = 0;
-            }
-            revenueByDepartment[dept] += c.totalAmount;
-        });
-
-        const revenueByDepartmentArray = Object.entries(revenueByDepartment).map(([name, value]) => ({
-            name: name.charAt(0).toUpperCase() + name.slice(1),
-            revenue: value
-        }));
 
         // Calculate Pending HMO Amount correctly
         // 1. Pending charges (not yet paid by patient or HMO)
@@ -892,10 +1284,10 @@ const getDashboardStats = async (req, res) => {
                 thisMonth: patientsThisMonth
             },
             revenue: {
-                today: revenueToday[0]?.total || 0,
-                thisWeek: revenueThisWeek[0]?.total || 0,
-                thisMonth: revenueThisMonth[0]?.total || 0,
-                total: totalRevenue[0]?.total || 0
+                today: revenue.today,
+                thisWeek: revenue.thisWeek,
+                thisMonth: revenue.thisMonth,
+                total: revenue.total
             },
             counts: {
                 users: totalUsers,
@@ -1095,6 +1487,205 @@ const getClinicalReport = async (req, res) => {
     }
 };
 
+// @desc    Get theatre revenue report by date range
+// @route   GET /api/reports/theatre-revenue?startDate=&endDate=
+// @access  Private (Admin)
+const getTheatreRevenue = async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+        const start = startDate ? new Date(startDate) : new Date(0);
+        const end = endDate ? new Date(endDate) : new Date();
+        end.setHours(23, 59, 59, 999);
+
+        const allCharges = await EncounterCharge.find({
+            createdAt: { $gte: start, $lte: end }
+        })
+            .populate('charge')
+            .populate('patient', 'name mrn')
+            .populate('encounter')
+            .populate('receipt')
+            .sort({ createdAt: -1 });
+
+        const theatreCharges = allCharges.filter(c => c.charge?.type === 'theatre');
+        const totalCharges = theatreCharges.length;
+        const paidChargesCount = theatreCharges.filter(c => c.status === 'paid').length;
+
+        const paidCharges = theatreCharges.filter(c => c.status === 'paid');
+        const insuranceCharges = paidCharges.filter(c => c.receipt?.paymentMethod === 'insurance');
+        const nonInsuranceCharges = paidCharges.filter(c => c.receipt && c.receipt.paymentMethod !== 'insurance');
+
+        const nonInsuranceRevenue = nonInsuranceCharges.reduce((sum, c) => sum + c.totalAmount, 0);
+        const insurancePatientRevenue = insuranceCharges
+            .filter(c => (c.patientPortion || 0) > 0)
+            .reduce((sum, c) => sum + c.patientPortion, 0);
+
+        const totalRevenue = nonInsuranceRevenue + insurancePatientRevenue; // simplified for theatre
+
+        res.json({
+            summary: {
+                totalCharges,
+                paidCharges: paidChargesCount,
+                totalRevenue,
+                pendingRevenue: theatreCharges.filter(c => c.status === 'pending').reduce((sum, c) => sum + c.totalAmount, 0),
+                dateRange: { start, end }
+            },
+            charges: theatreCharges
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Get family registration revenue report
+// @route   GET /api/reports/family-revenue?startDate=&endDate=
+// @access  Private (Admin)
+const getFamilyRevenue = async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+        const start = startDate ? new Date(startDate) : new Date(0);
+        const end = endDate ? new Date(endDate) : new Date();
+        end.setHours(23, 59, 59, 999);
+
+        const familyReceipts = await Receipt.find({
+            familyFile: { $exists: true },
+            createdAt: { $gte: start, $lte: end }
+        }).populate({ path: 'familyFile', model: 'FamilyFile' });
+
+        const totalRevenue = familyReceipts.reduce((sum, r) => sum + r.amountPaid, 0);
+
+        res.json({
+            summary: {
+                totalCharges: familyReceipts.length,
+                paidCharges: familyReceipts.length,
+                totalRevenue,
+                pendingRevenue: 0,
+                dateRange: { start, end }
+            },
+            charges: familyReceipts.map(r => ({
+                _id: r._id,
+                createdAt: r.createdAt,
+                amountPaid: r.amountPaid,
+                totalAmount: r.amountPaid,
+                status: 'paid',
+                paymentMethod: r.paymentMethod,
+                receiptNumber: r.receiptNumber,
+                patient: { name: r.familyFile?.familyName || 'Family File' },
+                charge: { name: 'Family Registration', type: 'family' }
+            }))
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Get retainership registration revenue report
+// @route   GET /api/reports/retainership-revenue?startDate=&endDate=
+// @access  Private (Admin)
+const getRetainershipRevenue = async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+        const start = startDate ? new Date(startDate) : new Date(0);
+        const end = endDate ? new Date(endDate) : new Date();
+        end.setHours(23, 59, 59, 999);
+
+        const retainershipReceipts = await Receipt.find({
+            hmo: { $exists: true },
+            createdAt: { $gte: start, $lte: end }
+        }).populate({ path: 'hmo', model: 'HMO' });
+
+        const totalRevenue = retainershipReceipts.reduce((sum, r) => sum + r.amountPaid, 0);
+
+        res.json({
+            summary: {
+                totalCharges: retainershipReceipts.length,
+                paidCharges: retainershipReceipts.length,
+                totalRevenue,
+                pendingRevenue: 0,
+                dateRange: { start, end }
+            },
+            charges: retainershipReceipts.map(r => ({
+                _id: r._id,
+                createdAt: r.createdAt,
+                amountPaid: r.amountPaid,
+                totalAmount: r.amountPaid,
+                status: 'paid',
+                paymentMethod: r.paymentMethod,
+                receiptNumber: r.receiptNumber,
+                patient: { name: r.hmo?.name || 'Retainership Entity' },
+                charge: { name: 'Retainership Registration', type: 'retainership' }
+            }))
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+
+
+// @desc    Get detailed visit history report
+// @route   GET /api/reports/visit-report?startDate=&endDate=&searchTerm=
+// @access  Private (Admin)
+const getVisitReport = async (req, res) => {
+    try {
+        const { startDate, endDate, searchTerm } = req.query;
+
+        let query = {};
+        if (startDate || endDate) {
+            query.createdAt = {};
+            if (startDate) query.createdAt.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                query.createdAt.$lte = end;
+            }
+        }
+
+        let visits = await Visit.find(query)
+            .populate('patient')
+            .populate('doctor', 'name role')
+            .populate('consultingPhysician', 'name role')
+            .populate('clinic', 'name')
+            .populate('ward', 'name')
+            .sort({ createdAt: -1 });
+
+        if (searchTerm) {
+            const regex = new RegExp(searchTerm, 'i');
+            visits = visits.filter(v =>
+                (v.patient && (regex.test(v.patient.name) || regex.test(v.patient.mrn))) ||
+                regex.test(v._id.toString())
+            );
+        }
+
+        const visitIds = visits.map(v => v._id);
+
+        // Fetch related data in bulk
+        const [vitals, labs, rads, scripts] = await Promise.all([
+            VitalSign.find({ visit: { $in: visitIds } }).populate('nurse', 'name'),
+            LabOrder.find({ visit: { $in: visitIds } }).populate('signedBy', 'name').populate('approvedBy', 'name'),
+            RadiologyOrder.find({ visit: { $in: visitIds } }).populate('signedBy', 'name'),
+            Prescription.find({ visit: { $in: visitIds } }).populate('dispensedBy', 'name').populate('doctor', 'name')
+        ]);
+
+        // Map related data to visits
+        const consolidatedData = visits.map(v => {
+            const visitIdStr = v._id.toString();
+            return {
+                ...v.toObject(),
+                vitalSigns: vitals.filter(s => s.visit?.toString() === visitIdStr),
+                labOrders: labs.filter(l => l.visit?.toString() === visitIdStr),
+                radiologyOrders: rads.filter(r => r.visit?.toString() === visitIdStr),
+                prescriptions: scripts.filter(p => p.visit?.toString() === visitIdStr)
+            };
+        });
+
+        res.json(consolidatedData);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+
 module.exports = {
     getLabRevenue,
     getRadiologyRevenue,
@@ -1103,5 +1694,9 @@ module.exports = {
     getNurseTriageRevenue,
     getOverallRevenue,
     getDashboardStats,
-    getClinicalReport
+    getClinicalReport,
+    getTheatreRevenue,
+    getFamilyRevenue,
+    getRetainershipRevenue,
+    getVisitReport
 };

@@ -3,7 +3,7 @@ import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import { AppContext } from '../context/AppContext';
 import Layout from '../components/Layout';
-import { FaXRay, FaSearch, FaCheckCircle, FaUpload, FaSave, FaImage, FaEdit, FaTimes, FaTrash } from 'react-icons/fa';
+import { FaXRay, FaSearch, FaCheckCircle, FaUpload, FaSave, FaImage, FaEdit, FaTimes, FaTrash, FaChevronUp, FaChevronDown, FaFileAlt } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 
 import LoadingOverlay from '../components/loadingOverlay';
@@ -12,7 +12,6 @@ const RadiologyDashboard = () => {
     const [loading, setLoading] = useState(false);
     const [radiologyOrders, setRadiologyOrders] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
-    const [completedSearchTerm, setCompletedSearchTerm] = useState('');
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [receiptNumber, setReceiptNumber] = useState('');
     const [receiptValidated, setReceiptValidated] = useState(false);
@@ -27,6 +26,7 @@ const RadiologyDashboard = () => {
     const [editResultModal, setEditResultModal] = useState(null);
     const [editNotes, setEditNotes] = useState('');
     const [editImageUrl, setEditImageUrl] = useState('');
+    const [expandedEncounter, setExpandedEncounter] = useState(null);
     const resultRef = useRef();
 
     useEffect(() => {
@@ -61,11 +61,7 @@ const RadiologyDashboard = () => {
             fetchRadiologyOrders();
             return;
         }
-        const filtered = radiologyOrders.filter(order =>
-            order.patient?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            order.patient?.mrn?.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-        setRadiologyOrders(filtered);
+        // Grouping logic handles filtering now
     };
 
     const handleSelectOrder = (order) => {
@@ -217,10 +213,12 @@ const RadiologyDashboard = () => {
                         <div>
                             <p><strong>Patient Name:</strong> ${order.patient?.name || 'N/A'}</p>
                             <p><strong>MRN:</strong> ${order.patient?.mrn || 'N/A'}</p>
+                            <p><strong>Age:</strong> ${order.patient?.age || 'N/A'}</p>
                         </div>
                         <div>
                             <p><strong>Imaging Type:</strong> ${order.scanType}</p>
                             <p><strong>Date Ordered:</strong> ${new Date(order.createdAt).toLocaleDateString()}</p>
+                            <p><strong>Gender:</strong> ${order.patient?.gender || 'N/A'}</p>
                         </div>
                     </div>
 
@@ -274,22 +272,44 @@ const RadiologyDashboard = () => {
         }, 500);
     };
 
-    const pendingOrders = radiologyOrders
-        .filter(o => o.status === 'pending')
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const pendingOrders = radiologyOrders.filter(o => o.status === 'pending');
 
-    const completedOrders = radiologyOrders
-        .filter(o => o.status === 'completed')
-        .filter(o => {
-            if (!completedSearchTerm) return true;
-            const searchLower = completedSearchTerm.toLowerCase();
-            return (
-                o.scanType?.toLowerCase().includes(searchLower) ||
-                o.patient?.name?.toLowerCase().includes(searchLower) ||
-                o.patient?.mrn?.toLowerCase().includes(searchLower)
-            );
-        })
-        .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    // Group orders for display
+    const groupedEncounters = Object.values(
+        radiologyOrders
+            .filter(order => {
+                if (!searchTerm) return true;
+                const s = searchTerm.toLowerCase();
+                return (
+                    (order.patient?.name?.toLowerCase() || '').includes(s) ||
+                    (String(order.patient?.mrn || '').toLowerCase()).includes(s) ||
+                    (order.patient?.contact?.toLowerCase() || '').includes(s) ||
+                    (order.scanType?.toLowerCase() || '').includes(s)
+                );
+            })
+            .reduce((acc, order) => {
+                const visitId = order.visit?._id || 'external-' + (order.patient?._id || 'unknown');
+                if (!acc[visitId]) {
+                    acc[visitId] = {
+                        id: visitId,
+                        patient: order.patient,
+                        visit: order.visit,
+                        orders: []
+                    };
+                }
+                acc[visitId].orders.push(order);
+                return acc;
+            }, {})
+    ).sort((a, b) => {
+        const getLatest = (group) => {
+            const orderDates = group.orders.map(o => new Date(o.createdAt).getTime());
+            const visitDate = group.visit?.createdAt ? new Date(group.visit.createdAt).getTime() : 0;
+            return Math.max(...orderDates, visitDate);
+        };
+        return getLatest(b) - getLatest(a);
+    });
+
+    const completedOrders = radiologyOrders.filter(o => o.status === 'completed');
 
     return (
         <Layout>
@@ -320,7 +340,7 @@ const RadiologyDashboard = () => {
                 <div className="flex gap-2">
                     <input
                         type="text"
-                        placeholder="Search by Patient Name or MRN..."
+                        placeholder="Search by Patient Name, MRN or Phone..."
                         className="flex-1 border p-2 rounded"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -335,34 +355,142 @@ const RadiologyDashboard = () => {
                 </div>
             </div>
 
-            {/* Pending Orders */}
+            {/* Imaging Encounters & Orders */}
             {!selectedOrder && (
-                <div className="bg-white p-6 rounded shadow mb-6">
-                    <h3 className="text-xl font-bold mb-4">Pending Imaging Studies</h3>
-                    {pendingOrders.length === 0 ? (
-                        <p className="text-gray-500">No pending studies</p>
+                <div className="bg-white rounded shadow p-6 mb-6">
+                    <h3 className="text-xl font-bold mb-6 text-gray-800 border-b pb-4">
+                        Patient Encounters & Imaging Orders
+                    </h3>
+                    {groupedEncounters.length === 0 ? (
+                        <div className="text-center py-12 bg-gray-50 rounded border-2 border-dashed border-gray-200">
+                            <FaXRay className="mx-auto text-gray-300 mb-4" size={48} />
+                            <p className="text-gray-500 text-lg">No imaging orders found matching your search</p>
+                        </div>
                     ) : (
-                        <div className="space-y-2">
-                            {pendingOrders.map(order => (
-                                <div
-                                    key={order._id}
-                                    className="border p-4 rounded hover:bg-gray-50 cursor-pointer"
-                                    onClick={() => handleSelectOrder(order)}
-                                >
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className="font-bold text-lg">{order.scanType}</p>
-                                            <p className="text-gray-600">
-                                                Patient: {order.patient?.name} (MRN: {order.patient?.mrn})
-                                            </p>
-                                            <p className="text-sm text-gray-500">
-                                                Ordered: {new Date(order.createdAt).toLocaleString()}
-                                            </p>
+                        <div className="space-y-4">
+                            {groupedEncounters.map(group => (
+                                <div key={group.id} className="bg-white rounded shadow overflow-hidden border border-indigo-100">
+                                    {/* Encounter Header */}
+                                    <div
+                                        className="p-4 cursor-pointer hover:bg-indigo-50 flex justify-between items-center transition-colors"
+                                        onClick={() => setExpandedEncounter(expandedEncounter === group.id ? null : group.id)}
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className="bg-indigo-100 p-3 rounded-full text-indigo-600">
+                                                <FaXRay size={20} />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-gray-800 text-lg">
+                                                    {group.patient?.name || 'Unknown Patient'}
+                                                </h4>
+                                                <p className="text-sm text-gray-600">
+                                                    {group.patient?.mrn && (
+                                                        <>
+                                                            MRN: <span className="font-semibold">{group.patient.mrn}</span>
+                                                            <span className="mx-2 text-gray-300">|</span>
+                                                        </>
+                                                    )}
+                                                    {group.patient?.contact && (
+                                                        <>
+                                                            Phone: <span className="font-semibold">{group.patient.contact}</span>
+                                                            <span className="mx-2 text-gray-300">|</span>
+                                                        </>
+                                                    )}
+                                                    {group.visit ? (
+                                                        <>
+                                                            <span className="text-indigo-600 font-medium">{group.visit.type}</span>
+                                                            <span className="mx-2 text-gray-300">•</span>
+                                                            {new Date(group.visit.createdAt).toLocaleDateString()}
+                                                        </>
+                                                    ) : (
+                                                        <span className="text-blue-600 font-medium italic flex items-center gap-1">
+                                                            Radiology Direct / Walk-in
+                                                        </span>
+                                                    )}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded text-sm">
-                                            {order.status}
-                                        </span>
+                                        <div className="flex items-center gap-4">
+                                            <div className="text-right mr-4">
+                                                <span className="bg-indigo-600 text-white px-3 py-1 rounded-full text-xs font-bold">
+                                                    {group.orders.length} {group.orders.length === 1 ? 'Study' : 'Studies'}
+                                                </span>
+                                                <div className="flex flex-col items-end mt-1">
+                                                    {group.orders.some(o => o.status === 'pending') && (
+                                                        <p className="text-[10px] text-amber-500 uppercase tracking-wider font-bold">
+                                                            {group.orders.filter(o => o.status === 'pending').length} Pending
+                                                        </p>
+                                                    )}
+                                                    {group.orders.some(o => o.status === 'completed') && (
+                                                        <p className="text-[10px] text-green-500 uppercase tracking-wider font-bold">
+                                                            {group.orders.filter(o => o.status === 'completed').length} Completed
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {expandedEncounter === group.id ? <FaChevronUp className="text-gray-400" /> : <FaChevronDown className="text-gray-400" />}
+                                        </div>
                                     </div>
+
+                                    {/* Studies List (Expanded) */}
+                                    {expandedEncounter === group.id && (
+                                        <div className="bg-gray-50 border-t divide-y">
+                                            {group.orders.map(order => (
+                                                <div
+                                                    key={order._id}
+                                                    className={`p-4 flex justify-between items-center ${order.status === 'completed'
+                                                        ? 'bg-gray-50 opacity-75'
+                                                        : 'bg-white'
+                                                        }`}
+                                                >
+                                                    <div className="flex-1 text-sm">
+                                                        <p className="font-bold text-indigo-900 mb-1">{order.scanType}</p>
+                                                        <p className="text-xs text-gray-500">Ordered: {new Date(order.createdAt).toLocaleString()}</p>
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${order.status === 'completed'
+                                                            ? 'bg-green-100 text-green-800'
+                                                            : 'bg-yellow-100 text-yellow-800'
+                                                            }`}>
+                                                            {order.status}
+                                                        </span>
+                                                        <div className="flex gap-1">
+                                                            {order.status === 'completed' ? (
+                                                                <>
+                                                                    <button
+                                                                        onClick={() => setViewResultModal(order)}
+                                                                        className="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
+                                                                        title="View Study/Report"
+                                                                    >
+                                                                        <FaFileAlt size={12} />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setEditResultModal(order);
+                                                                            setEditNotes(order.report || order.notes || '');
+                                                                            setEditImageUrl(order.resultImage || '');
+                                                                        }}
+                                                                        className="p-1.5 bg-orange-50 text-orange-600 rounded hover:bg-orange-100 transition-colors"
+                                                                        title="Edit"
+                                                                    >
+                                                                        <FaEdit size={12} />
+                                                                    </button>
+                                                                </>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => handleSelectOrder(order)}
+                                                                    className="p-1.5 bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-100 transition-colors"
+                                                                    title="Open Study"
+                                                                >
+                                                                    <FaEdit size={12} />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -626,84 +754,6 @@ Normal chest X-ray. No acute cardiopulmonary disease.
                 </div>
             )}
 
-            {/* Completed Studies */}
-            {!selectedOrder && (
-                <div className="bg-white p-6 rounded shadow">
-                    <h3 className="text-xl font-bold mb-4">Completed Studies</h3>
-
-                    {/* Search Bar for Completed Studies */}
-                    <div className="mb-4">
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                placeholder="Search by Scan Type, Patient Name, or MRN..."
-                                className="flex-1 border p-2 rounded"
-                                value={completedSearchTerm}
-                                onChange={(e) => setCompletedSearchTerm(e.target.value)}
-                            />
-                            {completedSearchTerm && (
-                                <button
-                                    onClick={() => setCompletedSearchTerm('')}
-                                    className="bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-500"
-                                >
-                                    Clear
-                                </button>
-                            )}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                            {completedSearchTerm ? `Showing ${completedOrders.length} result(s)` : `Showing ${Math.min(5, completedOrders.length)} of ${completedOrders.length} completed studie(s)`}
-                        </p>
-                    </div>
-
-                    {completedOrders.length === 0 ? (
-                        <p className="text-gray-500 text-center py-4">No completed studies found</p>
-                    ) : (
-                        <div className="space-y-2">
-                            {(completedSearchTerm ? completedOrders : completedOrders.slice(0, 5)).map(order => (
-                                <div key={order._id} className="border p-3 rounded bg-green-50">
-                                    <div className="flex justify-between items-start">
-                                        <div className="flex-1">
-                                            <p className="font-semibold">{order.scanType}</p>
-                                            <p className="text-sm text-gray-600">
-                                                Patient: {order.patient?.name} | Completed: {new Date(order.updatedAt).toLocaleString()}
-                                            </p>
-                                            {order.signedBy && (
-                                                <p className="text-xs text-blue-700 mt-1">
-                                                    Signed by: {order.signedBy.name}
-                                                </p>
-                                            )}
-                                        </div>
-                                        <div className="flex gap-2 items-center">
-                                            <button
-                                                onClick={() => setViewResultModal(order)}
-                                                className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm flex items-center gap-1"
-                                            >
-                                                <FaSearch /> View
-                                            </button>
-                                            <button
-                                                onClick={() => handleUniversalPrint(order)}
-                                                className="bg-purple-600 text-white px-3 py-1 rounded hover:bg-purple-700 text-sm flex items-center gap-1"
-                                            >
-                                                <FaSave /> Print
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    setEditResultModal(order);
-                                                    setEditNotes(order.report || '');
-                                                    setEditImageUrl(order.resultImage || '');
-                                                }}
-                                                className="bg-orange-600 text-white px-3 py-1 rounded hover:bg-orange-700 text-sm flex items-center gap-1"
-                                            >
-                                                <FaEdit /> Edit
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
 
             {/* View Result Modal */}
             {viewResultModal && (
@@ -736,10 +786,12 @@ Normal chest X-ray. No acute cardiopulmonary disease.
                                 <div>
                                     <p><strong>Patient Name:</strong> {viewResultModal.patient?.name}</p>
                                     <p><strong>MRN:</strong> {viewResultModal.patient?.mrn}</p>
+                                    <p><strong>Age:</strong> {viewResultModal.patient?.age || 'N/A'}</p>
                                 </div>
                                 <div>
                                     <p><strong>Imaging Type:</strong> {viewResultModal.scanType}</p>
                                     <p><strong>Date Ordered:</strong> {new Date(viewResultModal.createdAt).toLocaleDateString()}</p>
+                                    <p><strong>Gender:</strong> {viewResultModal.patient?.gender || 'N/A'}</p>
                                 </div>
                             </div>
 

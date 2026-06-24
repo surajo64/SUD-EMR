@@ -15,8 +15,8 @@ const createPrescription = async (req, res) => {
     // Check permissions
     if (req.user.role === 'pharmacist') {
         const visit = await Visit.findById(visitId);
-        if (!visit || visit.type !== 'External Investigation') {
-            return res.status(403).json({ message: 'Pharmacists can only prescribe for External Investigations.' });
+        if (!visit || (visit.type !== 'External Investigation' && visit.type !== 'External Pharmacy')) {
+            return res.status(403).json({ message: 'Pharmacists can only prescribe for External Investigations and External Pharmacy.' });
         }
     } else if (req.user.role !== 'doctor') {
         return res.status(403).json({ message: 'Not authorized to create prescriptions.' });
@@ -67,7 +67,7 @@ const getPrescriptions = async (req, res) => {
 
     const prescriptions = await Prescription.find(filter)
         .populate('doctor', 'name')
-        .populate('patient', 'name age gender mrn')
+        .populate('patient', 'name age gender mrn provider')
         .populate('charge') // Populate full charge object to get status
         .populate('pharmacy', 'name');
     res.json(prescriptions);
@@ -88,7 +88,8 @@ const getPatientPrescriptions = async (req, res) => {
 const getPrescriptionsByVisit = async (req, res) => {
     const prescriptions = await Prescription.find({ visit: req.params.id })
         .populate('doctor', 'name')
-        .populate('charge') // Populate full charge object
+        .populate('patient', 'name age gender mrn provider')
+        .populate('charge')
         .populate('dispensedBy', 'name');
     res.json(prescriptions);
 };
@@ -133,6 +134,11 @@ const generatePrescriptionCharge = async (req, res) => {
         const medicine = prescription.medicines[0];
         if (!medicine) {
             return res.status(400).json({ message: 'No medicine found in prescription' });
+        }
+
+        // BLOCK: Prevent charging for drugs marked as Buy Outside
+        if (medicine.buyOutside) {
+            return res.status(400).json({ message: 'Cannot generate charge for a prescription marked for External Purchase (Buy Outside).' });
         }
 
         // Find existing charge definition for the drug
@@ -214,6 +220,9 @@ const generatePrescriptionCharge = async (req, res) => {
             patientPortion,
             hmoPortion,
             addedBy: req.user._id, // Pharmacist
+            itemType: 'drugs',
+            itemName: medicine.name,
+            department: 'Pharmacy',
             notes: `${medicine.name} - Qty: ${finalQuantity} (Verified by Pharmacy)`
         });
 
@@ -311,7 +320,17 @@ const dispenseWithInventory = async (req, res) => {
 
         // Process each medicine
         for (const med of medicines) {
-            const { name, quantityDispensed } = med;
+            const { name, quantityDispensed, buyOutside } = med;
+
+            // Skip inventory deduction for drugs marked as Buy Outside
+            if (buyOutside) {
+                inventoryUpdates.push({
+                    drug: name,
+                    deducted: 0,
+                    reason: 'External Purchase (Buy Outside) - No inventory deduction'
+                });
+                continue;
+            }
 
             // Find inventory items for this drug in the pharmacist's assigned pharmacy
             // If admin or main pharmacy, maybe allow selection? For now, assume strict assignment.

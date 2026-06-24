@@ -59,8 +59,11 @@ const updateCharge = async (req, res) => {
 
         if (charge) {
             charge.name = req.body.name || charge.name;
+            charge.type = req.body.type || charge.type;
             charge.basePrice = req.body.basePrice !== undefined ? req.body.basePrice : charge.basePrice;
-            charge.description = req.body.description || charge.description;
+            charge.department = req.body.department !== undefined ? req.body.department : charge.department;
+            charge.code = req.body.code !== undefined ? req.body.code : charge.code;
+            charge.description = req.body.description !== undefined ? req.body.description : charge.description;
             charge.active = req.body.active !== undefined ? req.body.active : charge.active;
             charge.resultTemplate = req.body.resultTemplate !== undefined ? req.body.resultTemplate : charge.resultTemplate;
 

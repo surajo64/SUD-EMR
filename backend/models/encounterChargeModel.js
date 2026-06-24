@@ -14,6 +14,7 @@ const encounterChargeSchema = mongoose.Schema({
     itemType: { type: String }, // e.g., 'Service', 'Drug', 'Lab', 'Daily Bed Fee'
     itemName: { type: String }, // Snapshot of the name
     receipt: { type: mongoose.Schema.Types.ObjectId, ref: 'Receipt' }, // Linked after payment
+    department: { type: String }, // e.g., 'Pharmacy', 'Lab', 'Radiology'
     notes: { type: String },
 }, {
     timestamps: true,

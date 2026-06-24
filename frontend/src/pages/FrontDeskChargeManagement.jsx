@@ -215,6 +215,8 @@ const FrontDeskChargeManagement = () => {
         consultation: 'Consultation',
         card: 'Hospital Card',
         lab: 'Lab Investigation',
+        family: 'Family File Registration',
+        retainership: 'Retainership Registration',
         radiology: 'Radiology Investigation',
         drugs: 'Drug Purchase',
         nursing: 'Nursing Service',
@@ -259,21 +261,34 @@ const FrontDeskChargeManagement = () => {
                     </h2>
                     <p className="text-gray-600 text-sm">Manage charges available for encounter creation at the front desk</p>
                 </div>
-                {(user?.role === 'admin' || user?.role === 'super_admin') && (
+                {(user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'readonly_admin' || user?.role === 'receptionist') && (
                     <div className="flex gap-2 flex-wrap">
-                        <button onClick={handleDownloadTemplate} className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 flex items-center gap-2 text-sm">
-                            <FaDownload /> Template
-                        </button>
-                        <label className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 flex items-center gap-2 cursor-pointer text-sm">
-                            <FaUpload /> Import
-                            <input type="file" accept=".xlsx,.xls" onChange={handleImportExcel} className="hidden" />
-                        </label>
+                        {user?.role !== 'readonly_admin' && user?.role !== 'receptionist' && (
+                            <>
+                                <button onClick={handleDownloadTemplate} className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 flex items-center gap-2 text-sm">
+                                    <FaDownload /> Template
+                                </button>
+                                <label className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 flex items-center gap-2 cursor-pointer text-sm">
+                                    <FaUpload /> Import
+                                    <input type="file" accept=".xlsx,.xls" onChange={handleImportExcel} className="hidden" />
+                                </label>
+                            </>
+                        )}
                         <button onClick={handleExportToExcel} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center gap-2 text-sm">
                             <FaDownload /> Export
                         </button>
-                        <button onClick={() => setShowForm(!showForm)} className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 flex items-center gap-2">
-                            {showForm ? <><FaTimes /> Cancel</> : <><FaPlus /> Add New Charge</>}
-                        </button>
+                        {user?.role !== 'readonly_admin' && user?.role !== 'receptionist' && (
+                            <button onClick={() => setShowForm(!showForm)} className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 flex items-center gap-2">
+                                {showForm ? <><FaTimes /> Cancel</> : <><FaPlus /> Add New Charge</>}
+                            </button>
+                        )}
+                        {(user?.role === 'readonly_admin' || user?.role === 'receptionist') && (
+                            <div className="flex gap-2">
+                                <span className="text-gray-500 bg-gray-100 px-3 py-1 rounded text-sm font-medium border border-gray-200">
+                                    Read Only Access
+                                </span>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -316,6 +331,8 @@ const FrontDeskChargeManagement = () => {
                                     <option value="radiology">Radiology Investigation</option>
                                     <option value="drugs">Drug Purchase</option>
                                     <option value="nursing">Nursing Service</option>
+                                    <option value="family">Family File Registration</option>
+                                    <option value="retainership">Retainership Registration</option>
                                     <option value="labour">Labour Fee</option>
                                     <option value="theatre">Theatre Fee</option>
                                     <option value="other">Other</option>
@@ -471,6 +488,8 @@ const FrontDeskChargeManagement = () => {
                     <option value="radiology">Radiology</option>
                     <option value="drugs">Drugs</option>
                     <option value="nursing">Nursing</option>
+                    <option value="family">Family File</option>
+                    <option value="retainership">Retainership</option>
                     <option value="labour">Labour Fee</option>
                     <option value="theatre">Theatre Fee</option>
                     <option value="other">Other</option>
@@ -531,9 +550,14 @@ const FrontDeskChargeManagement = () => {
                                                                     <FaEdit /> Edit
                                                                 </button>
                                                             )}
-                                                            <button onClick={() => handleDeactivate(charge._id)} className="text-red-600 hover:text-red-800 text-sm">
-                                                                Deactivate
-                                                            </button>
+                                                            {user?.role !== 'readonly_admin' && (
+                                                                <button onClick={() => handleDeactivate(charge._id)} className="text-red-600 hover:text-red-800 text-sm">
+                                                                    Deactivate
+                                                                </button>
+                                                            )}
+                                                            {user?.role === 'readonly_admin' && (
+                                                                <span className="text-gray-400 text-xs font-semibold">Read Only</span>
+                                                            )}
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -566,12 +590,14 @@ const FrontDeskChargeManagement = () => {
                                     <span className="text-xs bg-red-100 text-red-700 px-3 py-1 rounded">
                                         Inactive
                                     </span>
-                                    <button
-                                        onClick={() => handleActivate(charge._id)}
-                                        className="text-green-600 hover:text-green-800 text-sm font-semibold"
-                                    >
-                                        Activate
-                                    </button>
+                                    {user?.role !== 'readonly_admin' && (
+                                        <button
+                                            onClick={() => handleActivate(charge._id)}
+                                            className="text-green-600 hover:text-green-800 text-sm font-semibold"
+                                        >
+                                            Activate
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         ))}

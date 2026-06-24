@@ -8,7 +8,11 @@ const {
     getNurseTriageRevenue,
     getOverallRevenue,
     getDashboardStats,
-    getClinicalReport
+    getClinicalReport,
+    getVisitReport,
+    getTheatreRevenue,
+    getFamilyRevenue,
+    getRetainershipRevenue
 } = require('../controllers/reportsController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
@@ -17,8 +21,12 @@ router.get('/radiology-revenue', protect, admin, getRadiologyRevenue);
 router.get('/pharmacy-revenue', protect, admin, getPharmacyRevenue);
 router.get('/consultation-revenue', protect, admin, getConsultationRevenue);
 router.get('/nurse-triage-revenue', protect, admin, getNurseTriageRevenue);
+router.get('/theatre-revenue', protect, admin, getTheatreRevenue);
+router.get('/family-revenue', protect, admin, getFamilyRevenue);
+router.get('/retainership-revenue', protect, admin, getRetainershipRevenue);
 router.get('/overall-revenue', protect, admin, getOverallRevenue);
 router.get('/dashboard-stats', protect, admin, getDashboardStats);
 router.get('/clinical-report', protect, admin, getClinicalReport);
+router.get('/visit-report', protect, admin, getVisitReport);
 
 module.exports = router;

@@ -9,13 +9,13 @@ const {
     deleteEncounterCharge,
     triggerDailyWardCharges
 } = require('../controllers/encounterChargeController');
-const { protect } = require('../middleware/authMiddleware');
+const { protect, admin } = require('../middleware/authMiddleware');
 
 router.route('/').post(protect, addChargeToEncounter);
 router.route('/trigger-daily-charges').post(protect, triggerDailyWardCharges);
 router.route('/encounter/:encounterId').get(protect, getEncounterCharges);
 router.route('/patient/:patientId').get(protect, getPatientCharges);
 router.route('/:id/pay').put(protect, markChargePaid);
-router.route('/:id').put(protect, updateEncounterCharge).delete(protect, deleteEncounterCharge);
+router.route('/:id').put(protect, updateEncounterCharge).delete(protect, admin, deleteEncounterCharge);
 
 module.exports = router;

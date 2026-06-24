@@ -2,13 +2,14 @@ import { useState, useEffect, useContext } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import { formatAge } from '../utils/patientUtils';
 import AuthContext from '../context/AuthContext';
 import { AppContext } from '../context/AppContext';
 import { checkRange, getRangeColorClass } from '../utils/labUtils';
 import Layout from '../components/Layout';
 import LoadingOverlay from '../components/loadingOverlay';
 import AppointmentModal from '../components/AppointmentModal';
-import { FaTimes, FaFileMedical, FaPills, FaChevronDown, FaChevronUp, FaHeartbeat, FaNotesMedical, FaProcedures, FaXRay, FaVial, FaUserMd, FaCalendarPlus, FaPlus, FaTrash, FaEdit, FaSearch } from 'react-icons/fa';
+import { FaTimes, FaFileMedical, FaPills, FaChevronDown, FaChevronUp, FaHeartbeat, FaNotesMedical, FaProcedures, FaXRay, FaVial, FaUserMd, FaCalendarPlus, FaPlus, FaTrash, FaEdit, FaSearch, FaClock, FaChevronRight, FaFileAlt, FaCheckCircle, FaInfoCircle } from 'react-icons/fa';
 import icd11Data from '../data/icd11.json';
 
 const PatientDetails = () => {
@@ -24,6 +25,248 @@ const PatientDetails = () => {
     const [inventoryDrugs, setInventoryDrugs] = useState([]);
     const [expandedDays, setExpandedDays] = useState({});
 
+    // Parse text-based template or saved result into table format
+    const parseTextTemplate = (template) => {
+        if (!template) return [];
+
+        const lines = template.split('\n');
+        const params = [];
+
+        for (const line of lines) {
+            // Match patterns like "- WBC: _____ x10^3/μL (Normal: 4.0-11.0)"
+            // OR "- Malaria: ++ Positive/Negative"
+            const match = line.match(/^\s*-\s*([^:]+):\s*(.*?)(?:\s*\(?(?:Normal:\s*)?([^)]*)\)?)?$/);
+            if (match) {
+                const name = match[1].trim();
+                let fullValue = match[2].trim();
+                const normalRange = (match[3] || '').trim();
+
+                // Extract value from underscores if present (e.g., "__yes__")
+                const valueMatch = fullValue.match(/^_*([^_]*)_*$/);
+                const value = valueMatch ? valueMatch[1].trim() : fullValue;
+
+                params.push({
+                    name,
+                    value: value === '_____' ? '' : value,
+                    unit: '', // Text templates usually don't have separate unit column
+                    normalRange
+                });
+            }
+        }
+        return params;
+    };
+
+    const handleUniversalPrint = (order) => {
+        try {
+            const printWindow = window.open("", "_blank");
+            if (!printWindow) {
+                alert("Please allow popups for this website to print reports.");
+                return;
+            }
+
+            const printContent = `
+                <html>
+                    <head>
+                        <title>Laboratory Report - ${order.testName}</title>
+                        <style>
+                            body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; color: #1a202c; }
+                            .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+                            .header h1 { font-size: 28px; margin: 0; }
+                            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; font-size: 14px; }
+                            .info-grid p { margin: 8px 0; }
+                            .results-section { border-top: 1px solid #333; border-bottom: 1px solid #333; padding: 20px 0; margin-bottom: 30px; }
+                            .results-section h3 { font-size: 18px; margin-bottom: 15px; }
+                            .results-content { background: #f9f9f9; padding: 15px; white-space: pre-wrap; font-family: monospace; font-size: 13px; }
+                            .signature-section { margin-top: 40px; padding-top: 20px; border-top: 1px solid #333; }
+                            .signature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+                            .signature-grid p { margin: 5px 0; font-size: 13px; }
+                            .footer { margin-top: 30px; text-align: center; font-size: 11px; color: #666; }
+                            @media print {
+                                body { padding: 0; }
+                                .results-content { background: none; }
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="header">
+                            ${systemSettings?.hospitalLogo ? `<img src="${systemSettings.hospitalLogo}" style="height: 150px; max-width: 250px; object-fit: contain; margin-bottom: 0;" />` : ''}
+                            <h1 style="margin: 0 0 5px 0;">${systemSettings?.reportHeader || 'LABORATORY REPORT'}</h1>
+                            <p style="margin: 5px 0; font-size: 14px;">${systemSettings?.address || ''}</p>
+                            <p style="margin: 2px 0; font-size: 12px;">
+                                ${systemSettings?.phone ? `Phone: ${systemSettings.phone}` : ''}
+                                ${systemSettings?.phone && systemSettings?.email ? ' | ' : ''}
+                                ${systemSettings?.email ? `Email: ${systemSettings.email}` : ''}
+                            </p>
+                            <h2 style="font-size: 20px; border-top: 1px solid #eee; padding-top: 10px; margin-top: 10px;">Laboratory Report</h2>
+                        </div>
+
+                        <div class="info-grid">
+                            <div>
+                                <p><strong>Patient Name:</strong> ${patient?.name}</p>
+                                <p><strong>MRN:</strong> ${patient?.mrn}</p>
+                                <p><strong>Age/Sex:</strong> ${formatAge(patient?.dateOfBirth)} / ${patient?.gender}</p>
+                            </div>
+                            <div>
+                                <p><strong>Test Name:</strong> ${order.testName}</p>
+                                <p><strong>Date Ordered:</strong> ${new Date(order.createdAt).toLocaleDateString()}</p>
+                                <p><strong>Ref. Doctor:</strong> ${order.doctor?.name || 'Self'}</p>
+                            </div>
+                        </div>
+
+                        ${order.clinicalDetails ? `
+                        <div style="margin-bottom: 20px; padding: 10px; background: #f9fafb; border-left: 4px solid #9ca3af; font-style: italic;">
+                            <p style="margin: 0; font-weight: bold; font-style: normal; color: #374151; font-size: 14px;">Clinical Detail:</p>
+                            <p style="margin: 5px 0 0 0; font-size: 13px; color: #4b5563;">${order.clinicalDetails}</p>
+                        </div>
+                        ` : ''}
+
+                        <div class="results-section">
+                            <h3>Test Results:</h3>
+                            ${(() => {
+                    try {
+                        const parsed = JSON.parse(order.result);
+                        if (parsed.format === 'table' && Array.isArray(parsed.parameters)) {
+                            return `
+                                            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                                                <thead>
+                                                    <tr style="background: #f3f4f6;">
+                                                        <th style="text-align: left; padding: 12px; border: 1px solid #d1d5db; font-weight: 600;">Parameter</th>
+                                                        <th style="text-align: left; padding: 12px; border: 1px solid #d1d5db; font-weight: 600; width: 120px;">Value</th>
+                                                        <th style="text-align: left; padding: 12px; border: 1px solid #d1d5db; font-weight: 600; width: 100px;">Unit</th>
+                                                        <th style="text-align: left; padding: 12px; border: 1px solid #d1d5db; font-weight: 600; width: 150px;">Normal Range</th>
+                                                        <th style="text-align: center; padding: 12px; border: 1px solid #d1d5db; font-weight: 600; width: 80px;">Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    ${parsed.parameters.map(p => {
+                                const rangeS = checkRange(p.value, p.normalRange);
+                                let bgColor = '#f9fafb';
+                                let statusText = '';
+                                let statusColor = '';
+
+                                if (p.value) {
+                                    if (rangeS === 'low') {
+                                        bgColor = '#fed7aa';
+                                        statusText = '↓ LOW';
+                                        statusColor = '#9a3412';
+                                    } else if (rangeS === 'high') {
+                                        bgColor = '#fecaca';
+                                        statusText = '↑ HIGH';
+                                        statusColor = '#991b1b';
+                                    } else {
+                                        bgColor = '#d1fae5';
+                                        statusText = '✓ Normal';
+                                        statusColor = '#065f46';
+                                    }
+                                }
+
+                                return `
+                                                            <tr style="background: ${bgColor};">
+                                                                <td style="padding: 10px; border: 1px solid #d1d5db; font-weight: 500;">${p.name}</td>
+                                                                <td style="padding: 10px; border: 1px solid #d1d5db; font-weight: 600;">${p.value || '-'}</td>
+                                                                <td style="padding: 10px; border: 1px solid #d1d5db; color: #6b7280;">${p.unit || ''}</td>
+                                                                <td style="padding: 10px; border: 1px solid #d1d5db; color: #6b7280;">${p.normalRange || ''}</td>
+                                                                <td style="padding: 10px; border: 1px solid #d1d5db; text-align: center;">
+                                                                    ${(p.value && !p.name.toLowerCase().trim().includes('blood group') && !p.name.toLowerCase().trim().includes('genotype')) ? `<span style="color: ${statusColor}; font-weight: 600; font-size: 11px;">${statusText}</span>` : ''}
+                                                                </td>
+                                                            </tr>
+                                                        `;
+                            }).join('')}
+                                                </tbody>
+                                            </table>
+                                        `;
+                        }
+                    } catch (e) {
+                        // Not JSON - try to parse as text-to-table
+                        const parsedParams = parseTextTemplate(order.result);
+                        if (parsedParams.length > 0) {
+                            return `
+                                <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                                    <thead>
+                                        <tr style="background: #f3f4f6;">
+                                            <th style="text-align: left; padding: 12px; border: 1px solid #d1d5db; font-weight: 600;">Parameter</th>
+                                            <th style="text-align: left; padding: 12px; border: 1px solid #d1d5db; font-weight: 600; width: 250px;">Result</th>
+                                            <th style="text-align: left; padding: 12px; border: 1px solid #d1d5db; font-weight: 600; width: 200px;">Normal Range</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${parsedParams.map(param => `
+                                            <tr>
+                                                <td style="padding: 10px; border: 1px solid #d1d5db; font-weight: 500;">${param.name}</td>
+                                                <td style="padding: 10px; border: 1px solid #d1d5db; font-weight: 600;">${param.value || '-'}</td>
+                                                <td style="padding: 10px; border: 1px solid #d1d5db; color: #6b7280;">${param.normalRange || ''}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            `;
+                        }
+                    }
+                    return `<div class="text-result">${order.result}</div>`;
+                })()}
+                        </div>
+
+                        <div class="signature-section" style="margin-top: 30px; padding-top: 15px; border-top: 2px solid #333;">
+                            <h4 style="margin: 0 0 15px 0; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; color: #374151;">Audit Trail & Signatures</h4>
+                            <div class="signature-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
+                                ${order.signedBy ? `
+                                    <div style="padding: 10px; border: 1px solid #e5e7eb; border-radius: 6px;">
+                                        <p style="margin: 0; font-size: 10px; font-weight: bold; color: #6b7280; text-transform: uppercase;">Performed By</p>
+                                        <p style="margin: 5px 0 0 0; font-size: 13px; font-weight: 600;">${order.signedBy.name}</p>
+                                        <p style="margin: 2px 0 0 0; font-size: 11px; color: #9ca3af;">${new Date(order.signedAt).toLocaleString()}</p>
+                                    </div>
+                                ` : ''}
+
+                                ${order.rejectedBy ? `
+                                    <div style="padding: 10px; border: 1px solid #fee2e2; border-radius: 6px; background-color: #fef2f2;">
+                                        <p style="margin: 0; font-size: 10px; font-weight: bold; color: #b91c1c; text-transform: uppercase;">Rejected By</p>
+                                        <p style="margin: 5px 0 0 0; font-size: 13px; font-weight: 600;">${order.rejectedBy.name || 'Lab Scientist'}</p>
+                                        <p style="margin: 2px 0 0 0; font-size: 11px; color: #f87171;">${order.rejectionReason ? `Reason: ${order.rejectionReason}` : ''}</p>
+                                        <p style="margin: 2px 0 0 0; font-size: 11px; color: #f87171;">${new Date(order.rejectedAt).toLocaleString()}</p>
+                                    </div>
+                                ` : ''}
+
+                                ${order.lastModifiedBy ? `
+                                    <div style="padding: 10px; border: 1px solid #fef3c7; border-radius: 6px; background-color: #fffbeb;">
+                                        <p style="margin: 0; font-size: 10px; font-weight: bold; color: #92400e; text-transform: uppercase;">Last Edited By</p>
+                                        <p style="margin: 5px 0 0 0; font-size: 13px; font-weight: 600;">${order.lastModifiedBy.name}</p>
+                                        <p style="margin: 2px 0 0 0; font-size: 11px; color: #d97706;">${new Date(order.lastModifiedAt).toLocaleString()}</p>
+                                    </div>
+                                ` : ''}
+
+                                ${order.approvedBy ? `
+                                    <div style="padding: 10px; border: 1px solid #dcfce7; border-radius: 6px; background-color: #f0fdf4;">
+                                        <p style="margin: 0; font-size: 10px; font-weight: bold; color: #166534; text-transform: uppercase;">Verified & Approved By</p>
+                                        <p style="margin: 5px 0 0 0; font-size: 13px; font-weight: 600;">${order.approvedBy.name}</p>
+                                        <p style="margin: 2px 0 0 0; font-size: 11px; color: #22c55e;">${new Date(order.approvedAt).toLocaleString()}</p>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+
+                        <div class="footer" style="margin-top: 30px; text-align: center; font-size: 11px; color: #666;">
+                            <p>This is an electronically signed document. No handwritten signature is required.</p>
+                        </div>
+                        <script>
+                            window.onload = function() { 
+                                window.focus();
+                                setTimeout(() => {
+                                    window.print();
+                                    window.close();
+                                }, 250);
+                            }
+                        </script>
+                    </body>
+                </html>
+            `;
+
+            printWindow.document.write(printContent);
+            printWindow.document.close();
+        } catch (err) {
+            console.error("Print Error:", err);
+            toast.error("Error generating report: " + err.message);
+        }
+    };
     // State for collapsible clinical notes sections
     const [expandedSections, setExpandedSections] = useState({
         history: true, // History section expanded by default
@@ -76,6 +319,7 @@ const PatientDetails = () => {
     const [tempLabOrders, setTempLabOrders] = useState([]); // Multi-select for Lab
     const [labSearchTerm, setLabSearchTerm] = useState('');
     const [showLabDropdown, setShowLabDropdown] = useState(false);
+    const [labClinicalDetails, setLabClinicalDetails] = useState('');
 
     const [selectedRadTest, setSelectedRadTest] = useState('');
     const [tempRadOrders, setTempRadOrders] = useState([]); // Multi-select for Radiology
@@ -93,6 +337,7 @@ const PatientDetails = () => {
     const [drugSearchTerm, setDrugSearchTerm] = useState('');
     const [filteredDrugs, setFilteredDrugs] = useState([]);
     const [tempDrugs, setTempDrugs] = useState([]); // List of drugs to prescribe
+    const [buyOutside, setBuyOutside] = useState(false); // New state for Buy Outside
     const [showDrugDropdown, setShowDrugDropdown] = useState(false);
     const [metadataOptions, setMetadataOptions] = useState({
         dosage: [],
@@ -110,6 +355,8 @@ const PatientDetails = () => {
     const [clinicalNotes, setClinicalNotes] = useState([]); // New state for clinical notes
     const [newNote, setNewNote] = useState(''); // State for new note input
     const [showNoteModal, setShowNoteModal] = useState(false); // Modal for adding note
+    const [dispensedPrescriptions, setDispensedPrescriptions] = useState([]);
+    const [administrationHistory, setAdministrationHistory] = useState([]);
 
     // Modal States
     const [showLabModal, setShowLabModal] = useState(false);
@@ -199,7 +446,7 @@ const PatientDetails = () => {
                 freqMultiplier = 2;
             } else if (freqLower === 'tds' || freqLower.includes('three times daily') || freqLower === 'tid' || freqLower.includes('trice') || freqLower.includes('8 hourly') || freqLower.includes('8h')) {
                 freqMultiplier = 3;
-            } else if (freqLower === 'qid' || freqLower.includes('four times daily') || freqLower.includes('6 hourly') || freqLower.includes('6h') || freqLower.includes('four times')) {
+            } else if (freqLower === 'qid' || freqLower.includes('four times daily') || freqLower === '6 hourly') {
                 freqMultiplier = 4;
             } else if (freqLower.includes('weekly')) {
                 freqMultiplier = 1 / 7;
@@ -231,7 +478,7 @@ const PatientDetails = () => {
 
     // Tab State - default based on user role
     const getDefaultTab = () => {
-        if (user?.role === 'lab_technician') return 'lab';
+        if (['lab_technician', 'lab_scientist'].includes(user?.role)) return 'lab';
         if (user?.role === 'radiologist') return 'radiology';
         if (user?.role === 'pharmacist') return 'prescriptions';
         if (user?.role === 'receptionist') return 'referrals'; // Receptionists start at referrals tab
@@ -334,7 +581,7 @@ const PatientDetails = () => {
 
 
     useEffect(() => {
-        if (user && user.token) {
+        if (user && user.token && id && id !== 'undefined') {
             fetchPatient();
             fetchCharges();
         }
@@ -348,9 +595,9 @@ const PatientDetails = () => {
             const foundPatient = data.find(p => p._id === id);
             setPatient(foundPatient);
 
-            // Fetch all visits for history
-            const visitsRes = await axios.get(`${backendUrl}/api/visits`, config);
-            const patientVisits = visitsRes.data.filter(v => v.patient._id === id || v.patient === id);
+            // Fetch all visits for this specific patient
+            const visitsRes = await axios.get(`${backendUrl}/api/visits?patient=${id}`, config);
+            const patientVisits = visitsRes.data;
 
             // Sort by date desc
             patientVisits.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -358,7 +605,7 @@ const PatientDetails = () => {
 
             // Find active encounter
             const activeEncounter = patientVisits.find(v =>
-                v.encounterStatus === 'with_doctor' || v.encounterStatus === 'in_nursing' || v.encounterStatus === 'in_pharmacy' || v.encounterStatus === 'in_ward' || v.encounterStatus === 'admitted'
+                ['registered', 'payment_pending', 'in_nursing', 'with_doctor', 'awaiting_services', 'in_pharmacy', 'in_lab', 'in_radiology', 'in_ward', 'admitted'].includes(v.encounterStatus)
             );
             setEncounter(activeEncounter);
 
@@ -407,9 +654,37 @@ const PatientDetails = () => {
             // Referrals
             setReferrals(referralsRes.data);
 
+            // Fetch drug administration data if Inpatient
+            if (visitRes.data.type === 'Inpatient') {
+                await fetchDrugAdministrationData(encounterId, config);
+            }
+
         } catch (error) {
             console.error('Error fetching encounter details', error);
             toast.error('Error fetching data');
+        }
+    };
+
+    const fetchDrugAdministrationData = async (encounterId, config) => {
+        try {
+            const [rxRes, historyRes] = await Promise.all([
+                axios.get(`${backendUrl}/api/prescriptions/visit/${encounterId}`, config),
+                axios.get(`${backendUrl}/api/drug-administration/visit/${encounterId}`, config)
+            ]);
+            const consumableKeywords = ['syringe', 'cannula', 'giving set', 'infusion set', 'needle', 'plaster', 'gloves', 'mask', 'catheter', 'bandage'];
+            const dispensedRx = rxRes.data.filter(p => p.status === 'dispensed').map(p => ({
+                ...p,
+                medicines: p.medicines.filter(m => {
+                    const isMedication = m.dosage || m.route || m.frequency;
+                    const isConsumable = consumableKeywords.some(keyword => m.name.toLowerCase().includes(keyword));
+                    return isMedication && !isConsumable;
+                })
+            })).filter(p => p.medicines.length > 0);
+
+            setDispensedPrescriptions(dispensedRx);
+            setAdministrationHistory(historyRes.data);
+        } catch (error) {
+            console.error('Error fetching drug admin data:', error);
         }
     };
 
@@ -448,8 +723,8 @@ const PatientDetails = () => {
 
         if (encounter.type === 'Inpatient') {
             // Inpatient encounters are active until discharged
-            // Active statuses: admitted, in_progress, with_doctor, in_nursing, in_lab, in_radiology, in_pharmacy, in_ward
-            const activeStatuses = ['admitted', 'in_progress', 'with_doctor', 'in_nursing', 'in_lab', 'in_radiology', 'in_pharmacy', 'in_ward'];
+            // Active statuses: admitted, in_progress, with_doctor, in_nursing, in_lab, in_radiology, in_pharmacy, in_ward, awaiting_services
+            const activeStatuses = ['admitted', 'in_progress', 'with_doctor', 'in_nursing', 'in_lab', 'in_radiology', 'in_pharmacy', 'in_ward', 'awaiting_services', 'registered', 'payment_pending'];
             const isActive = activeStatuses.includes(encounter.encounterStatus);
             console.log('🔍 isEncounterActive: Inpatient encounter', {
                 encounterStatus: encounter.encounterStatus,
@@ -476,7 +751,7 @@ const PatientDetails = () => {
     };
 
     // Determine if user can edit (read-only for receptionists, viewing past encounters, or inactive encounters)
-    const canEdit = ['doctor', 'nurse', 'admin'].includes(user?.role) && !viewingPastEncounter && isEncounterActive();
+    const canEdit = ['doctor', 'admin'].includes(user?.role) && !viewingPastEncounter && isEncounterActive();
 
     const fetchCharges = async () => {
         try {
@@ -492,7 +767,7 @@ const PatientDetails = () => {
                 inventoryUrl += `?pharmacy=${user.assignedPharmacy._id || user.assignedPharmacy}`;
             }
             const inventoryRes = await axios.get(inventoryUrl, config);
-            setInventoryDrugs(inventoryRes.data.filter(item => item.quantity > 0));
+            setInventoryDrugs(inventoryRes.data); // Include all drugs (even 0 qty)
         } catch (error) {
             console.error(error);
         }
@@ -558,6 +833,11 @@ const PatientDetails = () => {
             return;
         }
 
+        if (!soapNote.diagnosis || soapNote.diagnosis.length === 0) {
+            toast.error('Diagnosis is compulsory. Please search and select at least one ICD diagnosis.');
+            return;
+        }
+
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
@@ -617,7 +897,7 @@ const PatientDetails = () => {
     const handleAddLabToQueue = () => {
         if (!selectedLabTest) return;
         const test = labCharges.find(c => c._id === selectedLabTest);
-        
+
         if (test && test.active === false) {
             toast.error('This investigation is currently inactive or out of reagent.');
             return;
@@ -674,7 +954,8 @@ const PatientDetails = () => {
                         visitId: encounter._id,
                         chargeId: chargeRes.data._id, // Link to charge
                         testName: test.name,
-                        notes: 'Doctor ordered'
+                        notes: 'Doctor ordered',
+                        clinicalDetails: labClinicalDetails
                     },
                     config
                 );
@@ -683,6 +964,7 @@ const PatientDetails = () => {
             toast.success(`${ordersToPlace.length} Lab order(s) placed!`);
             setSelectedLabTest('');
             setTempLabOrders([]);
+            setLabClinicalDetails('');
             setShowLabModal(false);
             // Refresh list
             const labRes = await axios.get(`${backendUrl}/api/lab/visit/${encounter._id}`, config);
@@ -698,7 +980,7 @@ const PatientDetails = () => {
     const handleAddRadToQueue = () => {
         if (!selectedRadTest) return;
         const scan = radiologyCharges.find(c => c._id === selectedRadTest);
-        
+
         if (scan && scan.active === false) {
             toast.error('This investigation is currently inactive or out of reagent.');
             return;
@@ -776,13 +1058,45 @@ const PatientDetails = () => {
         }
     };
 
-    // Filter drugs based on search term
+    // Filter drugs based on search term - Aggregate batches by name
     useEffect(() => {
         if (drugSearchTerm) {
             const filtered = inventoryDrugs.filter(d =>
                 d.name.toLowerCase().includes(drugSearchTerm.toLowerCase())
             );
-            setFilteredDrugs(filtered);
+
+            // Group by name
+            const grouped = filtered.reduce((acc, drug) => {
+                const key = drug.name.toLowerCase();
+                if (!acc[key]) {
+                    acc[key] = {
+                        ...drug,
+                        quantity: 0,
+                        batches: []
+                    };
+                }
+                acc[key].quantity += drug.quantity;
+                acc[key].batches.push(drug);
+                return acc;
+            }, {});
+
+            // Sort batches within each group by expiryDate (earliest first)
+            Object.values(grouped).forEach(drugGroup => {
+                drugGroup.batches.sort((a, b) => {
+                    if (!a.expiryDate) return 1;
+                    if (!b.expiryDate) return -1;
+                    return new Date(a.expiryDate) - new Date(b.expiryDate);
+                });
+                // Update primary drug info to use the earliest non-expired batch if possible
+                const earliestActive = drugGroup.batches.find(b => b.quantity > 0 && (!b.expiryDate || new Date(b.expiryDate) > new Date())) || drugGroup.batches[0];
+                if (earliestActive) {
+                    drugGroup._id = earliestActive._id;
+                    drugGroup.price = earliestActive.price;
+                    drugGroup.expiryDate = earliestActive.expiryDate;
+                }
+            });
+
+            setFilteredDrugs(Object.values(grouped));
             setShowDrugDropdown(true);
         } else {
             setFilteredDrugs([]);
@@ -794,6 +1108,7 @@ const PatientDetails = () => {
         setSelectedDrug(drug._id);
         setDrugSearchTerm(drug.name);
         setShowDrugDropdown(false);
+        setBuyOutside(false); // Reset Buy Outside toggle when selecting a new drug
 
         // Auto-populate fields from drug data
         setDrugRoute(drug.route || '');
@@ -808,14 +1123,17 @@ const PatientDetails = () => {
         const drugData = inventoryDrugs.find(d => d._id === selectedDrug);
         if (!drugData) return;
 
-        if (drugData.expiryDate && new Date(drugData.expiryDate) < new Date()) {
-            toast.error('Cannot prescribe: This drug is expired.');
-            return;
-        }
+        // Restriction Check - Bypass if Buy Outside is checked
+        if (!buyOutside) {
+            if (drugData.expiryDate && new Date(drugData.expiryDate) < new Date()) {
+                toast.error('Cannot prescribe: This drug is expired. Use "Buy Outside" mode if needed for records.');
+                return;
+            }
 
-        if (drugData.quantity < drugQuantity) {
-            toast.error(`Cannot prescribe: Insufficient inventory. Only ${drugData.quantity} available.`);
-            return;
+            if (drugData.quantity < drugQuantity) {
+                toast.error(`Cannot prescribe: Insufficient inventory (Only ${drugData.quantity} available). Use "Buy Outside" mode if needed for records.`);
+                return;
+            }
         }
 
         const newDrugItem = {
@@ -828,7 +1146,8 @@ const PatientDetails = () => {
             dosage: drugDosage || 'As directed',
             form: drugForm || 'As directed',
             frequency: drugFrequency || 'As directed',
-            duration: (drugDuration && !isNaN(drugDuration)) ? `${drugDuration} days` : (drugDuration || 'As directed')
+            duration: (drugDuration && !isNaN(drugDuration)) ? `${drugDuration} days` : (drugDuration || 'As directed'),
+            buyOutside: buyOutside // Include flag
         };
 
         setTempDrugs([...tempDrugs, newDrugItem]);
@@ -866,7 +1185,10 @@ const PatientDetails = () => {
                     dosage: drugItem.dosage,
                     frequency: drugItem.frequency,
                     duration: drugItem.duration,
-                    quantity: drugItem.quantity
+                    route: drugItem.route,
+                    form: drugItem.form,
+                    quantity: drugItem.quantity,
+                    buyOutside: drugItem.buyOutside // Pass the flag
                 }],
                 notes: 'Doctor prescribed'
             },
@@ -1124,7 +1446,7 @@ const PatientDetails = () => {
                             </div>
                             <div class="flex-field" style="flex: 1; margin-left: 20px;">
                                 <span class="label">Age:</span>
-                                <span class="input-line">${patient.age}</span>
+                                <span class="input-line">${formatAge(patient.age)}</span>
                             </div>
                             <div class="flex-field" style="flex: 1; margin-left: 20px;">
                                 <span class="label">Gender:</span>
@@ -1264,7 +1586,7 @@ const PatientDetails = () => {
             <div className="mb-6 flex justify-between items-start">
                 <div>
                     <h2 className="text-2xl font-bold text-gray-800">{patient.name}</h2>
-                    <p className="text-gray-600">MRN: {patient.mrn} | Age: {patient.age} | {patient.gender}</p>
+                    <p className="text-gray-600">MRN: {patient.mrn} | Age: {formatAge(patient.age)} | {patient.gender}</p>
                     {encounter && (
                         <div className="flex items-center gap-4 mt-2">
                             <p className="text-sm text-blue-600">
@@ -1325,7 +1647,7 @@ const PatientDetails = () => {
                                     const diagStr = (encounter.diagnosis || []).map(d => `${d.code}: ${d.description}`).join(', ');
 
                                     const historyParts = [];
-                                    
+
                                     // Encounter (SOAP) Details
                                     if (encounter.presentingComplaints) historyParts.push(`Presenting Complaints: ${encounter.presentingComplaints}`);
                                     if (encounter.historyOfPresentingComplaint) historyParts.push(`HPC: ${encounter.historyOfPresentingComplaint}`);
@@ -1386,13 +1708,13 @@ const PatientDetails = () => {
                             {/* Tab Navigation */}
                             <div className="border-b flex">
                                 {/* Vitals & SOAP - Hidden for lab_technician, radiologist, and pharmacist */}
-                                {!['lab_technician', 'radiologist', 'pharmacist'].includes(user.role) && (
+                                {!['lab_technician', 'lab_scientist', 'radiologist', 'pharmacist'].includes(user.role) && (
                                     <>
                                         <button
                                             onClick={() => setActiveTab('vitals')}
                                             className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'vitals' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
                                         >
-                                            <FaHeartbeat /> Vitals
+                                            <FaHeartbeat /> Nursing Triage
                                         </button>
                                         <button
                                             onClick={() => setActiveTab('soap')}
@@ -1414,7 +1736,7 @@ const PatientDetails = () => {
                                 )}
 
                                 {/* Radiology - Show for doctors, radiologist, and receptionist */}
-                                {!['lab_technician', 'pharmacist'].includes(user.role) && (
+                                {!['lab_technician', 'lab_scientist', 'pharmacist'].includes(user.role) && (
                                     <button
                                         onClick={() => setActiveTab('radiology')}
                                         className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'radiology' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-600 hover:text-gray-800'}`}
@@ -1424,7 +1746,7 @@ const PatientDetails = () => {
                                 )}
 
                                 {/* Prescriptions - Show for doctors, pharmacist, and receptionist */}
-                                {!['lab_technician', 'radiologist'].includes(user.role) && (
+                                {!['lab_technician', 'lab_scientist', 'radiologist'].includes(user.role) && (
                                     <button
                                         onClick={() => setActiveTab('prescriptions')}
                                         className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'prescriptions' ? 'border-b-2 border-pink-600 text-pink-600' : 'text-gray-600 hover:text-gray-800'}`}
@@ -1604,35 +1926,167 @@ const PatientDetails = () => {
                                                     </div>
                                                 );
                                             }
-                                            return null;
                                         })()}
+
+                                        {/* Drug Observation Chart (MAR) - For Inpatients */}
+                                        {encounter.type === 'Inpatient' && (
+                                            <div className="mt-8 border rounded-lg overflow-hidden shadow-sm bg-white">
+                                                <div className="bg-blue-600 text-white p-3 flex justify-between items-center">
+                                                    <h4 className="font-bold flex items-center gap-2">
+                                                        <FaClock /> Drug Observation Chart (MAR)
+                                                    </h4>
+                                                </div>
+
+                                                <div className="p-4 bg-white">
+                                                    {dispensedPrescriptions.length === 0 ? (
+                                                        <div className="text-center py-6 text-gray-500 italic bg-gray-50 rounded border border-dashed">
+                                                            No dispensed medications found for this encounter.
+                                                        </div>
+                                                    ) : (
+                                                        <div className="space-y-4">
+                                                            {(() => {
+                                                                const admissionDate = new Date(encounter.createdAt);
+                                                                admissionDate.setHours(0, 0, 0, 0);
+
+                                                                // Get all unique dates from history, and today
+                                                                const historyDates = [...new Set(administrationHistory.map(h => {
+                                                                    const d = new Date(h.administeredAt);
+                                                                    d.setHours(0, 0, 0, 0);
+                                                                    return d.getTime();
+                                                                }))];
+
+                                                                const today = new Date();
+                                                                today.setHours(0, 0, 0, 0);
+                                                                if (!historyDates.includes(today.getTime())) {
+                                                                    historyDates.push(today.getTime());
+                                                                }
+
+                                                                return historyDates.sort().reverse().map((dateTimestamp, idx) => {
+                                                                    const currentDate = new Date(dateTimestamp);
+                                                                    const diffTime = dateTimestamp - admissionDate.getTime();
+                                                                    const dayNum = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                                                                    const isExpanded = expandedDays[dateTimestamp] !== false;
+
+                                                                    const dayHistory = administrationHistory.filter(h => {
+                                                                        const d = new Date(h.administeredAt);
+                                                                        d.setHours(0, 0, 0, 0);
+                                                                        return d.getTime() === dateTimestamp;
+                                                                    });
+
+                                                                    const dayTimes = [...new Set(dayHistory.map(h =>
+                                                                        new Date(h.administeredAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+                                                                    ))].sort();
+
+                                                                    return (
+                                                                        <div key={dateTimestamp} className="border rounded mb-3 overflow-hidden">
+                                                                            <button
+                                                                                onClick={() => setExpandedDays(prev => ({ ...prev, [dateTimestamp]: !isExpanded }))}
+                                                                                className="w-full bg-gray-50 px-4 py-2 hover:bg-blue-50 transition-colors flex items-center justify-between text-blue-900"
+                                                                            >
+                                                                                <div className="flex items-center gap-3">
+                                                                                    {isExpanded ? <FaChevronDown size={12} /> : <FaChevronRight size={12} />}
+                                                                                    <span className="font-bold text-sm">Day {dayNum} <span className="text-gray-400 font-normal ml-2">({currentDate.toLocaleDateString('en-GB')})</span></span>
+                                                                                    {dayNum === 1 && <span className="text-[9px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-bold">ADMISSION</span>}
+                                                                                    {dateTimestamp === today.getTime() && <span className="text-[9px] bg-green-100 text-green-600 px-1.5 py-0.5 rounded font-bold">TODAY</span>}
+                                                                                </div>
+                                                                                <div className="text-[10px] text-gray-500">
+                                                                                    {dayHistory.length} Administrations recorded
+                                                                                </div>
+                                                                            </button>
+
+                                                                            {isExpanded && (
+                                                                                <div className="overflow-x-auto">
+                                                                                    <table className="w-full text-xs text-left border-collapse">
+                                                                                        <thead className="bg-gray-100 border-b">
+                                                                                            <tr>
+                                                                                                <th className="p-2 border-r font-bold text-gray-600 w-64">Medication</th>
+                                                                                                {dayTimes.length > 0 ? dayTimes.map(timeStr => (
+                                                                                                    <th key={timeStr} className="p-2 border-r font-bold text-gray-600 text-center min-w-[70px]">
+                                                                                                        {timeStr}
+                                                                                                    </th>
+                                                                                                )) : (
+                                                                                                    <th className="p-2 border-r font-bold text-gray-400 text-center italic">No records for this day</th>
+                                                                                                )}
+                                                                                            </tr>
+                                                                                        </thead>
+                                                                                        <tbody>
+                                                                                            {dispensedPrescriptions.flatMap(p => p.medicines.map(m => (
+                                                                                                <tr key={`${p._id}-${m._id || m.name}`} className="hover:bg-blue-50/10 border-b last:border-0 transition-colors">
+                                                                                                    <td className="p-2 border-r">
+                                                                                                        <div className="font-bold text-blue-950 leading-tight">{m.name}</div>
+                                                                                                        <div className="text-[9px] text-gray-500 flex items-center gap-1 mt-0.5">
+                                                                                                            <span className="font-medium text-gray-700">{m.dosage}</span>
+                                                                                                            <span>|</span>
+                                                                                                            <span className="font-medium text-gray-700">{m.frequency}</span>
+                                                                                                            {m.route && <><span className="text-orange-500 font-bold px-1 rounded uppercase bg-orange-50 text-[8px] border border-orange-100">{m.route}</span></>}
+                                                                                                        </div>
+                                                                                                    </td>
+                                                                                                    {dayTimes.map(timeStr => {
+                                                                                                        const admin = dayHistory.find(h =>
+                                                                                                            new Date(h.administeredAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) === timeStr &&
+                                                                                                            (h.medicineId === m._id || h.medicineName === m.name)
+                                                                                                        );
+                                                                                                        return (
+                                                                                                            <td key={timeStr} className="p-2 border-r text-center">
+                                                                                                                {admin ? (
+                                                                                                                    <div className="inline-flex flex-col items-center justify-center p-1 rounded-md bg-green-50 border border-green-200 shadow-sm group relative cursor-help">
+                                                                                                                        <span className="font-black text-[8px] text-green-700 uppercase tracking-tighter">Given</span>
+                                                                                                                        <span className="text-[7px] text-green-600 leading-none">{admin.nurse?.name?.split(' ')[0]}</span>
+                                                                                                                        {admin.remarks && (
+                                                                                                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 bg-gray-900 border border-gray-700 text-white p-2 rounded-lg text-[9px] hidden group-hover:block z-50 shadow-2xl backdrop-blur-sm">
+                                                                                                                                <div className="font-bold text-blue-300 mb-1 border-b border-gray-700 pb-1">Remark:</div>
+                                                                                                                                {admin.remarks}
+                                                                                                                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                                                                                                                            </div>
+                                                                                                                        )}
+                                                                                                                    </div>
+                                                                                                                ) : <span className="text-gray-200">-</span>}
+                                                                                                            </td>
+                                                                                                        );
+                                                                                                    })}
+                                                                                                </tr>
+                                                                                            )))}
+                                                                                        </tbody>
+                                                                                    </table>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                });
+                                                            })()}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="p-3 bg-gray-50 text-[10px] text-gray-500 flex items-center gap-2 border-t italic">
+                                                    <FaClock className="text-blue-400" /> This is a read-only view of the medication administration record.
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
                                 {/* SOAP Notes Tab */}
                                 {activeTab === 'soap' && (
                                     <div>
-                                        <div className="flex justify-between items-center mb-4">
-                                            <h3 className="text-xl font-bold">Clinical Documentation</h3>
-                                            {(() => {
-                                                const hasNote = !!(encounter.presentingComplaints || encounter.historyOfPresentingComplaint ||
-                                                    encounter.assessment || encounter.plan ||
-                                                    (encounter.diagnosis && encounter.diagnosis.length > 0) ||
-                                                    encounter.generalAppearance || encounter.heent);
-                                                const isAuthor = encounter.consultingPhysician?._id === user?._id ||
-                                                    encounter.consultingPhysician === user?._id;
-                                                const isEditMode = hasNote && isAuthor;
-                                                return (
-                                                    <button
-                                                        onClick={() => setShowSoapModal(true)}
-                                                        disabled={!canEdit}
-                                                        className={`px-4 py-2 rounded flex items-center gap-2 ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : isEditMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-green-600 text-white hover:bg-green-700'}`}
-                                                    >
-                                                        {isEditMode ? <><FaEdit /> Edit Clinical Note</> : <><FaPlus /> Add Clinical Note</>}
-                                                    </button>
-                                                );
-                                            })()}
-                                        </div>
+                                        <h3 className="text-xl font-bold">Clinical Documentation</h3>
+                                        {(() => {
+                                            const hasNote = !!(encounter.presentingComplaints || encounter.historyOfPresentingComplaint ||
+                                                encounter.assessment || encounter.plan ||
+                                                (encounter.diagnosis && encounter.diagnosis.length > 0) ||
+                                                encounter.generalAppearance || encounter.heent);
+                                            const isAuthor = encounter.consultingPhysician?._id === user?._id ||
+                                                encounter.consultingPhysician === user?._id;
+                                            const isEditMode = hasNote && isAuthor;
+                                            return (
+                                                <button
+                                                    onClick={() => setShowSoapModal(true)}
+                                                    disabled={!canEdit}
+                                                    className={`px-4 py-2 rounded flex items-center gap-2 ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : isEditMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-green-600 text-white hover:bg-green-700'}`}
+                                                >
+                                                    {isEditMode ? <><FaEdit /> Edit Clinical Note</> : <><FaPlus /> Add Clinical Note</>}
+                                                </button>
+                                            );
+                                        })()}
                                         {/* Check if any clinical documentation exists */}
                                         {(encounter.presentingComplaints || encounter.historyOfPresentingComplaint ||
                                             encounter.systemReview || encounter.pastMedicalSurgicalHistory ||
@@ -1896,7 +2350,7 @@ const PatientDetails = () => {
                                     <div>
                                         <div className="flex justify-between items-center mb-4">
                                             <h3 className="text-xl font-bold">Lab Orders</h3>
-                                            {(user.role === 'doctor' || (user.role === 'lab_technician' && encounter?.type === 'External Investigation')) && (
+                                            {(user.role === 'doctor' || (['lab_technician', 'lab_scientist'].includes(user.role) && encounter?.type === 'External Investigation')) && (
                                                 <button
                                                     onClick={() => setShowLabModal(true)}
                                                     disabled={!canEdit}
@@ -1914,11 +2368,32 @@ const PatientDetails = () => {
                                                             <div className="flex-1">
                                                                 <p className="font-semibold text-lg">{order.testName}</p>
                                                                 <p className="text-sm text-gray-600">Ordered: {new Date(order.createdAt).toLocaleString()}</p>
-                                                                {order.result && (
-                                                                    <details className="mt-2">
-                                                                        <summary className="cursor-pointer text-blue-600 hover:text-blue-800 text-sm font-semibold">
-                                                                            View Results
+                                                                {order.clinicalDetails && (
+                                                                    <div className="mt-2 p-2 bg-blue-50 border-l-4 border-blue-400 text-xs italic">
+                                                                        <span className="font-bold text-blue-800 not-italic">Clinical Detail: </span>
+                                                                        {order.clinicalDetails}
+                                                                    </div>
+                                                                )}
+                                                                {order.result ? (
+                                                                    <details className="mt-2" open={!order.approvedBy}>
+                                                                        <summary className="cursor-pointer text-blue-600 hover:text-blue-800 text-sm font-semibold flex items-center gap-2">
+                                                                            {order.approvedBy ? (
+                                                                                <>View Official Results</>
+                                                                            ) : (
+                                                                                <>
+                                                                                    <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full text-[10px] font-bold border border-orange-200">
+                                                                                        PRELIMINARY
+                                                                                    </span>
+                                                                                    View Early Results
+                                                                                </>
+                                                                            )}
                                                                         </summary>
+                                                                        {!order.approvedBy && (
+                                                                            <div className="mt-2 p-2 bg-orange-50 border-l-4 border-orange-400 text-xs text-orange-800 italic">
+                                                                                <FaInfoCircle className="inline mr-1" />
+                                                                                These results have been entered but not yet formally reviewed and approved by a Lab Scientist.
+                                                                            </div>
+                                                                        )}
                                                                         <div className="mt-2 p-3 bg-white rounded border text-sm">
                                                                             {(() => {
                                                                                 try {
@@ -1974,14 +2449,16 @@ const PatientDetails = () => {
                                                                             })()}
                                                                         </div>
                                                                     </details>
-                                                                )}
+                                                                ) : null}
                                                             </div>
                                                             <div className="flex gap-2 ml-4">
                                                                 <span className={`text-xs px-3 py-1 rounded ${order.charge?.status === 'paid' ? 'bg-green-200 text-green-800' : 'bg-yellow-200 text-yellow-800'}`}>
                                                                     {order.charge?.status === 'paid' ? 'Paid' : 'Unpaid'}
                                                                 </span>
-                                                                <span className={`text-xs px-3 py-1 rounded ${order.status === 'completed' ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'}`}>
-                                                                    {order.status}
+                                                                <span className={`text-xs px-3 py-1 rounded font-bold uppercase tracking-wider ${order.status === 'completed'
+                                                                    ? (order.approvedBy ? 'bg-green-600 text-white' : 'bg-blue-200 text-blue-800')
+                                                                    : order.status === 'rejected' ? 'bg-red-100 text-red-800' : 'bg-gray-200 text-gray-600'}`}>
+                                                                    {order.status === 'completed' ? (order.approvedBy ? 'Approved' : 'Review Pending') : order.status}
                                                                 </span>
                                                                 {canEdit && (user.role === 'admin' || order.doctor === user._id || order.doctor?._id === user._id) && order.status !== 'completed' && order.charge?.status !== 'paid' && (
                                                                     <button
@@ -1994,15 +2471,24 @@ const PatientDetails = () => {
                                                                 )}
                                                             </div>
                                                         </div>
-                                                        {order.signedBy && (
-                                                            <p className="text-xs text-gray-500 mt-2 italic border-t pt-2">
-                                                                Result by: {order.signedBy.name}
-                                                            </p>
-                                                        )}
                                                         {order.approvedBy && (
-                                                            <p className="text-xs text-green-600 mt-1 italic font-semibold">
-                                                                Reviewed and Approved by: {order.approvedBy.name}
-                                                            </p>
+                                                            <div className="mt-2 pt-2 border-t flex justify-between items-end">
+                                                                <div className="text-[10px] text-gray-500 italic">
+                                                                    <p>Result by: {order.signedBy?.name}</p>
+                                                                    <p>Approved by: {order.approvedBy.name}</p>
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleUniversalPrint(order);
+                                                                    }}
+                                                                    className="p-1 text-purple-600 hover:bg-purple-100 rounded"
+                                                                    title="Print Report"
+                                                                >
+                                                                    <FaFileAlt />
+                                                                </button>
+                                                            </div>
                                                         )}
                                                     </div>
                                                 ))}
@@ -2177,7 +2663,14 @@ const PatientDetails = () => {
                                                                                     <div className="flex-1">
                                                                                         {rx.medicines.map((med, idx) => (
                                                                                             <div key={idx} className="mb-3 last:mb-0">
-                                                                                                <p className="font-semibold text-lg text-gray-800">{med.name}</p>
+                                                                                                <p className="font-semibold text-lg text-gray-800 flex items-center gap-2">
+                                                                                                    {med.name}
+                                                                                                    {med.buyOutside && (
+                                                                                                        <span className="text-[10px] bg-orange-100 text-orange-800 px-2 py-0.5 rounded border border-orange-200">
+                                                                                                            BUY OUTSIDE
+                                                                                                        </span>
+                                                                                                    )}
+                                                                                                </p>
                                                                                                 <div className="text-sm text-gray-600 space-y-1 mt-1">
                                                                                                     <p><span className="font-medium">Dosage:</span> {med.dosage}</p>
                                                                                                     <p><span className="font-medium">Frequency:</span> {med.frequency}</p>
@@ -2339,7 +2832,7 @@ const PatientDetails = () => {
 
 
                                         {/* Convert to Inpatient Button - Nurse/Receptionist Only */}
-                                        {['nurse', 'receptionist', 'admin'].includes(user.role) && encounter?.type === 'Outpatient' && isEncounterActive() && !viewingPastEncounter && (
+                                        {['receptionist', 'admin'].includes(user.role) && (encounter?.type === 'Outpatient' || encounter?.type === 'Emergency') && isEncounterActive() && !viewingPastEncounter && (
                                             <button
                                                 onClick={() => setShowConvertModal(true)}
                                                 className="bg-purple-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-purple-700 transition"
@@ -2652,10 +3145,12 @@ const PatientDetails = () => {
                                     <h4 className="font-bold text-lg mb-3 text-gray-800">Assessment & Plan</h4>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
-                                            <label className="block text-gray-700 mb-2 font-semibold">A - Assessment (Diagnosis)</label>
+                                            <label className="block text-gray-700 mb-2 font-semibold">
+                                                A - Assessment (Diagnosis) <span className="text-red-500">*</span>
+                                            </label>
 
                                             {/* ICD11 Search and Add */}
-                                            <div className="space-y-3 p-3 border rounded bg-gray-50 mb-3">
+                                            <div className={`space-y-3 p-3 border rounded mb-3 ${soapNote.diagnosis.length === 0 ? 'bg-red-50 border-red-300' : 'bg-gray-50'}`}>
                                                 <div className="relative">
                                                     <div className="flex gap-2">
                                                         <div className="relative flex-1">
@@ -2676,38 +3171,72 @@ const PatientDetails = () => {
 
                                                     {showDiagDropdown && diagSearchTerm && (
                                                         <div className="absolute z-20 w-full bg-white border rounded shadow-xl max-h-60 overflow-y-auto mt-1 border-gray-200">
-                                                            {icd11Data.filter(d =>
-                                                                d.code.toLowerCase().includes(diagSearchTerm.toLowerCase()) ||
-                                                                d.description.toLowerCase().includes(diagSearchTerm.toLowerCase())
-                                                            ).length > 0 ? (
-                                                                icd11Data.filter(d =>
+                                                            {(() => {
+                                                                const customCodes = JSON.parse(localStorage.getItem('kuntau_customIcdCodes') || '[]');
+                                                                const allDiagData = [...icd11Data, ...customCodes];
+                                                                const filtered = allDiagData.filter(d =>
                                                                     d.code.toLowerCase().includes(diagSearchTerm.toLowerCase()) ||
                                                                     d.description.toLowerCase().includes(diagSearchTerm.toLowerCase())
-                                                                ).map((diag, idx) => (
-                                                                    <div
-                                                                        key={idx}
-                                                                        className="p-3 hover:bg-blue-50 cursor-pointer text-sm border-b last:border-0 flex justify-between items-center transition-colors"
-                                                                        onClick={() => {
-                                                                            if (!soapNote.diagnosis.find(d => d.code === diag.code)) {
-                                                                                setSoapNote({
-                                                                                    ...soapNote,
-                                                                                    diagnosis: [...soapNote.diagnosis, diag]
-                                                                                });
-                                                                            }
-                                                                            setDiagSearchTerm('');
-                                                                            setShowDiagDropdown(false);
-                                                                        }}
-                                                                    >
-                                                                        <div>
-                                                                            <span className="font-bold text-blue-700 mr-2">{diag.code}</span>
-                                                                            <span className="text-gray-700">{diag.description}</span>
+                                                                );
+
+                                                                if (filtered.length > 0) {
+                                                                    return filtered.map((diag, idx) => (
+                                                                        <div
+                                                                            key={idx}
+                                                                            className="p-3 hover:bg-blue-50 cursor-pointer text-sm border-b last:border-0 flex justify-between items-center transition-colors"
+                                                                            onClick={() => {
+                                                                                if (!soapNote.diagnosis.find(d => d.code === diag.code)) {
+                                                                                    setSoapNote({
+                                                                                        ...soapNote,
+                                                                                        diagnosis: [...soapNote.diagnosis, diag]
+                                                                                    });
+                                                                                }
+                                                                                setDiagSearchTerm('');
+                                                                                setShowDiagDropdown(false);
+                                                                            }}
+                                                                        >
+                                                                            <div>
+                                                                                <span className={`font-bold mr-2 ${diag.code.startsWith('CUST-') ? 'text-orange-600' : 'text-blue-700'}`}>{diag.code}</span>
+                                                                                <span className="text-gray-700">{diag.description}</span>
+                                                                                {diag.code.startsWith('CUST-') && (
+                                                                                    <span className="ml-2 text-xs bg-orange-100 text-orange-600 px-1 rounded">Custom</span>
+                                                                                )}
+                                                                            </div>
+                                                                            <FaPlus className="text-blue-500" />
                                                                         </div>
-                                                                        <FaPlus className="text-blue-500" />
+                                                                    ));
+                                                                }
+
+                                                                return (
+                                                                    <div className="p-3">
+                                                                        <p className="text-gray-400 text-xs text-center mb-2">No matching ICD-11 codes found for "<strong>{diagSearchTerm}</strong>"</p>
+                                                                        <button
+                                                                            className="w-full bg-orange-500 text-white text-sm px-3 py-2 rounded hover:bg-orange-600 flex items-center justify-center gap-2 transition-colors font-semibold"
+                                                                            onClick={() => {
+                                                                                const stored = JSON.parse(localStorage.getItem('kuntau_customIcdCodes') || '[]');
+                                                                                const nextNum = stored.length + 1;
+                                                                                const newEntry = {
+                                                                                    code: `CUST-${String(nextNum).padStart(3, '0')}`,
+                                                                                    description: diagSearchTerm.trim()
+                                                                                };
+                                                                                // Avoid duplicates
+                                                                                const alreadyExists = stored.find(c => c.description.toLowerCase() === newEntry.description.toLowerCase());
+                                                                                const entryToAdd = alreadyExists || newEntry;
+                                                                                if (!alreadyExists) {
+                                                                                    localStorage.setItem('kuntau_customIcdCodes', JSON.stringify([...stored, newEntry]));
+                                                                                }
+                                                                                if (!soapNote.diagnosis.find(d => d.description.toLowerCase() === entryToAdd.description.toLowerCase())) {
+                                                                                    setSoapNote({ ...soapNote, diagnosis: [...soapNote.diagnosis, entryToAdd] });
+                                                                                }
+                                                                                setDiagSearchTerm('');
+                                                                                setShowDiagDropdown(false);
+                                                                            }}
+                                                                        >
+                                                                            <FaPlus /> Add "{diagSearchTerm}" as custom diagnosis
+                                                                        </button>
                                                                     </div>
-                                                                ))
-                                                            ) : (
-                                                                <div className="p-4 text-gray-500 text-sm text-center">No matching ICD-11 codes found</div>
-                                                            )}
+                                                                );
+                                                            })()}
                                                         </div>
                                                     )}
                                                 </div>
@@ -2732,6 +3261,11 @@ const PatientDetails = () => {
                                                     </div>
                                                 )}
                                             </div>
+                                            {soapNote.diagnosis.length === 0 && (
+                                                <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                                                    <span className="font-bold">⚠</span> At least one ICD-11 diagnosis is required before saving.
+                                                </p>
+                                            )}
                                         </div>
                                         <div>
                                             <label className="block text-gray-700 mb-2 font-semibold">P - Plan (Treatment Plan)</label>
@@ -2750,7 +3284,8 @@ const PatientDetails = () => {
                                 <div className="flex gap-2">
                                     <button
                                         onClick={handleSaveSOAP}
-                                        className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 font-semibold"
+                                        disabled={soapNote.diagnosis.length === 0}
+                                        className={`px-6 py-2 rounded font-semibold transition-colors ${soapNote.diagnosis.length === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'}`}
                                     >
                                         Save SOAP Notes
                                     </button>
@@ -2760,6 +3295,9 @@ const PatientDetails = () => {
                                     >
                                         Cancel
                                     </button>
+                                    {soapNote.diagnosis.length === 0 && (
+                                        <span className="text-red-500 text-sm font-medium">⚠ Diagnosis required to save</span>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -2857,6 +3395,17 @@ const PatientDetails = () => {
                                         </table>
                                     </div>
                                 )}
+
+                                <div>
+                                    <label className="block text-gray-700 mb-2 font-semibold">Clinical Detail</label>
+                                    <textarea
+                                        className="w-full border p-2 rounded"
+                                        rows="3"
+                                        placeholder="Add clinical details for the lab scientist..."
+                                        value={labClinicalDetails}
+                                        onChange={(e) => setLabClinicalDetails(e.target.value)}
+                                    ></textarea>
+                                </div>
 
                                 <div className="flex gap-2 justify-end mt-4">
                                     <button
@@ -3027,11 +3576,21 @@ const PatientDetails = () => {
                                                     {filteredDrugs.map(drug => (
                                                         <div
                                                             key={drug._id}
-                                                            className="p-2 hover:bg-blue-50 cursor-pointer text-sm"
+                                                            className={`p-2 hover:bg-blue-50 cursor-pointer text-sm ${drug.quantity <= 0 || (drug.expiryDate && new Date(drug.expiryDate) < new Date()) ? 'bg-red-50' : ''}`}
                                                             onClick={() => handleSelectDrugFromSearch(drug)}
                                                         >
-                                                            <div className="font-semibold">{drug.name}</div>
-                                                            <div className="text-xs text-gray-500">Stock: {drug.quantity} | ₦{drug.price}</div>
+                                                            <div className="font-semibold flex justify-between">
+                                                                <span>{drug.name}</span>
+                                                                {drug.expiryDate && new Date(drug.expiryDate) < new Date() && (
+                                                                    <span className="text-[10px] bg-red-600 text-white px-1 rounded">EXPIRED</span>
+                                                                )}
+                                                                {drug.quantity <= 0 && (
+                                                                    <span className="text-[10px] bg-gray-600 text-white px-1 rounded">OUT OF STOCK</span>
+                                                                )}
+                                                            </div>
+                                                            <div className="text-xs text-gray-500">
+                                                                Total Stock: {drug.quantity} {drug.batches.length > 1 && `(${drug.batches.length} batches)`} | ₦{drug.price}
+                                                            </div>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -3124,10 +3683,19 @@ const PatientDetails = () => {
                                                         min="1"
                                                     />
                                                 </div>
+                                                <div className="flex flex-col items-center justify-center h-full mb-1">
+                                                    <label className="text-[10px] text-gray-600 mb-1 font-bold">Buy Outside</label>
+                                                    <input
+                                                        type="checkbox"
+                                                        className="w-5 h-5 cursor-pointer accent-red-600"
+                                                        checked={buyOutside}
+                                                        onChange={(e) => setBuyOutside(e.target.checked)}
+                                                    />
+                                                </div>
                                                 <div>
                                                     <button
                                                         onClick={handleAddDrugToQueue}
-                                                        className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 text-sm font-semibold"
+                                                        className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 text-sm font-semibold h-[38px]"
                                                     >
                                                         Add
                                                     </button>
@@ -3160,8 +3728,17 @@ const PatientDetails = () => {
                                                     </tr>
                                                 ) : (
                                                     tempDrugs.map(drug => (
-                                                        <tr key={drug.id} className="border-b">
-                                                            <td className="p-2 font-semibold">{drug.name}</td>
+                                                        <tr key={drug.id} className={`border-b ${drug.buyOutside ? 'bg-orange-50' : ''}`}>
+                                                            <td className="p-2 font-semibold">
+                                                                <div className="flex items-center gap-1">
+                                                                    {drug.name}
+                                                                    {drug.buyOutside && (
+                                                                        <span className="text-[10px] bg-orange-200 text-orange-800 px-1 rounded border border-orange-300">
+                                                                            BUY OUTSIDE
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
                                                             <td className="p-2">{drug.route}</td>
                                                             <td className="p-2">{drug.dosage}</td>
                                                             <td className="p-2">{drug.form}</td>

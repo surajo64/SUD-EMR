@@ -135,7 +135,7 @@ const ClinicManagement = () => {
             c.department.toLowerCase().includes(searchTerm.toLowerCase())
         );
 
-    if (user?.role !== 'admin' && user?.role !== 'super_admin') {
+    if (user?.role !== 'admin' && user?.role !== 'super_admin' && user?.role !== 'readonly_admin') {
         return (
             <Layout>
                 <div className="bg-red-50 border border-red-200 p-6 rounded">
@@ -155,12 +155,14 @@ const ClinicManagement = () => {
                     </h2>
                     <p className="text-gray-600 text-sm">Manage hospital clinics and departments</p>
                 </div>
-                <button
-                    onClick={() => setShowForm(!showForm)}
-                    className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 flex items-center gap-2"
-                >
-                    {showForm ? <><FaTimes /> Cancel</> : <><FaPlus /> Add New Clinic</>}
-                </button>
+                {user?.role !== 'readonly_admin' && (
+                    <button
+                        onClick={() => setShowForm(!showForm)}
+                        className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 flex items-center gap-2"
+                    >
+                        {showForm ? <><FaTimes /> Cancel</> : <><FaPlus /> Add New Clinic</>}
+                    </button>
+                )}
             </div>
 
             {/* Form */}
@@ -276,20 +278,24 @@ const ClinicManagement = () => {
                                             {clinic.description || '-'}
                                         </td>
                                         <td className="p-3">
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => handleEdit(clinic)}
-                                                    className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
-                                                >
-                                                    <FaEdit /> Edit
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDeactivate(clinic._id)}
-                                                    className="text-red-600 hover:text-red-800 text-sm"
-                                                >
-                                                    Deactivate
-                                                </button>
-                                            </div>
+                                            {user?.role !== 'readonly_admin' ? (
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => handleEdit(clinic)}
+                                                        className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
+                                                    >
+                                                        <FaEdit /> Edit
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeactivate(clinic._id)}
+                                                        className="text-red-600 hover:text-red-800 text-sm"
+                                                    >
+                                                        Deactivate
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <span className="text-gray-400 text-xs font-semibold">Read Only</span>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}
@@ -316,12 +322,14 @@ const ClinicManagement = () => {
                                     <span className="text-xs bg-red-100 text-red-700 px-3 py-1 rounded">
                                         Inactive
                                     </span>
-                                    <button
-                                        onClick={() => handleActivate(clinic._id)}
-                                        className="text-green-600 hover:text-green-800 text-sm font-semibold"
-                                    >
-                                        Activate
-                                    </button>
+                                    {user?.role !== 'readonly_admin' && (
+                                        <button
+                                            onClick={() => handleActivate(clinic._id)}
+                                            className="text-green-600 hover:text-green-800 text-sm font-semibold"
+                                        >
+                                            Activate
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         ))}

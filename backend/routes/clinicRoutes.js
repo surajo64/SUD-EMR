@@ -7,15 +7,15 @@ const {
     updateClinic,
     deleteClinic
 } = require('../controllers/clinicController');
-const { protect } = require('../middleware/authMiddleware');
+const { protect, checkNotReadOnly } = require('../middleware/authMiddleware');
 
 router.route('/')
     .get(protect, getClinics)
-    .post(protect, createClinic);
+    .post(protect, checkNotReadOnly, createClinic);
 
 router.route('/:id')
     .get(protect, getClinicById)
-    .put(protect, updateClinic)
-    .delete(protect, deleteClinic);
+    .put(protect, checkNotReadOnly, updateClinic)
+    .delete(protect, checkNotReadOnly, deleteClinic);
 
 module.exports = router;

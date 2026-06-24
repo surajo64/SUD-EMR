@@ -3,9 +3,10 @@ import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import { AppContext } from '../context/AppContext';
 import Layout from '../components/Layout';
-import { FaDollarSign, FaFileInvoiceDollar, FaCheckCircle, FaUndo, FaWallet, FaPrint, FaSearch, FaUser, FaExclamationTriangle, FaBuilding, FaHistory, FaPlus } from 'react-icons/fa';
+import { FaDollarSign, FaFileInvoiceDollar, FaCheckCircle, FaUndo, FaWallet, FaPrint, FaSearch, FaUser, FaExclamationTriangle, FaBuilding, FaHistory, FaPlus, FaEdit, FaTrash } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import LoadingOverlay from '../components/loadingOverlay';
+import { formatAge } from '../utils/patientUtils';
 
 const BillingDashboard = () => {
     const [loading, setLoading] = useState(false);
@@ -23,6 +24,8 @@ const BillingDashboard = () => {
     const [showPatientSearch, setShowPatientSearch] = useState(false);
     const [patientSearchTerm, setPatientSearchTerm] = useState('');
     const [viewingPatient, setViewingPatient] = useState(null);
+    const [showRefundModal, setShowRefundModal] = useState(false);
+    const [refundAmount, setRefundAmount] = useState('');
     const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
     const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
     const [depositSearchTerm, setDepositSearchTerm] = useState('');
@@ -37,8 +40,26 @@ const BillingDashboard = () => {
     const [hmoDepositReference, setHmoDepositReference] = useState('');
     const [statementStartDate, setStatementStartDate] = useState('');
     const [statementEndDate, setStatementEndDate] = useState('');
+    const [hmoCurrentPage, setHmoCurrentPage] = useState(1);
+    const hmoItemsPerPage = 10;
+
+    const [showReverseModal, setShowReverseModal] = useState(false);
+    const [reversingReceipt, setReversingReceipt] = useState(null);
+    const [selectedChargesToReverse, setSelectedChargesToReverse] = useState([]);
 
     const [systemSettings, setSystemSettings] = useState(null);
+
+    const [patientStatementStartDate, setPatientStatementStartDate] = useState('');
+    const [patientStatementEndDate, setPatientStatementEndDate] = useState('');
+
+    const [totalRetainershipBalance, setTotalRetainershipBalance] = useState(0);
+
+    const [showHMOEditModal, setShowHMOEditModal] = useState(false);
+    const [editingTransaction, setEditingTransaction] = useState(null);
+    const [editAmount, setEditAmount] = useState('');
+    const [editDescription, setEditDescription] = useState('');
+    const [editReference, setEditReference] = useState('');
+    const [editDate, setEditDate] = useState('');
 
     const { user } = useContext(AuthContext);
     const { backendUrl } = useContext(AppContext);
@@ -56,6 +77,7 @@ const BillingDashboard = () => {
         fetchInvoices();
         fetchPatients();
         fetchReceipts();
+        fetchRetainershipHMOs();
     }, []);
 
     const [newInvoice, setNewInvoice] = useState({
@@ -84,8 +106,69 @@ const BillingDashboard = () => {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const { data } = await axios.get(`${backendUrl}/api/patients`, config);
             setPatients(data);
+            fetchTotalRetainershipBalance();
         } catch (error) {
             console.error(error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchTotalRetainershipBalance = async () => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get(`${backendUrl}/api/hmo-transactions/total-retainership-balance`, config);
+            setTotalRetainershipBalance(data.balance || 0);
+        } catch (error) {
+            console.error('Error fetching total retainership balance:', error);
+        }
+    };
+
+    const handleEditTransaction = (tx) => {
+        setEditingTransaction(tx);
+        setEditAmount(tx.amount);
+        setEditDescription(tx.description);
+        setEditReference(tx.reference || '');
+        setEditDate(new Date(tx.date).toISOString().split('T')[0]);
+        setShowHMOEditModal(true);
+    };
+
+    const handleUpdateHMOTransaction = async (e) => {
+        e.preventDefault();
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            await axios.put(`${backendUrl}/api/hmo-transactions/${editingTransaction._id}`, {
+                amount: Number(editAmount),
+                description: editDescription,
+                reference: editReference,
+                date: editDate
+            }, config);
+
+            toast.success('Transaction updated successfully');
+            setShowHMOEditModal(false);
+            fetchHMOStatement(selectedHMO._id);
+            fetchTotalRetainershipBalance();
+        } catch (error) {
+            console.error(error);
+            toast.error(error.response?.data?.message || 'Error updating transaction');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeleteTransaction = async (tx) => {
+        if (!window.confirm('Are you sure you want to delete this transaction? This action cannot be undone.')) return;
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            await axios.delete(`${backendUrl}/api/hmo-transactions/${tx._id}`, config);
+            toast.success('Transaction deleted');
+            fetchHMOStatement(selectedHMO._id);
+            fetchTotalRetainershipBalance();
+        } catch (error) {
+            console.error(error);
+            toast.error(error.response?.data?.message || 'Error deleting transaction');
         } finally {
             setLoading(false);
         }
@@ -107,8 +190,7 @@ const BillingDashboard = () => {
 
     // --- Retainership Billing Functions ---
 
-    const searchRetainershipHMOs = async () => {
-        if (!retainershipSearchTerm) return;
+    const fetchRetainershipHMOs = async (term = '') => {
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
@@ -116,19 +198,21 @@ const BillingDashboard = () => {
 
             const filtered = data.filter(h =>
                 h.category === 'Retainership' &&
-                h.name.toLowerCase().includes(retainershipSearchTerm.toLowerCase())
+                (!term || h.name.toLowerCase().includes(term.toLowerCase()))
             );
 
             setRetainershipHMOs(filtered);
-            if (filtered.length === 0) {
-                toast.info('No Retainership HMOs found matching your search');
-            }
         } catch (error) {
             console.error(error);
-            toast.error('Error searching HMOs');
+            toast.error('Error fetching HMOs');
         } finally {
             setLoading(false);
         }
+    };
+
+    const searchRetainershipHMOs = () => {
+        fetchRetainershipHMOs(retainershipSearchTerm);
+        setHmoCurrentPage(1);
     };
 
     const handleSelectHMO = async (hmo) => {
@@ -179,6 +263,7 @@ const BillingDashboard = () => {
 
             // Refresh statement
             fetchHMOStatement(selectedHMO._id);
+            fetchTotalRetainershipBalance();
         } catch (error) {
             console.error(error);
             toast.error(error.response?.data?.message || 'Error adding deposit');
@@ -208,6 +293,49 @@ const BillingDashboard = () => {
         }
     };
 
+    const handleRefundDeposit = async (e) => {
+        e.preventDefault();
+        if (!refundAmount || isNaN(refundAmount) || Number(refundAmount) <= 0) {
+            toast.error('Please enter a valid amount');
+            return;
+        }
+
+        if (Number(refundAmount) > (viewingPatient?.depositBalance || 0)) {
+            toast.error('Refund amount cannot exceed available balance');
+            return;
+        }
+
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            await axios.post(`${backendUrl}/api/patients/${selectedPatient}/refund`, {
+                amount: Number(refundAmount)
+            }, config);
+
+            toast.success('Deposit refunded successfully!');
+            setShowRefundModal(false);
+            setRefundAmount('');
+
+            // Refresh patient data
+            const patientRes = await axios.get(`${backendUrl}/api/patients/${selectedPatient}`, config);
+            const depositRes = await axios.get(`${backendUrl}/api/patients/${selectedPatient}/deposit`, config);
+
+            setViewingPatient({
+                ...patientRes.data,
+                depositBalance: depositRes.data.balance,
+                lowDepositThreshold: depositRes.data.threshold
+            });
+
+            fetchPatients();
+            fetchReceipts();
+        } catch (error) {
+            console.error(error);
+            toast.error(error.response?.data?.message || 'Error processing refund');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleViewPatientDetails = async (patient) => {
         try {
             setLoading(true);
@@ -223,7 +351,20 @@ const BillingDashboard = () => {
     };
 
     const handlePrintPatientStatement = (patient) => {
-        const patientReceipts = receipts.filter(r => r.patient?._id === patient._id);
+        let patientReceipts = receipts.filter(r => r.patient?._id === patient._id);
+
+        // Apply date filter if selected
+        if (patientStatementStartDate) {
+            patientReceipts = patientReceipts.filter(r =>
+                new Date(r.createdAt).toISOString().split('T')[0] >= patientStatementStartDate
+            );
+        }
+        if (patientStatementEndDate) {
+            patientReceipts = patientReceipts.filter(r =>
+                new Date(r.createdAt).toISOString().split('T')[0] <= patientStatementEndDate
+            );
+        }
+
         const totalSpent = patientReceipts.reduce((sum, r) => sum + r.amountPaid, 0);
 
         const printWindow = window.open('', '', 'width=900,height=800');
@@ -465,17 +606,20 @@ const BillingDashboard = () => {
                     <div class="header">
                         <div class="hospital-info">
                             ${systemSettings?.hospitalLogo ? `<img src="${systemSettings.hospitalLogo}" alt="Logo" />` : ''}
-                            <h1>SUD GENERAL HOSPITAL</h1>
-                            <div class="address">No 234 Hadejia Road</div>
+                            <h1>${systemSettings?.reportHeader || 'MedKare EMR SYSTEM'}</h1>
+                            <div class="address">${systemSettings?.address || ''}</div>
                             <div class="contact">
-                                Tel: 07035400899 <span class="spacer">|</span> Email: info@sud.com
+                                ${systemSettings?.phone ? `Tel: ${systemSettings.phone}` : ''} 
+                                ${systemSettings?.phone && systemSettings?.email ? '<span class="spacer">|</span>' : ''} 
+                                ${systemSettings?.email ? `Email: ${systemSettings.email}` : ''}
                             </div>
                         </div>
                         
                         <div class="statement-title-section">
                             <h2>Statement of Account</h2>
                             <div class="statement-meta">
-                                <div>Date: ${new Date().toLocaleDateString()}</div>
+                                <div>Date Range: ${patientStatementStartDate || 'Beginning'} - ${patientStatementEndDate || 'Present'}</div>
+                                <div>Print Date: ${new Date().toLocaleDateString()}</div>
                                 <div>Generated By: Cashier ${user.name}</div>
                             </div>
                         </div>
@@ -492,7 +636,7 @@ const BillingDashboard = () => {
                                     <span class="info-value">${patient.mrn}</span>
                                     
                                     <span class="info-label">Gender / Age:</span>
-                                    <span class="info-value" style="text-transform: capitalize;">${patient.gender} / ${patient.age} years</span>
+                                    <span class="info-value" style="text-transform: capitalize;">${patient.gender} / ${formatAge(patient.age)}</span>
                                 </div>
                             </div>
                         </div>
@@ -531,10 +675,12 @@ const BillingDashboard = () => {
                                     <td>${new Date(r.createdAt).toLocaleDateString()}</td>
                                     <td><span style="font-family: monospace; background: #eee; padding: 2px 5px; border-radius: 3px;">${r.receiptNumber}</span></td>
                                     <td>
-                                        ${r.charges?.map(c => c.charge?.name || 'Service').join(', ') || 'Payment on Account'}
+                                        ${r.paymentMethod === 'refund' ? '<span style="color: #e53e3e; font-weight: bold;">Deposit Refund</span>' : (r.charges?.map(c => c.charge?.name || 'Service').join(', ') || 'Payment on Account')}
                                     </td>
                                     <td style="text-transform: capitalize;">${r.paymentMethod}</td>
-                                    <td class="text-right font-bold">₦${r.amountPaid.toLocaleString()}</td>
+                                    <td class="text-right font-bold ${r.amountPaid < 0 ? 'text-red-600' : ''}">
+                                        ${r.amountPaid < 0 ? `-₦${Math.abs(r.amountPaid).toLocaleString()}` : `₦${r.amountPaid.toLocaleString()}`}
+                                    </td>
                                 </tr>
                             `).join('')}
                             ${patientReceipts.length === 0 ? '<tr><td colspan="5" class="text-center" style="padding: 30px; color: #888;">No transaction history found for this patient.</td></tr>' : ''}
@@ -565,7 +711,7 @@ const BillingDashboard = () => {
                     </div>
 
                     <div class="footer">
-                        <p>Thank you for choosing ${systemSettings?.hospitalName || 'SUD EMR Medical Center'}.</p>
+                        <p>Thank you for choosing ${systemSettings?.reportHeader || 'SUD EMR Medical Center'}.</p>
                         <p>For billing inquiries, please contact our accounts department.</p>
                         <p style="margin-top: 10px; font-style: italic;">This is a computer-generated document and does not require a signature.</p>
                     </div>
@@ -579,16 +725,49 @@ const BillingDashboard = () => {
         printWindow.document.close();
     };
 
-    const handleReverseReceipt = async (receiptId) => {
-        if (!window.confirm('Are you sure you want to reverse this payment? This will restore the patient\'s deposit if paid via deposit.')) {
+    const handleReverseReceipt = (receipt) => {
+        setReversingReceipt(receipt);
+        // Pre-select all charges by default
+        setSelectedChargesToReverse(receipt.charges?.map(c => c._id) || []);
+        setShowReverseModal(true);
+    };
+
+    const confirmReverseReceipt = async () => {
+        if (selectedChargesToReverse.length === 0) {
+            toast.error('Please select at least one item to reverse');
             return;
         }
+
+        const isFullReversal = selectedChargesToReverse.length === reversingReceipt.charges.length;
+        const confirmMsg = isFullReversal
+            ? 'Are you sure you want to reverse this entire payment?'
+            : `Are you sure you want to reverse ${selectedChargesToReverse.length} selected item(s)?`;
+
+        if (!window.confirm(confirmMsg)) {
+            return;
+        }
+
+        const returnDetails = reversingReceipt.charges
+            .filter(c => selectedChargesToReverse.includes(c._id) && c.returnQty > 0)
+            .map(c => ({
+                chargeId: c._id,
+                quantity: c.returnQty
+            }));
+
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            await axios.post(`${backendUrl}/api/receipts/${receiptId}/reverse`, {}, config);
-            toast.success('Payment reversed successfully!');
+            await axios.post(`${backendUrl}/api/receipts/${reversingReceipt._id}/reverse`, {
+                chargeIds: selectedChargesToReverse,
+                returnDetails
+            }, config);
+
+            toast.success(isFullReversal ? 'Payment reversed successfully!' : 'Selected items reversed successfully!');
+            setShowReverseModal(false);
+            setReversingReceipt(null);
+            setSelectedChargesToReverse([]);
             fetchReceipts();
+            fetchPatients(); // In case deposit balance changed
         } catch (error) {
             console.error(error);
             toast.error(error.response?.data?.message || 'Error reversing payment');
@@ -629,8 +808,8 @@ const BillingDashboard = () => {
                     
                     <div class="info-row"><span>Receipt #:</span> <strong>${receipt.receiptNumber}</strong></div>
                     <div class="info-row"><span>Date:</span> <span>${new Date(receipt.paymentDate).toLocaleString()}</span></div>
-                    <div class="info-row"><span>Patient:</span> <strong>${receipt.patient?.name}</strong></div>
-                    <div class="info-row"><span>MRN:</span> <span>${receipt.patient?.mrn || 'N/A'}</span></div>
+                    <div class="info-row"><span>${receipt.familyFile ? 'Family' : 'Patient'}:</span> <strong>${receipt.patient?.name || receipt.familyFile?.familyName || 'N/A'}</strong></div>
+                    <div class="info-row"><span>${receipt.familyFile ? 'File #' : 'MRN'}:</span> <span>${receipt.patient?.mrn || receipt.familyFile?.fileNumber || 'N/A'}</span></div>
                     <div class="info-row"><span>Cashier:</span> <strong>${receipt.cashier?.name || 'Unknown'}</strong></div>
                     <div class="info-row"><span>Method:</span> <span style="text-transform: uppercase;">${receipt.paymentMethod}</span></div>
 
@@ -642,7 +821,12 @@ const BillingDashboard = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            ${receipt.charges?.map(c => `
+                            ${receipt.familyFile ? `
+                                <tr>
+                                    <td>Family Registration</td>
+                                    <td style="text-align: right;">₦${receipt.amountPaid.toFixed(2)}</td>
+                                </tr>
+                            ` : (receipt.charges?.map(c => `
                                 <tr>
                                     <td>
                                         ${c.charge?.name || 'Service'} 
@@ -650,7 +834,7 @@ const BillingDashboard = () => {
                                     </td>
                                     <td style="text-align: right;">₦${c.totalAmount.toFixed(2)}</td>
                                 </tr>
-                            `).join('') || '<tr><td colspan="2">No items</td></tr>'}
+                            `).join('') || '<tr><td colspan="2">No items</td></tr>')}
                         </tbody>
                     </table>
 
@@ -698,6 +882,8 @@ const BillingDashboard = () => {
 
     const totalReceiptsToday = receipts.filter(r => new Date(r.createdAt).toDateString() === new Date().toDateString()).length;
 
+    const totalPatientDeposits = patients.reduce((sum, p) => sum + (p.depositBalance || 0), 0);
+
     return (
         <Layout>
             {loading && <LoadingOverlay />}
@@ -734,14 +920,16 @@ const BillingDashboard = () => {
                             onClick={() => setShowPatientSearch(true)}
                             className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 flex items-center gap-2"
                         >
-                            <FaSearch /> Search Patient
+                            <FaSearch /> Patient Wallet
                         </button>
-                        <button
-                            onClick={() => setShowDepositModal(true)}
-                            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center gap-2"
-                        >
-                            <FaWallet /> Add Deposit
-                        </button>
+                        {user.role !== 'readonly_admin' && (
+                            <button
+                                onClick={() => setShowDepositModal(true)}
+                                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center gap-2"
+                            >
+                                <FaWallet /> Add Deposit
+                            </button>
+                        )}
                     </div>
                 )}
             </div>
@@ -749,7 +937,7 @@ const BillingDashboard = () => {
             {activeTab === 'invoices' ? (
                 <>
                     {/* Summary Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
                         <div className="bg-green-50 p-6 rounded shadow">
                             <p className="text-green-700 text-sm font-semibold">Collected Today</p>
                             <p className="text-3xl font-bold text-green-800">₦{totalCollectedToday.toLocaleString()}</p>
@@ -762,6 +950,14 @@ const BillingDashboard = () => {
                         <div className="bg-blue-50 p-6 rounded shadow">
                             <p className="text-blue-700 text-sm font-semibold">Total Receipts Today</p>
                             <p className="text-3xl font-bold text-blue-800">{totalReceiptsToday}</p>
+                        </div>
+                        <div className="bg-purple-50 p-6 rounded shadow">
+                            <p className="text-purple-700 text-sm font-semibold">Total Deposit Balance</p>
+                            <p className="text-3xl font-bold text-purple-800">₦{(totalPatientDeposits + totalRetainershipBalance).toLocaleString()}</p>
+                            <div className="flex justify-between text-xs text-purple-600 mt-2 border-t border-purple-200 pt-2">
+                                <span>Patients: ₦{totalPatientDeposits.toLocaleString()}</span>
+                                <span>Retainership: ₦{totalRetainershipBalance.toLocaleString()}</span>
+                            </div>
                         </div>
                     </div>
 
@@ -777,7 +973,7 @@ const BillingDashboard = () => {
                                             <label className="block text-gray-700 mb-2">Search Patient</label>
                                             <input
                                                 type="text"
-                                                placeholder="Name or MRN..."
+                                                placeholder="Name, MRN or Phone..."
                                                 className="w-full border p-2 rounded"
                                                 value={depositSearchTerm}
                                                 onChange={(e) => setDepositSearchTerm(e.target.value)}
@@ -789,7 +985,8 @@ const BillingDashboard = () => {
                                                 .filter(p =>
                                                     !depositSearchTerm ||
                                                     p.name.toLowerCase().includes(depositSearchTerm.toLowerCase()) ||
-                                                    (p.mrn && p.mrn.toLowerCase().includes(depositSearchTerm.toLowerCase()))
+                                                    (p.mrn && p.mrn.toLowerCase().includes(depositSearchTerm.toLowerCase())) ||
+                                                    (p.contact && p.contact.includes(depositSearchTerm))
                                                 )
                                                 .slice(0, 10)
                                                 .map(p => (
@@ -865,6 +1062,48 @@ const BillingDashboard = () => {
                         </div>
                     )}
 
+                    {/* Refund Modal */}
+                    {showRefundModal && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+                            <div className="bg-white p-6 rounded-lg shadow-xl w-[400px]">
+                                <h3 className="text-xl font-bold mb-4">Refund Patient Deposit</h3>
+                                <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded text-sm text-orange-800">
+                                    Available Balance: <strong>₦{(viewingPatient?.depositBalance || 0).toLocaleString()}</strong>
+                                </div>
+                                <form onSubmit={handleRefundDeposit}>
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-semibold mb-1">Refund Amount (₦)</label>
+                                        <input
+                                            type="number"
+                                            className="w-full border p-2 rounded"
+                                            value={refundAmount}
+                                            onChange={(e) => setRefundAmount(e.target.value)}
+                                            placeholder="Enter amount to refund"
+                                            max={viewingPatient?.depositBalance || 0}
+                                            required
+                                        />
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowRefundModal(false)}
+                                            className="flex-1 bg-gray-300 text-gray-800 px-4 py-2 rounded hover:bg-gray-400"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            className="flex-1 bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700 font-bold"
+                                        >
+                                            Process Refund
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+
                     {/* Patient Search Modal */}
                     {showPatientSearch && (
                         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -874,7 +1113,7 @@ const BillingDashboard = () => {
                                 </h3>
                                 <input
                                     type="text"
-                                    placeholder="Search by name or MRN..."
+                                    placeholder="Search by Name, MRN or Phone..."
                                     className="w-full border p-2 rounded mb-4"
                                     value={patientSearchTerm}
                                     onChange={(e) => setPatientSearchTerm(e.target.value)}
@@ -883,7 +1122,8 @@ const BillingDashboard = () => {
                                     {patients
                                         .filter(p =>
                                             p.name.toLowerCase().includes(patientSearchTerm.toLowerCase()) ||
-                                            (p.mrn && p.mrn.toLowerCase().includes(patientSearchTerm.toLowerCase()))
+                                            (p.mrn && p.mrn.toLowerCase().includes(patientSearchTerm.toLowerCase())) ||
+                                            (p.contact && p.contact.includes(patientSearchTerm))
                                         )
                                         .slice(0, 10)
                                         .map(patient => (
@@ -897,13 +1137,14 @@ const BillingDashboard = () => {
                                             >
                                                 <p className="font-semibold">{patient.name}</p>
                                                 <p className="text-sm text-gray-600">
-                                                    MRN: {patient.mrn} | Age: {patient.age} | {patient.gender}
+                                                    MRN: {patient.mrn} | Age: {formatAge(patient.age)} | {patient.gender}
                                                 </p>
                                             </div>
                                         ))}
                                     {patients.filter(p =>
                                         p.name.toLowerCase().includes(patientSearchTerm.toLowerCase()) ||
-                                        (p.mrn && p.mrn.toLowerCase().includes(patientSearchTerm.toLowerCase()))
+                                        (p.mrn && p.mrn.toLowerCase().includes(patientSearchTerm.toLowerCase())) ||
+                                        (p.contact && p.contact.includes(patientSearchTerm))
                                     ).length === 0 && (
                                             <p className="text-gray-500 text-center py-4">No patients found</p>
                                         )}
@@ -949,7 +1190,7 @@ const BillingDashboard = () => {
                                         </div>
                                         <div>
                                             <p className="text-sm text-gray-600">Age / Gender</p>
-                                            <p className="font-semibold">{viewingPatient.age} / {viewingPatient.gender}</p>
+                                            <p className="font-semibold">{formatAge(viewingPatient.age)} / {viewingPatient.gender}</p>
                                         </div>
                                         <div>
                                             <p className="text-sm text-gray-600">Contact</p>
@@ -1002,23 +1243,249 @@ const BillingDashboard = () => {
                                     </div>
                                 </div>
 
+                                <div class="bg-gray-50 p-4 rounded mb-4 border border-gray-200">
+                                    <h4 className="font-bold mb-3 text-sm text-gray-700 uppercase tracking-wider">Statement Date Range (Optional)</h4>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-600 mb-1">Start Date</label>
+                                            <input
+                                                type="date"
+                                                value={patientStatementStartDate}
+                                                onChange={(e) => setPatientStatementStartDate(e.target.value)}
+                                                className="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-600 mb-1">End Date</label>
+                                            <input
+                                                type="date"
+                                                value={patientStatementEndDate}
+                                                onChange={(e) => setPatientStatementEndDate(e.target.value)}
+                                                className="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                            />
+                                        </div>
+                                    </div>
+                                    {(patientStatementStartDate || patientStatementEndDate) && (
+                                        <button
+                                            onClick={() => {
+                                                setPatientStatementStartDate('');
+                                                setPatientStatementEndDate('');
+                                            }}
+                                            className="mt-2 text-xs text-blue-600 hover:underline font-medium"
+                                        >
+                                            Clear Date Range
+                                        </button>
+                                    )}
+                                </div>
+
                                 <div className="flex gap-2">
                                     <button
                                         onClick={() => handlePrintPatientStatement(viewingPatient)}
-                                        className="flex-1 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center justify-center gap-2"
+                                        className="flex-1 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center justify-center gap-2 shadow-sm transition-all"
                                     >
                                         <FaPrint /> Print Statement
                                     </button>
+                                    {(user?.role === 'admin' || user?.role === 'super_admin') && user?.role !== 'readonly_admin' && (
+                                        <button
+                                            onClick={() => {
+                                                setSelectedPatient(viewingPatient._id);
+                                                setShowRefundModal(true);
+                                                setRefundAmount('');
+                                                // Keep viewingPatient for context in the refund modal
+                                            }}
+                                            disabled={(viewingPatient.depositBalance || 0) <= 0}
+                                            className={`flex-1 px-4 py-2 rounded flex items-center justify-center gap-2 ${(viewingPatient.depositBalance || 0) <= 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-orange-600 text-white hover:bg-orange-700'}`}
+                                        >
+                                            <FaUndo /> Refund
+                                        </button>
+                                    )}
+                                    {user.role !== 'readonly_admin' && (
+                                        <button
+                                            onClick={() => {
+                                                setSelectedPatient(viewingPatient._id);
+                                                setShowDepositModal(true);
+                                                setViewingPatient(null);
+                                            }}
+                                            className="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center justify-center gap-2"
+                                        >
+                                            <FaWallet /> Add Deposit
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Selective Reversal Modal */}
+                    {showReverseModal && reversingReceipt && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                            <div className="bg-white p-6 rounded-lg w-[600px] max-h-[80vh] flex flex-col">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div>
+                                        <h3 className="text-xl font-bold flex items-center gap-2">
+                                            <FaUndo className="text-red-600" /> Reverse Payment
+                                        </h3>
+                                        <p className="text-sm text-gray-500 mt-1">
+                                            Receipt: <span className="font-mono font-bold">{reversingReceipt.receiptNumber}</span> |
+                                            Patient: <span className="font-bold">{reversingReceipt.patient?.name || reversingReceipt.familyFile?.familyName || 'N/A'}</span>
+                                        </p>
+                                    </div>
                                     <button
                                         onClick={() => {
-                                            setSelectedPatient(viewingPatient._id);
-                                            setShowDepositModal(true);
-                                            setViewingPatient(null);
+                                            setShowReverseModal(false);
+                                            setReversingReceipt(null);
                                         }}
-                                        className="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center justify-center gap-2"
+                                        className="text-gray-500 hover:text-gray-700 text-2xl"
                                     >
-                                        <FaWallet /> Add Deposit
+                                        ×
                                     </button>
+                                </div>
+
+                                <div className="bg-blue-50 p-3 rounded mb-4 text-sm text-blue-700 flex items-center gap-2">
+                                    <FaExclamationTriangle />
+                                    <span>Select the items you want to reverse. For pharmacy items, you can also select the quantity to return to inventory.</span>
+                                </div>
+
+                                <div className="flex-1 overflow-y-auto mb-4 border rounded">
+                                    <table className="w-full text-left">
+                                        <thead className="bg-gray-100 sticky top-0">
+                                            <tr>
+                                                <th className="p-3 border-b">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedChargesToReverse.length === reversingReceipt.charges?.length}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                setSelectedChargesToReverse(reversingReceipt.charges?.map(c => c._id) || []);
+                                                            } else {
+                                                                setSelectedChargesToReverse([]);
+                                                            }
+                                                        }}
+                                                        className="w-4 h-4 rounded text-blue-600"
+                                                    />
+                                                </th>
+                                                <th className="p-3 border-b text-sm font-bold uppercase">Item / Service</th>
+                                                <th className="p-3 border-b text-sm font-bold uppercase text-center">Return Qty</th>
+                                                <th className="p-3 border-b text-sm font-bold uppercase text-right">Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {reversingReceipt.charges?.map((item) => (
+                                                <tr key={item._id} className="hover:bg-gray-50">
+                                                    <td className="p-3 border-b">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selectedChargesToReverse.includes(item._id)}
+                                                            onChange={(e) => {
+                                                                if (e.target.checked) {
+                                                                    setSelectedChargesToReverse([...selectedChargesToReverse, item._id]);
+                                                                } else {
+                                                                    setSelectedChargesToReverse(selectedChargesToReverse.filter(id => id !== item._id));
+                                                                }
+                                                            }}
+                                                            className="w-4 h-4 rounded text-blue-600 cursor-pointer"
+                                                        />
+                                                    </td>
+                                                    <td className="p-3 border-b text-sm">
+                                                        <div className="font-semibold">
+                                                            {item.itemName || item.charge?.name || 'Service'}
+                                                            {item.quantity > 0 && <span className="text-gray-500 text-xs ml-1 font-normal">(Sold: {item.quantity})</span>}
+                                                        </div>
+                                                        <div className="text-[10px] text-gray-500 italic uppercase">{item.itemType || item.charge?.type || 'Other'}</div>
+                                                    </td>
+                                                    <td className="p-3 border-b text-sm text-center">
+                                                        {(
+                                                            item.itemType?.toLowerCase() === 'pharmacy' ||
+                                                            item.itemType?.toLowerCase() === 'drugs' ||
+                                                            item.itemType?.toLowerCase() === 'drug' ||
+                                                            item.charge?.type?.toLowerCase() === 'pharmacy' ||
+                                                            item.charge?.type?.toLowerCase() === 'drugs' ||
+                                                            item.charge?.type?.toLowerCase() === 'drug'
+                                                        ) ? (
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                max={item.quantity}
+                                                                className="w-16 border rounded p-1 text-center"
+                                                                value={item.returnQty || 0}
+                                                                onChange={(e) => {
+                                                                    const val = Math.min(item.quantity, Math.max(0, parseInt(e.target.value) || 0));
+                                                                    setReversingReceipt({
+                                                                        ...reversingReceipt,
+                                                                        charges: reversingReceipt.charges.map(c =>
+                                                                            c._id === item._id ? { ...c, returnQty: val } : c
+                                                                        )
+                                                                    });
+                                                                    // Auto-select the item if quantity is > 0
+                                                                    if (val > 0 && !selectedChargesToReverse.includes(item._id)) {
+                                                                        setSelectedChargesToReverse([...selectedChargesToReverse, item._id]);
+                                                                    }
+                                                                }}
+                                                            />
+                                                        ) : (
+                                                            <span className="text-gray-400">-</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-3 border-b text-sm text-right font-mono font-bold">
+                                                        ₦{item.totalAmount.toLocaleString()}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            {(!reversingReceipt.charges || reversingReceipt.charges.length === 0) && (
+                                                <tr>
+                                                    <td colSpan="4" className="p-4 text-center text-gray-500">
+                                                        No individual items found on this receipt. Reversing will process the full amount.
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div className="bg-gray-50 p-4 rounded-lg flex justify-between items-center border border-gray-200">
+                                    <div>
+                                        <p className="text-xs text-gray-500 uppercase font-bold tracking-wider">Amount to Reverse</p>
+                                        <p className="text-2xl font-black text-red-600">
+                                            ₦{reversingReceipt.charges?.filter(c => selectedChargesToReverse.includes(c._id)).reduce((sum, c) => {
+                                                const isPharm = (
+                                                    c.itemType?.toLowerCase() === 'pharmacy' ||
+                                                    c.itemType?.toLowerCase() === 'drugs' ||
+                                                    c.itemType?.toLowerCase() === 'drug' ||
+                                                    c.charge?.type?.toLowerCase() === 'pharmacy' ||
+                                                    c.charge?.type?.toLowerCase() === 'drugs' ||
+                                                    c.charge?.type?.toLowerCase() === 'drug'
+                                                );
+                                                if (isPharm && (c.returnQty || 0) > 0) {
+                                                    const unitPrice = c.unitPrice || (c.totalAmount / (c.quantity || 1));
+                                                    return sum + (c.returnQty * unitPrice);
+                                                }
+                                                return sum + c.totalAmount;
+                                            }, 0).toLocaleString() || '0'}
+                                        </p>
+                                    </div>
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => {
+                                                setShowReverseModal(false);
+                                                setReversingReceipt(null);
+                                            }}
+                                            className="px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-bold"
+                                        >
+                                            Cancel
+                                        </button>
+                                        {user.role !== 'readonly_admin' && (
+                                            <button
+                                                onClick={confirmReverseReceipt}
+                                                disabled={selectedChargesToReverse.length === 0}
+                                                className={`px-6 py-2 rounded-lg flex items-center gap-2 font-bold transition shadow-md ${selectedChargesToReverse.length === 0
+                                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                                    : 'bg-red-600 text-white hover:bg-red-700'
+                                                    }`}
+                                            >
+                                                <FaUndo /> Confirm Reverse
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1073,9 +1540,11 @@ const BillingDashboard = () => {
                                         .map((receipt) => (
                                             <tr key={receipt._id} className="hover:bg-gray-50">
                                                 <td className="p-3 border-b font-mono text-sm">{receipt.receiptNumber}</td>
-                                                <td className="p-3 border-b font-semibold">{receipt.patient?.name}</td>
+                                                <td className="p-3 border-b font-semibold">
+                                                    {receipt.patient?.name || receipt.familyFile?.familyName || 'N/A'}
+                                                </td>
                                                 <td className="p-3 border-b text-sm">
-                                                    {receipt.charges?.map(c => c.charge?.name || 'Service').join(', ') || 'N/A'}
+                                                    {receipt.familyFile ? 'Family Registration' : (receipt.charges?.map(c => c.itemName || c.charge?.name || 'Service').join(', ') || 'N/A')}
                                                 </td>
                                                 <td className="p-3 border-b text-green-600 font-bold">₦{receipt.amountPaid.toFixed(2)}</td>
                                                 <td className="p-3 border-b capitalize">
@@ -1097,9 +1566,9 @@ const BillingDashboard = () => {
                                                         >
                                                             <FaPrint /> Print
                                                         </button>
-                                                        {(user?.role === 'admin' || user?.role === 'super_admin') && (
+                                                        {(user?.role === 'admin' || user?.role === 'super_admin') && user?.role !== 'readonly_admin' && (
                                                             <button
-                                                                onClick={() => handleReverseReceipt(receipt._id)}
+                                                                onClick={() => handleReverseReceipt(receipt)}
                                                                 className="text-red-600 hover:underline flex items-center gap-1 text-sm"
                                                                 title="Reverse Payment"
                                                             >
@@ -1151,24 +1620,70 @@ const BillingDashboard = () => {
                         </div>
 
                         {/* HMO Results */}
-                        {retainershipHMOs.length > 0 && !selectedHMO && (
-                            <div className="space-y-2">
-                                <p className="font-semibold text-gray-700">Search Results:</p>
-                                {retainershipHMOs.map(hmo => (
-                                    <div
-                                        key={hmo._id}
-                                        onClick={() => handleSelectHMO(hmo)}
-                                        className="p-3 border rounded hover:bg-gray-50 cursor-pointer flex justify-between items-center"
-                                    >
-                                        <div>
-                                            <p className="font-semibold">{hmo.name}</p>
-                                            <p className="text-sm text-gray-600">Contact: {hmo.contactPerson || 'N/A'}</p>
+                        {!selectedHMO && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center mb-2">
+                                    <p className="font-semibold text-gray-700">
+                                        {retainershipSearchTerm ? `Search Results (${retainershipHMOs.length}):` : `All Retainership HMOs (${retainershipHMOs.length}):`}
+                                    </p>
+                                </div>
+
+                                {retainershipHMOs.length === 0 ? (
+                                    <p className="text-gray-500 text-center py-4 italic">No retainership entities found.</p>
+                                ) : (
+                                    <>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            {retainershipHMOs
+                                                .slice((hmoCurrentPage - 1) * hmoItemsPerPage, hmoCurrentPage * hmoItemsPerPage)
+                                                .map(hmo => (
+                                                    <div
+                                                        key={hmo._id}
+                                                        onClick={() => handleSelectHMO(hmo)}
+                                                        className="p-4 border rounded-xl hover:bg-blue-50 hover:border-blue-200 cursor-pointer flex justify-between items-center transition-all shadow-sm bg-white group"
+                                                    >
+                                                        <div>
+                                                            <p className="font-bold text-gray-800 group-hover:text-blue-700">{hmo.name}</p>
+                                                            <p className="text-xs text-gray-500 mt-1">Contact: {hmo.contactPerson || 'N/A'}</p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <span className="bg-purple-100 text-purple-800 text-[10px] font-black uppercase px-2 py-1 rounded">
+                                                                {hmo.category}
+                                                            </span>
+                                                            <p className="text-[10px] text-gray-400 mt-1 font-mono">{hmo.code}</p>
+                                                        </div>
+                                                    </div>
+                                                ))}
                                         </div>
-                                        <span className="bg-purple-100 text-purple-800 text-xs font-semibold px-2 py-1 rounded">
-                                            {hmo.category}
-                                        </span>
-                                    </div>
-                                ))}
+
+                                        {/* Pagination Controls */}
+                                        {retainershipHMOs.length > hmoItemsPerPage && (
+                                            <div className="flex items-center justify-between border-t border-gray-100 pt-4 mt-4">
+                                                <p className="text-xs text-gray-500">
+                                                    Showing {(hmoCurrentPage - 1) * hmoItemsPerPage + 1} to {Math.min(hmoCurrentPage * hmoItemsPerPage, retainershipHMOs.length)} of {retainershipHMOs.length}
+                                                </p>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => setHmoCurrentPage(p => Math.max(1, p - 1))}
+                                                        disabled={hmoCurrentPage === 1}
+                                                        className="px-3 py-1 border rounded text-xs disabled:opacity-50 hover:bg-gray-50"
+                                                    >
+                                                        Previous
+                                                    </button>
+                                                    <span className="text-xs flex items-center px-2 font-bold text-gray-600">
+                                                        Page {hmoCurrentPage} of {Math.ceil(retainershipHMOs.length / hmoItemsPerPage)}
+                                                    </span>
+                                                    <button
+                                                        onClick={() => setHmoCurrentPage(p => Math.min(Math.ceil(retainershipHMOs.length / hmoItemsPerPage), p + 1))}
+                                                        disabled={hmoCurrentPage === Math.ceil(retainershipHMOs.length / hmoItemsPerPage)}
+                                                        className="px-3 py-1 border rounded text-xs disabled:opacity-50 hover:bg-gray-50"
+                                                    >
+                                                        Next
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
                             </div>
                         )}
                     </div>
@@ -1192,12 +1707,14 @@ const BillingDashboard = () => {
                                             ← Change HMO
                                         </button>
                                     </div>
-                                    <button
-                                        onClick={() => setShowHMODepositModal(true)}
-                                        className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 flex items-center gap-2 shadow-lg"
-                                    >
-                                        <FaPlus /> Add Deposit
-                                    </button>
+                                    {user.role !== 'readonly_admin' && (
+                                        <button
+                                            onClick={() => setShowHMODepositModal(true)}
+                                            className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 flex items-center gap-2 shadow-lg"
+                                        >
+                                            <FaPlus /> Add Deposit
+                                        </button>
+                                    )}
                                 </div>
 
                                 {/* Date Range Filter */}
@@ -1371,6 +1888,10 @@ const BillingDashboard = () => {
                                                 <th className="p-3 border-b">Description</th>
                                                 <th className="p-3 border-b">Reference</th>
                                                 <th className="p-3 border-b text-right">Amount</th>
+                                                {(user?.role === 'admin' || user?.role === 'super_admin') && (
+                                                    <th className="p-3 border-b text-center">Actions</th>
+                                                )}
+
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -1408,6 +1929,30 @@ const BillingDashboard = () => {
                                                             }`}>
                                                             {tx.isCredit ? '+' : '-'}₦{tx.amount.toLocaleString()}
                                                         </td>
+                                                        {(user?.role === 'admin' || user?.role === 'super_admin') && user?.role !== 'readonly_admin' && (
+                                                            <td className="p-3 border-b text-center">
+                                                                {tx.type === 'Deposit' ? (
+                                                                    <div className="flex justify-center gap-2 text-sm">
+                                                                        <button
+                                                                            onClick={() => handleEditTransaction(tx)}
+                                                                            className="text-blue-600 hover:text-blue-800"
+                                                                            title="Edit Transaction"
+                                                                        >
+                                                                            <FaEdit />
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => handleDeleteTransaction(tx)}
+                                                                            className="text-red-600 hover:text-red-800"
+                                                                            title="Delete Transaction"
+                                                                        >
+                                                                            <FaTrash />
+                                                                        </button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-gray-300 text-[10px] font-bold">LOCKED</span>
+                                                                )}
+                                                            </td>
+                                                        )}
                                                     </tr>
                                                 ))
                                             )}
@@ -1467,6 +2012,77 @@ const BillingDashboard = () => {
                                             className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
                                         >
                                             Add Deposit
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+                    {/* HMO Edit Transaction Modal */}
+                    {showHMOEditModal && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                            <div className="bg-white p-6 rounded-lg w-[400px] shadow-2xl">
+                                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                                    <FaEdit className="text-blue-600" /> Edit Transaction
+                                </h3>
+                                <div className="mb-4 text-xs bg-blue-50 p-3 rounded-lg text-blue-700 border border-blue-100 flex items-center gap-2">
+                                    <FaExclamationTriangle />
+                                    <span>Updating this transaction will affect the current balance.</span>
+                                </div>
+                                <form onSubmit={handleUpdateHMOTransaction}>
+                                    <div className="mb-4">
+                                        <label className="block text-gray-700 text-sm font-semibold mb-1">Date</label>
+                                        <input
+                                            type="date"
+                                            className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                            value={editDate}
+                                            onChange={(e) => setEditDate(e.target.value)}
+                                            required
+                                        />
+                                    </div>
+                                    <div className="mb-4">
+                                        <label className="block text-gray-700 text-sm font-semibold mb-1">Amount (₦)</label>
+                                        <input
+                                            type="number"
+                                            className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                            value={editAmount}
+                                            onChange={(e) => setEditAmount(e.target.value)}
+                                            required
+                                            min="0"
+                                        />
+                                    </div>
+                                    <div className="mb-4">
+                                        <label className="block text-gray-700 text-sm font-semibold mb-1">Description</label>
+                                        <input
+                                            type="text"
+                                            className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                            value={editDescription}
+                                            onChange={(e) => setEditDescription(e.target.value)}
+                                            required
+                                        />
+                                    </div>
+                                    <div className="mb-6">
+                                        <label className="block text-gray-700 text-sm font-semibold mb-1">Reference</label>
+                                        <input
+                                            type="text"
+                                            className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                            value={editReference}
+                                            onChange={(e) => setEditReference(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="flex justify-end gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowHMOEditModal(false)}
+                                            className="px-6 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-bold"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-md"
+                                        >
+                                            Save Changes
                                         </button>
                                     </div>
                                 </form>

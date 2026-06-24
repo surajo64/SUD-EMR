@@ -9,7 +9,7 @@ const {
     deleteBank,
     setDefaultBank
 } = require('../controllers/bankController');
-const { protect, admin } = require('../middleware/authMiddleware');
+const { protect, admin, checkNotReadOnly } = require('../middleware/authMiddleware');
 
 // Get default bank (accessible to all authenticated users)
 router.get('/default', protect, getDefaultBank);
@@ -21,15 +21,15 @@ router.get('/', protect, getBanks);
 router.get('/:id', protect, getBankById);
 
 // Create bank (admin only)
-router.post('/', protect, admin, createBank);
+router.post('/', protect, admin, checkNotReadOnly, createBank);
 
 // Update bank (admin only)
-router.put('/:id', protect, admin, updateBank);
+router.put('/:id', protect, admin, checkNotReadOnly, updateBank);
 
 // Set default bank (admin only)
-router.put('/:id/set-default', protect, admin, setDefaultBank);
+router.put('/:id/set-default', protect, admin, checkNotReadOnly, setDefaultBank);
 
 // Delete bank (admin only)
-router.delete('/:id', protect, admin, deleteBank);
+router.delete('/:id', protect, admin, checkNotReadOnly, deleteBank);
 
 module.exports = router;

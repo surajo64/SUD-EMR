@@ -13,7 +13,7 @@ const inventorySchema = mongoose.Schema({
     supplier: { type: String },
     batchNumber: { type: String },
     barcode: { type: String },
-    reorderLevel: { type: Number, default: 10 }, // Alert when stock falls below this
+    reorderLevel: { type: Number, default: 2 }, // Alert when stock falls below this
     route: { type: String },
     form: { type: String },
     dosage: { type: String },

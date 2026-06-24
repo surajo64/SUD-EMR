@@ -31,9 +31,11 @@ const AdminDashboard = () => {
     const [activeTab, setActiveTab] = useState('overview'); // overview, reports, users
     const [settings, setSettings] = useState(null);
     const [showRegisterPatientModal, setShowRegisterPatientModal] = useState(false);
+    const [totalPatientDeposits, setTotalPatientDeposits] = useState(0);
+    const [totalRetainershipBalance, setTotalRetainershipBalance] = useState(0);
 
     useEffect(() => {
-        if (user && (user.role === 'admin' || user.role === 'super_admin')) {
+        if (user && (user.role === 'admin' || user.role === 'super_admin' || user.role === 'readonly_admin')) {
             fetchDashboardData();
             fetchSettings();
         }
@@ -67,6 +69,15 @@ const AdminDashboard = () => {
             });
 
             setRevenueByDepartment(data.revenueByDepartment);
+
+            // Fetch patient deposit balance sum
+            const { data: patientsData } = await axios.get(`${backendUrl}/api/patients`, config);
+            const patTotal = patientsData.reduce((sum, p) => sum + (p.depositBalance || 0), 0);
+            setTotalPatientDeposits(patTotal);
+
+            // Fetch HMO retainership deposit balance
+            const { data: hmoData } = await axios.get(`${backendUrl}/api/hmo-transactions/total-retainership-balance`, config);
+            setTotalRetainershipBalance(hmoData.balance || 0);
 
         } catch (error) {
             console.error(error);
@@ -123,7 +134,7 @@ const AdminDashboard = () => {
             {activeTab === 'overview' && (
                 <div className="space-y-6">
                     {/* Stats Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                         {/* Total Patients */}
                         <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-lg shadow hover:shadow-md transition">
                             <div className="flex justify-between items-start">
@@ -172,7 +183,22 @@ const AdminDashboard = () => {
                             </div>
                         </div>
 
-                        {/* Total Users */}
+                        {/* Total Deposit Balance */}
+                        <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-lg shadow hover:shadow-md transition">
+                            <div className="flex justify-between items-start">
+                                <div className="w-full">
+                                    <p className="text-purple-600 text-sm font-semibold mb-2">Total Deposit Balance</p>
+                                    <p className="text-4xl font-bold text-purple-800">₦{(totalPatientDeposits + totalRetainershipBalance).toLocaleString()}</p>
+                                    <div className="flex justify-between text-xs text-purple-600 mt-3 border-t border-purple-200 pt-2">
+                                        <span>Patients: ₦{totalPatientDeposits.toLocaleString()}</span>
+                                        <span>Retainership: ₦{totalRetainershipBalance.toLocaleString()}</span>
+                                    </div>
+                                </div>
+                                <FaFileInvoiceDollar className="text-5xl text-purple-400 opacity-50 flex-shrink-0 ml-2" />
+                            </div>
+                        </div>
+
+                        {/* System Users */}
                         <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-lg shadow hover:shadow-md transition">
                             <div className="flex justify-between items-start">
                                 <div>
@@ -220,12 +246,14 @@ const AdminDashboard = () => {
                                     <Link to="/admin/patients" className="flex-1 bg-green-600 text-white text-xs px-3 py-1 rounded hover:bg-green-700 text-center">
                                         View All
                                     </Link>
-                                    <button
-                                        onClick={() => setShowRegisterPatientModal(true)}
-                                        className="flex-1 bg-blue-600 text-white text-xs px-3 py-1 rounded hover:bg-blue-700"
-                                    >
-                                        Register
-                                    </button>
+                                    {user.role !== 'readonly_admin' && (
+                                        <button
+                                            onClick={() => setShowRegisterPatientModal(true)}
+                                            className="flex-1 bg-blue-600 text-white text-xs px-3 py-1 rounded hover:bg-blue-700"
+                                        >
+                                            Register
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                             <Link to="/billing" className="p-4 border-2 border-blue-200 rounded-lg hover:bg-blue-50 transition flex flex-col items-center gap-2">

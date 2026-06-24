@@ -1,4 +1,4 @@
-import { useState, useContext } from 'react';
+import { useState, useContext, useEffect } from 'react';
 import axios from 'axios';
 import { AppContext } from '../context/AppContext';
 import AuthContext from '../context/AuthContext';
@@ -10,22 +10,62 @@ import { useNavigate } from 'react-router-dom';
 const ExternalRadiology = () => {
     const { backendUrl } = useContext(AppContext);
     const [searchTerm, setSearchTerm] = useState('');
-    const [encounters, setEncounters] = useState([]);
-    const [loading, setLoading] = useState(false);
     const { user } = useContext(AuthContext);
     const navigate = useNavigate();
+    const [encounters, setEncounters] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [allEncounters, setAllEncounters] = useState([]); // All pending encounters
+    const [isSearching, setIsSearching] = useState(false);
+
+    // Fetch all pending encounters on mount
+    const fetchAllEncounters = async () => {
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            
+            // Fetch both new and legacy external investigation types
+            const [newRes, legacyRes] = await Promise.all([
+                axios.get(`${backendUrl}/api/visits?type=External Lab/Radiology&encounterStatus=awaiting_services`, config),
+                axios.get(`${backendUrl}/api/visits?type=External Investigation&encounterStatus=awaiting_services`, config)
+            ]);
+            
+            // Re-filter to ensure strict type matching
+            const combined = [...newRes.data, ...legacyRes.data].filter(v => 
+                v.type === 'External Lab/Radiology' || v.type === 'External Investigation'
+            );
+            
+            // Sort by date (latest first)
+            const sorted = combined.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                .map(v => ({ ...v, patientInfo: v.patient }));
+            
+            setAllEncounters(sorted);
+            setEncounters(sorted);
+        } catch (error) {
+            console.error(error);
+            toast.error('Error fetching encounters');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchAllEncounters();
+    }, []);
 
     const searchEncounters = async () => {
         if (!searchTerm.trim()) {
-            toast.error('Please enter a patient name or MRN');
+            setEncounters(allEncounters);
+            setIsSearching(false);
             return;
         }
+
+        setIsSearching(true);
 
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
 
-            // Search for the specific patient
+            // Search for all matching patients
             const { data: patients } = await axios.get(
                 `${backendUrl}/api/patients?search=${searchTerm}`,
                 config
@@ -37,34 +77,34 @@ const ExternalRadiology = () => {
                 return;
             }
 
-            // If multiple patients found, use the first match
-            const patient = patients[0];
+            // Get encounters for all matching patients to find relevant ones
+            let allExternalEncounters = [];
 
-            if (patients.length > 1) {
-                toast.info(`Found ${patients.length} patients. Showing results for: ${patient.name}`);
+            for (const patient of patients) {
+                const { data: visits } = await axios.get(
+                    `${backendUrl}/api/visits/patient/${patient._id}`,
+                    config
+                );
+
+                const patientExternalEnc = visits
+                    .filter(v => v.type === 'External Lab/Radiology' || v.type === 'External Investigation')
+                    .map(enc => ({
+                        ...enc,
+                        patientInfo: patient
+                    }));
+                
+                allExternalEncounters = [...allExternalEncounters, ...patientExternalEnc];
             }
 
-            // Get External Investigation encounters for this specific patient only
-            const { data: visits } = await axios.get(
-                `${backendUrl}/api/visits/patient/${patient._id}`,
-                config
-            );
+            // Sort by date (latest first)
+            allExternalEncounters.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            setEncounters(allExternalEncounters);
 
-            // Filter for External Investigation type and sort by date (latest first)
-            const externalInvestigations = visits
-                .filter(v => v.type === 'External Investigation')
-                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                .map(enc => ({
-                    ...enc,
-                    patientInfo: patient
-                }));
-
-            setEncounters(externalInvestigations);
-
-            if (externalInvestigations.length === 0) {
-                toast.info(`No External Investigation encounters found for ${patient.name}`);
+            if (allExternalEncounters.length === 0) {
+                const names = patients.map(p => p.name).join(', ');
+                toast.info(`No External Lab/Radiology encounters found for: ${names}`);
             } else {
-                toast.success(`Found ${externalInvestigations.length} External Investigation encounter(s) for ${patient.name}`);
+                toast.success(`Found ${allExternalEncounters.length} External Lab/Radiology encounter(s)`);
             }
         } catch (error) {
             console.error(error);
@@ -87,7 +127,7 @@ const ExternalRadiology = () => {
                     <FaXRay className="text-indigo-600" /> External Radiology
                 </h2>
                 <p className="text-gray-600 text-sm mt-1">
-                    Search for patients with External Investigation encounters to order radiology scans
+                    Search for patients with External Lab/Radiology encounters to order radiology scans
                 </p>
             </div>
 
@@ -119,7 +159,7 @@ const ExternalRadiology = () => {
             {encounters.length > 0 && (
                 <div className="bg-white p-6 rounded shadow">
                     <h3 className="text-xl font-bold mb-4">
-                        External Investigation Encounters ({encounters.length})
+                        {isSearching ? `Search Results (${encounters.length})` : `All Pending External Lab/Radiology Encounters (${encounters.length})`}
                     </h3>
                     <div className="space-y-3">
                         {encounters.map(encounter => (
@@ -185,7 +225,7 @@ const ExternalRadiology = () => {
             {!loading && encounters.length === 0 && searchTerm && (
                 <div className="bg-white p-12 rounded shadow text-center">
                     <FaSearch className="text-gray-400 text-5xl mx-auto mb-4" />
-                    <p className="text-gray-600 text-lg">No External Investigation encounters found</p>
+                    <p className="text-gray-600 text-lg">No External Lab/Radiology encounters found</p>
                     <p className="text-gray-500 text-sm mt-2">
                         Try searching with a different patient name or MRN
                     </p>

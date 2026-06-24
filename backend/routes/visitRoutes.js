@@ -17,5 +17,6 @@ router.route('/:id')
 
 router.route('/:id/notes').post(protect, require('../controllers/visitController').addNote);
 router.route('/:id/convert-to-inpatient').put(protect, require('../controllers/visitController').convertToInpatient);
+router.route('/:id/change-type').put(protect, require('../controllers/visitController').changeEncounterType);
 
 module.exports = router;

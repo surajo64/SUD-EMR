@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { FaUserMd, FaPills, FaFlask, FaXRay, FaUserInjured, FaCalendarAlt, FaNotesMedical, FaSignOutAlt, FaTachometerAlt, FaDollarSign, FaFileInvoiceDollar, FaHeart, FaHospital, FaBed, FaChevronDown, FaChevronRight, FaCogs, FaMoneyBillWave, FaExchangeAlt, FaTrash, FaUniversity, FaChartLine, FaFileMedicalAlt, FaLock } from 'react-icons/fa';
+import { FaUserMd, FaPills, FaFlask, FaXRay, FaUserInjured, FaCalendarAlt, FaNotesMedical, FaSignOutAlt, FaTachometerAlt, FaDollarSign, FaFileInvoiceDollar, FaHeart, FaHospital, FaBed, FaChevronDown, FaChevronRight, FaCogs, FaMoneyBillWave, FaExchangeAlt, FaTrash, FaUniversity, FaChartLine, FaFileMedicalAlt, FaLock, FaUserFriends, FaHospitalUser, FaHistory, FaCashRegister } from 'react-icons/fa';
+
 import { useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import { AppContext } from '../context/AppContext';
@@ -90,6 +91,9 @@ const Sidebar = () => {
                         <Link to="/appointments" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/appointments')}`}>
                             <FaCalendarAlt /> Appointments
                         </Link>
+                        <Link to="/nurse/inpatients" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/nurse/inpatients')}`}>
+                            <FaBed /> Inpatient Management
+                        </Link>
 
                     </>
                 )}
@@ -97,7 +101,13 @@ const Sidebar = () => {
                 {user.role === 'nurse' && (
                     <>
                         <Link to="/nurse/triage" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/nurse/triage')}`}>
-                            <FaUserMd /> Triage / Vitals
+                            <FaUserMd /> Nursing Triage
+                        </Link>
+                        <Link to="/nurse/inpatients" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/nurse/inpatients')}`}>
+                            <FaBed /> Inpatient Management
+                        </Link>
+                        <Link to="/nurse/wards" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/nurse/wards')}`}>
+                            <FaHospital /> Ward Availability
                         </Link>
                         <Link to="/nurse/services" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/nurse/services')}`}>
                             <FaHeart /> Manage Nurse Services
@@ -113,8 +123,17 @@ const Sidebar = () => {
                         <Link to="/front-desk/patients" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/front-desk/patients')}`}>
                             <FaUserInjured /> Patient Management
                         </Link>
+                        <Link to="/front-desk/family-files" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/front-desk/family-files')}`}>
+                            <FaUserFriends /> Family Files
+                        </Link>
+                        <Link to="/hmo-management" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/hmo-management')}`}>
+                            <FaHospital size={14} /> HMO/Retainership
+                        </Link>
                         <Link to="/appointments" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/appointments')}`}>
                             <FaCalendarAlt /> Appointments
+                        </Link>
+                        <Link to="/nurse/wards" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/nurse/wards')}`}>
+                            <FaHospital /> Ward Availability
                         </Link>
                     </>
                 )}
@@ -138,9 +157,10 @@ const Sidebar = () => {
                         <Link to="/pharmacy/prescriptions" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/pharmacy/prescriptions')}`}>
                             <FaPills /> Prescriptions
                         </Link>
-                        <Link to="/pharmacy/external-investigations" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/pharmacy/external-investigations')}`}>
-                            <FaPills /> External Purchase
+                        <Link to="/pharmacy/pos" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/pharmacy/pos')}`}>
+                            <FaCashRegister /> External Pharmacy POS
                         </Link>
+
                         <Link to="/pharmacy/inventory" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/pharmacy/inventory')}`}>
                             <FaPills /> Inventory
                         </Link>
@@ -160,6 +180,9 @@ const Sidebar = () => {
                                 </Link>
                             </>
                         )}
+                        <Link to="/admin/drug-metadata" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/admin/drug-metadata')}`}>
+                            <FaPills /> Drug Metadata
+                        </Link>
                     </>
                 )}
 
@@ -168,8 +191,8 @@ const Sidebar = () => {
                         <Link to="/lab" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/lab')}`}>
                             <FaFlask /> Lab Orders
                         </Link>
-                        <Link to="/lab/external-investigations" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/lab/external-investigations')}`}>
-                            <FaFlask /> External Investigations
+                        <Link to="/lab/pos" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/lab/pos')}`}>
+                            <FaCashRegister />  External Test Orders
                         </Link>
                         <Link to="/lab/manage-tests" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/lab/manage-tests')}`}>
                             <FaFlask /> Manage Lab Tests
@@ -183,9 +206,10 @@ const Sidebar = () => {
                         <Link to="/lab" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/lab')}`}>
                             <FaFlask /> Lab Orders
                         </Link>
-                        <Link to="/lab/external-investigations" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/lab/external-investigations')}`}>
-                            <FaFlask /> External Investigations
+                        <Link to="/lab/pos" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/lab/pos')}`}>
+                            <FaCashRegister /> External Test Orders
                         </Link>
+
                         <Link to="/lab/manage-tests" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/lab/manage-tests')}`}>
                             <FaFlask /> Manage Lab Tests
                         </Link>
@@ -197,16 +221,17 @@ const Sidebar = () => {
                         <Link to="/radiology" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/radiology')}`}>
                             <FaXRay /> Radiology Orders
                         </Link>
-                        <Link to="/radiology/external-investigations" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/radiology/external-investigations')}`}>
-                            <FaXRay /> External Radiology
+                        <Link to="/radiology/pos" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/radiology/pos')}`}>
+                            <FaCashRegister /> External Scan Orders
                         </Link>
+
                         <Link to="/radiology/manage-tests" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/radiology/manage-tests')}`}>
                             <FaXRay /> Manage Radiology Tests
                         </Link>
                     </>
                 )}
 
-                {(user.role === 'admin' || user.role === 'super_admin') && (
+                {(user.role === 'admin' || user.role === 'super_admin' || user.role === 'readonly_admin') && (
                     <>
                         <SidebarDropdown title="General Management" icon={<FaCogs />} name="general">
                             <Link to="/admin/users" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/users')}`}>
@@ -214,6 +239,9 @@ const Sidebar = () => {
                             </Link>
                             <Link to="/admin/patients" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/patients')}`}>
                                 <FaUserInjured size={14} /> Patients
+                            </Link>
+                            <Link to="/admin/family-files" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/family-files')}`}>
+                                <FaUserFriends size={14} /> Family Files
                             </Link>
                             <Link to="/admin/clinics" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/clinics')}`}>
                                 <FaHospital size={14} /> Clinics
@@ -225,7 +253,7 @@ const Sidebar = () => {
                                 <FaCalendarAlt size={14} /> Appointments
                             </Link>
                             <Link to="/admin/hmo-management" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/hmo-management')}`}>
-                                <FaHospital size={14} /> HMO Management
+                                <FaHospital size={14} /> HMO/Retainership
                             </Link>
                             <Link to="/admin/bank-management" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/bank-management')}`}>
                                 <FaUniversity size={14} /> Bank Management
@@ -237,8 +265,12 @@ const Sidebar = () => {
                                 </Link>
                             )}
                         </SidebarDropdown>
+                    </>
+                )}
 
-                        <SidebarDropdown title="Service Management" icon={<FaHeart />} name="services">
+                {(user.role === 'admin' || user.role === 'super_admin' || user.role === 'readonly_admin' || user.role === 'receptionist') && (
+                    <>
+                        <SidebarDropdown title={user.role === 'receptionist' ? "Services Price List" : "Service Management"} icon={<FaHeart />} name="services">
                             <Link to="/nurse/services" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/nurse/services')}`}>
                                 <FaHeart size={14} /> Nurse Services
                             </Link>
@@ -252,7 +284,11 @@ const Sidebar = () => {
                                 <FaDollarSign size={14} /> Front Desk Charges
                             </Link>
                         </SidebarDropdown>
+                    </>
+                )}
 
+                {(user.role === 'admin' || user.role === 'super_admin' || user.role === 'readonly_admin') && (
+                    <>
                         <SidebarDropdown title="Manage Pharmacy" icon={<FaPills />} name="pharmacy">
                             <Link to="/pharmacy/inventory" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/pharmacy/inventory')}`}>
                                 <FaPills size={14} /> Inventory
@@ -278,14 +314,23 @@ const Sidebar = () => {
                             <Link to="/admin/clinical-reports" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/clinical-reports')}`}>
                                 <FaFileMedicalAlt size={14} /> Clinical Reports
                             </Link>
+                            <Link to="/admin/visit-report" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/visit-report')}`}>
+                                <FaHospitalUser size={14} /> Visit Reports
+                            </Link>
                         </SidebarDropdown>
 
                         <SidebarDropdown title="Financials" icon={<FaMoneyBillWave />} name="financials">
+                            <Link to="/cashier" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/cashier')}`}>
+                                <FaDollarSign size={14} /> Cashier Dashboard
+                            </Link>
                             <Link to="/billing" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/billing')}`}>
                                 <FaFileInvoiceDollar size={14} /> Billing
                             </Link>
-                            <Link to="/admin/claims-management" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/admin/claims-management')}`}>
-                                <FaFileInvoiceDollar /> HMO Claims
+                            <Link to="/admin/claims-management" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/claims-management')}`}>
+                                <FaFileInvoiceDollar size={14} /> HMO Claims
+                            </Link>
+                            <Link to="/admin/patient-financial-statement" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/patient-financial-statement')}`}>
+                                <FaHistory size={14} /> Patient Ledgers
                             </Link>
                         </SidebarDropdown>
                     </>

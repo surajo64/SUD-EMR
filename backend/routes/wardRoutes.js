@@ -6,9 +6,9 @@ const {
     updateWard,
     deleteWard
 } = require('../controllers/wardController');
-const { protect, admin } = require('../middleware/authMiddleware');
+const { protect, admin, checkNotReadOnly } = require('../middleware/authMiddleware');
 
-router.route('/').post(protect, admin, createWard).get(protect, getWards);
-router.route('/:id').put(protect, admin, updateWard).delete(protect, admin, deleteWard);
+router.route('/').post(protect, admin, checkNotReadOnly, createWard).get(protect, getWards);
+router.route('/:id').put(protect, admin, checkNotReadOnly, updateWard).delete(protect, admin, checkNotReadOnly, deleteWard);
 
 module.exports = router;

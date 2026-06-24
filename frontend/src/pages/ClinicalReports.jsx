@@ -8,6 +8,7 @@ import { FaFileMedicalAlt, FaDownload, FaSearch, FaUserFriends, FaVenusMars, FaC
 import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
+import { checkRange, getRangeColorClass } from '../utils/labUtils';
 
 const ClinicalReports = () => {
     const [reportType, setReportType] = useState('diagnosis');
@@ -99,7 +100,7 @@ const ClinicalReports = () => {
         toast.success('Report exported successfully!');
     };
 
-    if (user?.role !== 'admin' && user?.role !== 'super_admin') {
+    if (user?.role !== 'admin' && user?.role !== 'super_admin' && user?.role !== 'readonly_admin') {
         return (
             <Layout>
                 <div className="bg-red-50 border border-red-200 p-6 rounded">
@@ -318,8 +319,55 @@ const ClinicalReports = () => {
                                                                         <span className="text-gray-700 font-semibold">{rec.patient?.age} Yrs</span>
                                                                     </div>
                                                                 </td>
-                                                                <td className="px-6 py-4 italic text-gray-600">
-                                                                    {rec.details}
+                                                                <td className="px-6 py-4 text-gray-700">
+                                                                    {reportType === 'lab' ? (
+                                                                        (() => {
+                                                                            try {
+                                                                                const parsed = JSON.parse(rec.details);
+                                                                                if (parsed.format === 'table' && Array.isArray(parsed.parameters)) {
+                                                                                    return (
+                                                                                        <div className="border rounded overflow-hidden">
+                                                                                            <table className="w-full text-[10px]">
+                                                                                                <thead className="bg-gray-50 border-b">
+                                                                                                    <tr className="text-gray-500 uppercase font-bold">
+                                                                                                        <th className="px-2 py-1 text-left">Param</th>
+                                                                                                        <th className="px-2 py-1 text-left">Val</th>
+                                                                                                        <th className="px-2 py-1 text-left">Normal</th>
+                                                                                                        <th className="px-2 py-1 text-center">St</th>
+                                                                                                    </tr>
+                                                                                                </thead>
+                                                                                                <tbody className="divide-y">
+                                                                                                    {parsed.parameters.map((param, pIdx) => {
+                                                                                                        const status = checkRange(param.value, param.normalRange);
+                                                                                                        const colorClass = getRangeColorClass(status);
+                                                                                                        return (
+                                                                                                            <tr key={pIdx} className={param.value ? colorClass : ''}>
+                                                                                                                <td className="px-2 py-1 font-medium">{param.name}</td>
+                                                                                                                <td className="px-2 py-1 font-bold">{param.value || '-'} <span className="text-[8px] font-normal opacity-70">{param.unit}</span></td>
+                                                                                                                <td className="px-2 py-1 opacity-80">{param.normalRange}</td>
+                                                                                                                <td className="px-2 py-1 text-center">
+                                                                                                                    {param.value && !param.name.toLowerCase().trim().includes('blood group') && !param.name.toLowerCase().trim().includes('genotype') && (
+                                                                                                                        <span className="font-black text-[8px]">
+                                                                                                                            {status === 'low' ? 'L' : status === 'high' ? 'H' : ''}
+                                                                                                                        </span>
+                                                                                                                    )}
+                                                                                                                </td>
+                                                                                                            </tr>
+                                                                                                        );
+                                                                                                    })}
+                                                                                                </tbody>
+                                                                                            </table>
+                                                                                        </div>
+                                                                                    );
+                                                                                }
+                                                                            } catch (e) {
+                                                                                // Fallback to text
+                                                                            }
+                                                                            return <span className="italic text-gray-600">{rec.details}</span>;
+                                                                        })()
+                                                                    ) : (
+                                                                        <span className="italic text-gray-600">{rec.details}</span>
+                                                                    )}
                                                                 </td>
                                                                 <td className="px-6 py-4 font-semibold text-gray-700">
                                                                     {rec.doctor?.name || 'SYSTEM ADMIN'}

@@ -442,6 +442,13 @@ RESULT:
                         </button>
                     </div>
                 )}
+                {user?.role === 'receptionist' && (
+                    <div className="flex gap-2">
+                        <span className="text-gray-500 bg-gray-100 px-3 py-1 rounded text-sm font-medium border border-gray-200">
+                            Read Only Access
+                        </span>
+                    </div>
+                )}
             </div>
 
             {/* Form */}
@@ -739,20 +746,24 @@ _____________________________________"
                                         </td>
                                         <td className="p-3">
                                             <div className="flex gap-2">
-                                                {(user?.role === 'admin' || user?.role === 'super_admin') && (
-                                                    <button
-                                                        onClick={() => handleEdit(test)}
-                                                        className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
-                                                    >
-                                                        <FaEdit /> Edit
-                                                    </button>
+                                                {(user?.role === 'admin' || user?.role === 'super_admin') ? (
+                                                    <>
+                                                        <button
+                                                            onClick={() => handleEdit(test)}
+                                                            className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
+                                                        >
+                                                            <FaEdit /> Edit
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeactivate(test._id)}
+                                                            className="text-red-600 hover:text-red-800 text-sm"
+                                                        >
+                                                            Deactivate
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <span className="text-gray-400 text-xs italic">No actions available</span>
                                                 )}
-                                                <button
-                                                    onClick={() => handleDeactivate(test._id)}
-                                                    className="text-red-600 hover:text-red-800 text-sm"
-                                                >
-                                                    Deactivate
-                                                </button>
                                             </div>
                                         </td>
                                     </tr>
@@ -781,12 +792,14 @@ _____________________________________"
                                         <span className="text-xs bg-red-100 text-red-700 px-3 py-1 rounded">
                                             Inactive
                                         </span>
-                                        <button
-                                            onClick={() => handleActivate(test._id)}
-                                            className="text-green-600 hover:text-green-800 text-sm font-semibold"
-                                        >
-                                            Activate
-                                        </button>
+                                        {(user?.role === 'admin' || user?.role === 'super_admin') && (
+                                            <button
+                                                onClick={() => handleActivate(test._id)}
+                                                className="text-green-600 hover:text-green-800 text-sm font-semibold"
+                                            >
+                                                Activate
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             ))}

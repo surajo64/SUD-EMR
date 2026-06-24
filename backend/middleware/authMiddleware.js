@@ -25,11 +25,18 @@ const protect = async (req, res, next) => {
 };
 
 const admin = (req, res, next) => {
-    if (req.user && (req.user.role === 'admin' || req.user.role === 'super_admin')) {
+    if (req.user && (req.user.role === 'admin' || req.user.role === 'super_admin' || req.user.role === 'readonly_admin')) {
         next();
     } else {
         res.status(401).json({ message: 'Not authorized as an admin' });
     }
+};
+
+const checkNotReadOnly = (req, res, next) => {
+    if (req.user && req.user.role === 'readonly_admin') {
+        return res.status(403).json({ message: 'Action not allowed for Read-only Admin' });
+    }
+    next();
 };
 
 const superAdmin = (req, res, next) => {
@@ -41,11 +48,27 @@ const superAdmin = (req, res, next) => {
 };
 
 const pharmacy = (req, res, next) => {
-    if (req.user && (req.user.role === 'pharmacist' || req.user.role === 'admin' || req.user.role === 'super_admin')) {
+    if (req.user && (req.user.role === 'pharmacist' || req.user.role === 'admin' || req.user.role === 'super_admin' || req.user.role === 'readonly_admin')) {
         next();
     } else {
         res.status(401).json({ message: 'Not authorized as a pharmacist' });
     }
 };
 
-module.exports = { protect, admin, superAdmin, pharmacy };
+const adminOrReceptionist = (req, res, next) => {
+    if (req.user && (req.user.role === 'admin' || req.user.role === 'super_admin' || req.user.role === 'readonly_admin' || req.user.role === 'receptionist')) {
+        next();
+    } else {
+        res.status(401).json({ message: 'Not authorized. Admin or Receptionist access required.' });
+    }
+};
+
+const scientist = (req, res, next) => {
+    if (req.user && (req.user.role === 'lab_scientist' || req.user.role === 'admin' || req.user.role === 'super_admin' || req.user.role === 'readonly_admin')) {
+        next();
+    } else {
+        res.status(401).json({ message: 'Not authorized as a lab scientist' });
+    }
+};
+
+module.exports = { protect, admin, superAdmin, pharmacy, adminOrReceptionist, scientist, checkNotReadOnly };

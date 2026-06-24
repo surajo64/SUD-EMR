@@ -15,6 +15,7 @@ const settingSchema = mongoose.Schema({
     currencySymbol: { type: String, default: '₦' },
     idPrefix: { type: String, default: 'PAT' }, // Prefix for MRN generation (e.g., 'SUD', 'HOSP')
     mrnCounter: { type: Number, default: 0 }, // Auto-incrementing counter for MRN
+    familyFileCounter: { type: Number, default: 0 }, // Auto-incrementing counter for Family Files
     lastUpdatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, {
     timestamps: true

@@ -94,7 +94,7 @@ const PharmacyManagement = () => {
         setShowModal(true);
     };
 
-    if (user?.role !== 'admin' && user?.role !== 'super_admin') {
+    if (user?.role !== 'admin' && user?.role !== 'super_admin' && user?.role !== 'readonly_admin') {
         return (
             <Layout>
                 <div className="bg-red-50 border border-red-200 p-6 rounded">
@@ -116,12 +116,14 @@ const PharmacyManagement = () => {
                     </h1>
                     <p className="text-gray-600 mt-2">Manage pharmacy locations and assignments</p>
                 </div>
-                <button
-                    onClick={openAddModal}
-                    className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center gap-2"
-                >
-                    <FaPlus /> Add Pharmacy
-                </button>
+                {user?.role !== 'readonly_admin' && (
+                    <button
+                        onClick={openAddModal}
+                        className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center gap-2"
+                    >
+                        <FaPlus /> Add Pharmacy
+                    </button>
+                )}
             </div>
 
             {/* Pharmacies List */}
@@ -176,19 +178,25 @@ const PharmacyManagement = () => {
                                         </span>
                                     </td>
                                     <td className="p-4 text-right space-x-2">
-                                        <button
-                                            onClick={() => openEditModal(item)}
-                                            className="text-blue-600 hover:text-blue-800"
-                                        >
-                                            <FaEdit />
-                                        </button>
-                                        {!item.isMainPharmacy && (
-                                            <button
-                                                onClick={() => handleDelete(item._id)}
-                                                className="text-red-600 hover:text-red-800"
-                                            >
-                                                <FaTrash />
-                                            </button>
+                                        {user?.role !== 'readonly_admin' ? (
+                                            <>
+                                                <button
+                                                    onClick={() => openEditModal(item)}
+                                                    className="text-blue-600 hover:text-blue-800"
+                                                >
+                                                    <FaEdit />
+                                                </button>
+                                                {!item.isMainPharmacy && (
+                                                    <button
+                                                        onClick={() => handleDelete(item._id)}
+                                                        className="text-red-600 hover:text-red-800"
+                                                    >
+                                                        <FaTrash />
+                                                    </button>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <span className="text-gray-400 text-xs font-semibold">Read Only</span>
                                         )}
                                     </td>
                                 </tr>
