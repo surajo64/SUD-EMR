@@ -41,6 +41,7 @@ const patientSchema = mongoose.Schema({
     // Family File Integration
     isFamilyMember: { type: Boolean, default: false },
     familyFile: { type: mongoose.Schema.Types.ObjectId, ref: 'FamilyFile' },
+    registeredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, {
     timestamps: true,
 });

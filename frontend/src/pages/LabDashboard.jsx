@@ -4,9 +4,10 @@ import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import { AppContext } from '../context/AppContext';
 import Layout from '../components/Layout';
-import { FaFlask, FaSearch, FaCheckCircle, FaEdit, FaSave, FaTimes, FaFileAlt, FaCog, FaChevronDown, FaChevronUp, FaTimesCircle } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { parseRange, checkRange, getRangeColorClass } from '../utils/labUtils';
+import { formatCompactNumber } from '../utils/formatters';
+import { FaFlask, FaSearch, FaCheckCircle, FaEdit, FaSave, FaTimes, FaFileAlt, FaCog, FaChevronDown, FaChevronUp, FaTimesCircle, FaVials } from 'react-icons/fa';
 
 const LabDashboard = () => {
     const resultRef = useRef();
@@ -26,6 +27,23 @@ const LabDashboard = () => {
     const { user } = useContext(AuthContext);
     const { backendUrl } = useContext(AppContext);
     const [expandedEncounter, setExpandedEncounter] = useState(null);
+    const [userStats, setUserStats] = useState({ testsToday: 0 });
+
+    useEffect(() => {
+        if (user && user.token) {
+            fetchUserStats();
+        }
+    }, [user.token, backendUrl]);
+
+    const fetchUserStats = async () => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get(`${backendUrl}/api/reports/user-stats`, config);
+            setUserStats(data);
+        } catch (error) {
+            console.error('Error fetching user stats:', error);
+        }
+    };
 
 
 
@@ -540,20 +558,6 @@ const LabDashboard = () => {
                 </button>
             </div>
 
-            {/* Summary */}
-            <div className="grid grid-cols-2 gap-6 mb-6">
-                <div className="bg-yellow-50 p-6 rounded shadow">
-                    <p className="text-yellow-700 text-sm font-semibold">Pending Tests</p>
-                    <p className="text-3xl font-bold text-yellow-800">{pendingOrders.length}</p>
-                </div>
-                <div className="bg-green-50 p-6 rounded shadow">
-                    <p className="text-green-700 text-sm font-semibold">Completed Today</p>
-                    <p className="text-3xl font-bold text-green-800">
-                        {completedOrders.filter(o => new Date(o.updatedAt).toDateString() === new Date().toDateString()).length}
-                    </p>
-                </div>
-            </div>
-
             {/* Search */}
             <div className="bg-white p-6 rounded shadow mb-6">
                 <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
@@ -589,278 +593,644 @@ const LabDashboard = () => {
             </div>
 
             {/* Grouped Search Results */}
-            {!selectedOrder && (
-                <div className="mb-6">
-                    <div className="space-y-4">
-                        {groupedEncounters.length === 0 ? (
-                            <div className="bg-white p-12 rounded shadow text-center text-gray-500">
-                                <p className="text-lg font-semibold">No results found</p>
-                                <p className="text-sm">Try searching with a different name or MRN.</p>
-                            </div>
-                        ) : (
-                            groupedEncounters.map(group => (
-                                <div key={group.id} className="bg-white rounded shadow overflow-hidden border border-purple-100">
-                                    {/* Encounter Header */}
-                                    <div
-                                        className="p-4 cursor-pointer hover:bg-purple-50 flex justify-between items-center transition-colors"
-                                        onClick={() => setExpandedEncounter(expandedEncounter === group.id ? null : group.id)}
-                                    >
-                                        <div className="flex items-center gap-4">
-                                            <div className="bg-purple-100 p-3 rounded-full text-purple-600">
-                                                <FaFlask size={20} />
-                                            </div>
-                                            <div>
-                                                <h4 className="font-bold text-gray-800 text-lg">
-                                                    {group.patient?.name || 'Unknown Patient'}
-                                                </h4>
-                                                <p className="text-sm text-gray-600">
-                                                    {group.patient?.mrn && (
-                                                        <>
-                                                            MRN: <span className="font-semibold">{group.patient.mrn}</span>
-                                                            <span className="mx-2 text-gray-300">|</span>
-                                                        </>
-                                                    )}
-                                                    {group.patient?.contact && (
-                                                        <>
-                                                            Phone: <span className="font-semibold">{group.patient.contact}</span>
-                                                            <span className="mx-2 text-gray-300">|</span>
-                                                        </>
-                                                    )}
-                                                    {group.visit ? (
-                                                        <>
-                                                            <span className="text-purple-600 font-medium">{group.visit.type}</span>
-                                                            <span className="mx-2 text-gray-300">•</span>
-                                                            {new Date(group.visit.createdAt).toLocaleDateString()}
-                                                        </>
-                                                    ) : (
-                                                        <span className="text-blue-600 font-medium italic flex items-center gap-1">
-                                                            <FaFlask size={10} /> Lab Direct / Walk-in
-                                                        </span>
-                                                    )}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-4">
-                                            <div className="text-right mr-4">
-                                                <span className="bg-purple-600 text-white px-3 py-1 rounded-full text-xs font-bold">
-                                                    {group.orders.length} {group.orders.length === 1 ? 'Test' : 'Tests'}
-                                                </span>
-                                                <div className="flex flex-col items-end mt-1">
-                                                    {group.orders.some(o => o.status === 'pending') && (
-                                                        <p className="text-[10px] text-amber-500 uppercase tracking-wider font-bold">
-                                                            {group.orders.filter(o => o.status === 'pending').length} Pending
-                                                        </p>
-                                                    )}
-                                                    {group.orders.some(o => o.status === 'rejected') && (
-                                                        <p className="text-[10px] text-red-500 uppercase tracking-wider font-bold">
-                                                            {group.orders.filter(o => o.status === 'rejected').length} Rejected
-                                                        </p>
-                                                    )}
-                                                    {group.orders.some(o => o.status === 'completed') && (
-                                                        <p className="text-[10px] text-green-500 uppercase tracking-wider font-bold">
-                                                            {group.orders.filter(o => o.status === 'completed').length} Completed
-                                                        </p>
-                                                    )}
+            {
+                !selectedOrder && (
+                    <div className="mb-6">
+                        <div className="space-y-4">
+                            {groupedEncounters.length === 0 ? (
+                                <div className="bg-white p-12 rounded shadow text-center text-gray-500">
+                                    <p className="text-lg font-semibold">No results found</p>
+                                    <p className="text-sm">Try searching with a different name or MRN.</p>
+                                </div>
+                            ) : (
+                                groupedEncounters.map(group => (
+                                    <div key={group.id} className="bg-white rounded shadow overflow-hidden border border-purple-100">
+                                        {/* Encounter Header */}
+                                        <div
+                                            className="p-4 cursor-pointer hover:bg-purple-50 flex justify-between items-center transition-colors"
+                                            onClick={() => setExpandedEncounter(expandedEncounter === group.id ? null : group.id)}
+                                        >
+                                            <div className="flex items-center gap-4">
+                                                <div className="bg-purple-100 p-3 rounded-full text-purple-600">
+                                                    <FaFlask size={20} />
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-bold text-gray-800 text-lg">
+                                                        {group.patient?.name || 'Unknown Patient'}
+                                                    </h4>
+                                                    <p className="text-sm text-gray-600">
+                                                        {group.patient?.mrn && (
+                                                            <>
+                                                                MRN: <span className="font-semibold">{group.patient.mrn}</span>
+                                                                <span className="mx-2 text-gray-300">|</span>
+                                                            </>
+                                                        )}
+                                                        {group.patient?.contact && (
+                                                            <>
+                                                                Phone: <span className="font-semibold">{group.patient.contact}</span>
+                                                                <span className="mx-2 text-gray-300">|</span>
+                                                            </>
+                                                        )}
+                                                        {group.visit ? (
+                                                            <>
+                                                                <span className="text-purple-600 font-medium">{group.visit.type}</span>
+                                                                <span className="mx-2 text-gray-300">•</span>
+                                                                {new Date(group.visit.createdAt).toLocaleDateString()}
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-blue-600 font-medium italic flex items-center gap-1">
+                                                                <FaFlask size={10} /> Lab Direct / Walk-in
+                                                            </span>
+                                                        )}
+                                                    </p>
                                                 </div>
                                             </div>
-                                            {expandedEncounter === group.id ? <FaChevronUp className="text-gray-400" /> : <FaChevronDown className="text-gray-400" />}
-                                        </div>
-                                    </div>
-
-                                    {/* Tests List (Expanded) */}
-                                    {expandedEncounter === group.id && (
-                                        <div className="bg-gray-50 border-t divide-y">
-                                            {group.orders.map(order => (
-                                                <div
-                                                    key={order._id}
-                                                    className={`p-4 flex justify-between items-center ${order.status === 'completed' && order.approvedBy
-                                                        ? 'bg-gray-50 opacity-75'
-                                                        : 'bg-white'
-                                                        }`}
-                                                >
-                                                    <div className="flex-1">
-                                                        <div className="flex items-center gap-2 mb-1">
-                                                            <p className="font-bold text-gray-800">{order.testName}</p>
-                                                            {order.labSpecialization && (
-                                                                <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded font-bold uppercase">
-                                                                    {order.labSpecialization}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        <p className="text-xs text-gray-500">
-                                                            Ordered: {new Date(order.createdAt).toLocaleString()}
-                                                        </p>
-                                                        {order.clinicalDetails && (
-                                                            <div className="mt-2 p-2 bg-blue-50 border-l-4 border-blue-400 text-xs italic">
-                                                                <p className="font-bold text-blue-800 not-italic uppercase text-[9px] mb-1">Clinical context:</p>
-                                                                <p className="text-gray-700">{order.clinicalDetails}</p>
-                                                            </div>
+                                            <div className="flex items-center gap-4">
+                                                <div className="text-right mr-4">
+                                                    <span className="bg-purple-600 text-white px-3 py-1 rounded-full text-xs font-bold">
+                                                        {group.orders.length} {group.orders.length === 1 ? 'Test' : 'Tests'}
+                                                    </span>
+                                                    <div className="flex flex-col items-end mt-1">
+                                                        {group.orders.some(o => o.status === 'pending') && (
+                                                            <p className="text-[10px] text-amber-500 uppercase tracking-wider font-bold">
+                                                                {group.orders.filter(o => o.status === 'pending').length} Pending
+                                                            </p>
+                                                        )}
+                                                        {group.orders.some(o => o.status === 'rejected') && (
+                                                            <p className="text-[10px] text-red-500 uppercase tracking-wider font-bold">
+                                                                {group.orders.filter(o => o.status === 'rejected').length} Rejected
+                                                            </p>
+                                                        )}
+                                                        {group.orders.some(o => o.status === 'completed') && (
+                                                            <p className="text-[10px] text-green-500 uppercase tracking-wider font-bold">
+                                                                {group.orders.filter(o => o.status === 'completed').length} Completed
+                                                            </p>
                                                         )}
                                                     </div>
-                                                    <div className="flex items-center gap-3">
-                                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${order.status === 'completed'
-                                                            ? (order.approvedBy ? 'bg-green-600 text-white' : 'bg-green-100 text-green-800')
-                                                            : order.status === 'rejected'
-                                                                ? 'bg-red-100 text-red-800'
-                                                                : 'bg-yellow-100 text-yellow-800'
-                                                            }`}>
-                                                            {order.status === 'completed' ? (order.approvedBy ? 'Reviewed and Approved' : 'Completed') : order.status === 'rejected' ? 'REJECTED' : 'Pending'}
-                                                        </span>
-                                                        <div className="flex gap-1">
-                                                            {order.status === 'completed' ? (
-                                                                <>
-                                                                    <button
-                                                                        onClick={() => setViewResultModal(order)}
-                                                                        className="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
-                                                                        title="View Results"
-                                                                    >
-                                                                        <FaFileAlt size={12} />
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleUniversalPrint(order)}
-                                                                        className="p-1.5 bg-purple-50 text-purple-600 rounded hover:bg-purple-100 transition-colors"
-                                                                        title="Print Results"
-                                                                    >
-                                                                        <FaFileAlt size={12} />
-                                                                    </button>
-                                                                    {((user.role === 'lab_technician' && !order.approvedBy) || user.role === 'lab_scientist') && (
-                                                                        <button
-                                                                            onClick={() => {
-                                                                                setEditResultModal(order);
-                                                                                try {
-                                                                                    const parsed = JSON.parse(order.result);
-                                                                                    if (parsed.format === 'table' && Array.isArray(parsed.parameters)) {
-                                                                                        setIsEditTableFormat(true);
-                                                                                        setEditTableResults(parsed.parameters);
-                                                                                        setEditResults('');
-                                                                                    } else {
-                                                                                        setIsEditTableFormat(false);
-                                                                                        setEditResults(order.result);
-                                                                                        setEditTableResults([]);
-                                                                                    }
-                                                                                } catch (err) {
-                                                                                    const parsedParams = parseTextTemplate(order.result);
-                                                                                    if (parsedParams.length > 0) {
-                                                                                        setIsEditTableFormat(true);
-                                                                                        setEditTableResults(parsedParams);
-                                                                                        setEditResults('');
-                                                                                    } else {
-                                                                                        setIsEditTableFormat(false);
-                                                                                        setEditResults(order.result);
-                                                                                        setEditTableResults([]);
-                                                                                    }
-                                                                                }
-                                                                            }}
-                                                                            className="p-1.5 bg-orange-50 text-orange-600 rounded hover:bg-orange-100 transition-colors"
-                                                                            title="Edit"
-                                                                        >
-                                                                            <FaEdit size={12} />
-                                                                        </button>
-                                                                    )}
-                                                                    {user.role === 'lab_scientist' && !order.approvedBy && (
-                                                                        <>
-                                                                            {order.signedBy?._id !== user._id && (
-                                                                                <button
-                                                                                    onClick={() => handleApproveResult(order._id)}
-                                                                                    className="p-1.5 bg-green-50 text-green-600 rounded hover:bg-green-100 transition-colors"
-                                                                                    title="Approve"
-                                                                                >
-                                                                                    <FaCheckCircle size={12} />
-                                                                                </button>
-                                                                            )}
-                                                                            {order.signedBy?._id !== user._id && (
-                                                                                <button
-                                                                                    onClick={() => handleRejectResult(order._id)}
-                                                                                    className="p-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
-                                                                                    title="Reject Result"
-                                                                                >
-                                                                                    <FaTimesCircle size={12} />
-                                                                                </button>
-                                                                            )}
-                                                                        </>
-                                                                    )}
-                                                                </>
-                                                            ) : (
-                                                                <button
-                                                                    onClick={() => handleSelectOrder(order)}
-                                                                    className={`p-1.5 rounded transition-colors ${order.status === 'rejected' ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
-                                                                    title={order.status === 'rejected' ? 'Revise Rejected Result' : 'Enter Results'}
-                                                                >
-                                                                    <FaEdit size={12} />
-                                                                </button>
+                                                </div>
+                                                {expandedEncounter === group.id ? <FaChevronUp className="text-gray-400" /> : <FaChevronDown className="text-gray-400" />}
+                                            </div>
+                                        </div>
+
+                                        {/* Tests List (Expanded) */}
+                                        {expandedEncounter === group.id && (
+                                            <div className="bg-gray-50 border-t divide-y">
+                                                {group.orders.map(order => (
+                                                    <div
+                                                        key={order._id}
+                                                        className={`p-4 flex justify-between items-center ${order.status === 'completed' && order.approvedBy
+                                                            ? 'bg-gray-50 opacity-75'
+                                                            : 'bg-white'
+                                                            }`}
+                                                    >
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <p className="font-bold text-gray-800">{order.testName}</p>
+                                                                {order.labSpecialization && (
+                                                                    <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded font-bold uppercase">
+                                                                        {order.labSpecialization}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-xs text-gray-500">
+                                                                Ordered: {new Date(order.createdAt).toLocaleString()}
+                                                            </p>
+                                                            {order.clinicalDetails && (
+                                                                <div className="mt-2 p-2 bg-blue-50 border-l-4 border-blue-400 text-xs italic">
+                                                                    <p className="font-bold text-blue-800 not-italic uppercase text-[9px] mb-1">Clinical context:</p>
+                                                                    <p className="text-gray-700">{order.clinicalDetails}</p>
+                                                                </div>
                                                             )}
                                                         </div>
+                                                        <div className="flex items-center gap-3">
+                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${order.status === 'completed'
+                                                                ? (order.approvedBy ? 'bg-green-600 text-white' : 'bg-green-100 text-green-800')
+                                                                : order.status === 'rejected'
+                                                                    ? 'bg-red-100 text-red-800'
+                                                                    : 'bg-yellow-100 text-yellow-800'
+                                                                }`}>
+                                                                {order.status === 'completed' ? (order.approvedBy ? 'Reviewed and Approved' : 'Completed') : order.status === 'rejected' ? 'REJECTED' : 'Pending'}
+                                                            </span>
+                                                            <div className="flex gap-1">
+                                                                {order.status === 'completed' ? (
+                                                                    <>
+                                                                        <button
+                                                                            onClick={() => setViewResultModal(order)}
+                                                                            className="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
+                                                                            title="View Results"
+                                                                        >
+                                                                            <FaFileAlt size={12} />
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => handleUniversalPrint(order)}
+                                                                            className="p-1.5 bg-purple-50 text-purple-600 rounded hover:bg-purple-100 transition-colors"
+                                                                            title="Print Results"
+                                                                        >
+                                                                            <FaFileAlt size={12} />
+                                                                        </button>
+                                                                        {((user.role === 'lab_technician' && !order.approvedBy) || user.role === 'lab_scientist') && (
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    setEditResultModal(order);
+                                                                                    try {
+                                                                                        const parsed = JSON.parse(order.result);
+                                                                                        if (parsed.format === 'table' && Array.isArray(parsed.parameters)) {
+                                                                                            setIsEditTableFormat(true);
+                                                                                            setEditTableResults(parsed.parameters);
+                                                                                            setEditResults('');
+                                                                                        } else {
+                                                                                            setIsEditTableFormat(false);
+                                                                                            setEditResults(order.result);
+                                                                                            setEditTableResults([]);
+                                                                                        }
+                                                                                    } catch (err) {
+                                                                                        const parsedParams = parseTextTemplate(order.result);
+                                                                                        if (parsedParams.length > 0) {
+                                                                                            setIsEditTableFormat(true);
+                                                                                            setEditTableResults(parsedParams);
+                                                                                            setEditResults('');
+                                                                                        } else {
+                                                                                            setIsEditTableFormat(false);
+                                                                                            setEditResults(order.result);
+                                                                                            setEditTableResults([]);
+                                                                                        }
+                                                                                    }
+                                                                                }}
+                                                                                className="p-1.5 bg-orange-50 text-orange-600 rounded hover:bg-orange-100 transition-colors"
+                                                                                title="Edit"
+                                                                            >
+                                                                                <FaEdit size={12} />
+                                                                            </button>
+                                                                        )}
+                                                                        {user.role === 'lab_scientist' && !order.approvedBy && (
+                                                                            <>
+                                                                                {order.signedBy?._id !== user._id && (
+                                                                                    <button
+                                                                                        onClick={() => handleApproveResult(order._id)}
+                                                                                        className="p-1.5 bg-green-50 text-green-600 rounded hover:bg-green-100 transition-colors"
+                                                                                        title="Approve"
+                                                                                    >
+                                                                                        <FaCheckCircle size={12} />
+                                                                                    </button>
+                                                                                )}
+                                                                                {order.signedBy?._id !== user._id && (
+                                                                                    <button
+                                                                                        onClick={() => handleRejectResult(order._id)}
+                                                                                        className="p-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
+                                                                                        title="Reject Result"
+                                                                                    >
+                                                                                        <FaTimesCircle size={12} />
+                                                                                    </button>
+                                                                                )}
+                                                                            </>
+                                                                        )}
+                                                                    </>
+                                                                ) : (
+                                                                    <button
+                                                                        onClick={() => handleSelectOrder(order)}
+                                                                        className={`p-1.5 rounded transition-colors ${order.status === 'rejected' ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
+                                                                        title={order.status === 'rejected' ? 'Revise Rejected Result' : 'Enter Results'}
+                                                                    >
+                                                                        <FaEdit size={12} />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))}
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                )
+            }
+
+            {/* Selected Order - Results Entry */}
+            {
+                selectedOrder && (
+                    <div className="bg-white p-6 rounded shadow">
+                        <div className="bg-purple-50 p-4 rounded mb-6">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="font-bold text-lg">{selectedOrder.testName}</p>
+                                    <p className="text-gray-700">Patient: {selectedOrder.patient?.name}</p>
+                                    <p className="text-sm text-gray-600">MRN: {selectedOrder.patient?.mrn}</p>
+                                    {selectedOrder.clinicalDetails && (
+                                        <div className="mt-3 p-3 bg-white bg-opacity-60 border-l-4 border-purple-400 text-sm">
+                                            <p className="font-semibold text-purple-900">Clinical Detail:</p>
+                                            <p className="text-gray-800 italic">{selectedOrder.clinicalDetails}</p>
+                                        </div>
+                                    )}
+                                    {selectedOrder.rejectionReason && (
+                                        <div className="mt-3 p-3 bg-red-100 border-l-4 border-red-500 text-sm animate-pulse">
+                                            <p className="font-bold text-red-800 uppercase text-[10px] mb-1">Rejection Feedback (Action Required):</p>
+                                            <p className="text-red-900 font-semibold">{selectedOrder.rejectionReason}</p>
+                                            <p className="text-xs text-red-700 mt-2 italic">Please review the previous entries, correct any errors, and sign again.</p>
                                         </div>
                                     )}
                                 </div>
-                            ))
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* Selected Order - Results Entry */}
-            {selectedOrder && (
-                <div className="bg-white p-6 rounded shadow">
-                    <div className="bg-purple-50 p-4 rounded mb-6">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <p className="font-bold text-lg">{selectedOrder.testName}</p>
-                                <p className="text-gray-700">Patient: {selectedOrder.patient?.name}</p>
-                                <p className="text-sm text-gray-600">MRN: {selectedOrder.patient?.mrn}</p>
-                                {selectedOrder.clinicalDetails && (
-                                    <div className="mt-3 p-3 bg-white bg-opacity-60 border-l-4 border-purple-400 text-sm">
-                                        <p className="font-semibold text-purple-900">Clinical Detail:</p>
-                                        <p className="text-gray-800 italic">{selectedOrder.clinicalDetails}</p>
-                                    </div>
-                                )}
-                                {selectedOrder.rejectionReason && (
-                                    <div className="mt-3 p-3 bg-red-100 border-l-4 border-red-500 text-sm animate-pulse">
-                                        <p className="font-bold text-red-800 uppercase text-[10px] mb-1">Rejection Feedback (Action Required):</p>
-                                        <p className="text-red-900 font-semibold">{selectedOrder.rejectionReason}</p>
-                                        <p className="text-xs text-red-700 mt-2 italic">Please review the previous entries, correct any errors, and sign again.</p>
-                                    </div>
-                                )}
-                            </div>
-                            <button
-                                onClick={() => {
-                                    setSelectedOrder(null);
-                                }}
-                                className="text-blue-600 hover:underline text-sm"
-                            >
-                                ← Back to List
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Payment Status Check */}
-                    {selectedOrder.charge?.status !== 'paid' ? (
-                        <div className="border-2 border-red-300 bg-red-50 p-6 rounded mb-6">
-                            <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-red-800">
-                                <FaCheckCircle /> Payment Pending
-                            </h3>
-                            <p className="text-sm text-gray-700 mb-4">
-                                This test has not been paid for yet. Please ask the patient to pay at the cashier.
-                            </p>
-                            <div className="flex gap-2 items-center">
-                                <span className="font-bold text-red-600">Status: Unpaid</span>
                                 <button
-                                    onClick={fetchLabOrders}
-                                    className="text-blue-600 hover:underline text-sm ml-4"
+                                    onClick={() => {
+                                        setSelectedOrder(null);
+                                    }}
+                                    className="text-blue-600 hover:underline text-sm"
                                 >
-                                    Refresh Status
+                                    ← Back to List
                                 </button>
                             </div>
                         </div>
-                    ) : (
-                        <div>
-                            <div className="bg-green-50 p-4 rounded mb-6">
-                                <p className="text-green-700 font-semibold flex items-center gap-2">
-                                    <FaCheckCircle /> Payment Verified
+
+                        {/* Payment Status Check */}
+                        {selectedOrder.charge?.status !== 'paid' ? (
+                            <div className="border-2 border-red-300 bg-red-50 p-6 rounded mb-6">
+                                <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-red-800">
+                                    <FaCheckCircle /> Payment Pending
+                                </h3>
+                                <p className="text-sm text-gray-700 mb-4">
+                                    This test has not been paid for yet. Please ask the patient to pay at the cashier.
                                 </p>
+                                <div className="flex gap-2 items-center">
+                                    <span className="font-bold text-red-600">Status: Unpaid</span>
+                                    <button
+                                        onClick={fetchLabOrders}
+                                        className="text-blue-600 hover:underline text-sm ml-4"
+                                    >
+                                        Refresh Status
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div>
+                                <div className="bg-green-50 p-4 rounded mb-6">
+                                    <p className="text-green-700 font-semibold flex items-center gap-2">
+                                        <FaCheckCircle /> Payment Verified
+                                    </p>
+                                </div>
+
+                                <div className="mb-6">
+                                    <label className="block text-gray-700 mb-2 font-semibold flex items-center gap-2">
+                                        <FaEdit /> Lab Results
+                                    </label>
+
+                                    {isTableFormat ? (
+                                        <div className="border rounded overflow-hidden">
+                                            <table className="w-full">
+                                                <thead className="bg-gray-100">
+                                                    <tr>
+                                                        <th className="text-left p-3 font-semibold border-b">Parameter</th>
+                                                        <th className="text-left p-3 font-semibold border-b w-32">Value</th>
+                                                        <th className="text-left p-3 font-semibold border-b w-24">Unit</th>
+                                                        <th className="text-left p-3 font-semibold border-b w-40">Normal Range</th>
+                                                        <th className="text-left p-3 font-semibold border-b w-24">Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {tableResults.map((param, index) => {
+                                                        const rangeStatus = checkRange(param.value, param.normalRange);
+                                                        const colorClass = getRangeColorClass(rangeStatus);
+
+                                                        return (
+                                                            <tr key={index} className={`border-b ${param.value ? colorClass : ''}`}>
+                                                                <td className="p-3 font-medium">{param.name}</td>
+                                                                <td className="p-2">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={param.value}
+                                                                        onChange={(e) => {
+                                                                            const newResults = [...tableResults];
+                                                                            newResults[index].value = e.target.value;
+                                                                            setTableResults(newResults);
+                                                                        }}
+                                                                        className="w-full border p-2 rounded text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                                                        placeholder="Enter value"
+                                                                    />
+                                                                </td>
+                                                                <td className="p-3 text-sm text-gray-600">{param.unit}</td>
+                                                                <td className="p-3 text-sm text-gray-600">{param.normalRange}</td>
+                                                                <td className="p-3">
+                                                                    {param.value && (
+                                                                        <span className={`text-xs px-2 py-1 rounded font-semibold ${rangeStatus === 'low' ? 'bg-orange-200 text-orange-900' :
+                                                                            rangeStatus === 'high' ? 'bg-red-200 text-red-900' :
+                                                                                'bg-green-200 text-green-900'
+                                                                            }`}>
+                                                                            {rangeStatus === 'low' ? '↓ LOW' :
+                                                                                rangeStatus === 'high' ? '↑ HIGH' :
+                                                                                    (param.name.toLowerCase().trim().includes('blood group') || param.name.toLowerCase().trim().includes('genotype')) ? '' : '✓ Normal'}
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : (
+                                        <textarea
+                                            className="w-full border p-3 rounded font-mono text-sm"
+                                            rows="20"
+                                            value={results}
+                                            onChange={(e) => setResults(e.target.value)}
+                                            placeholder="Enter lab test results here..."
+                                        ></textarea>
+                                    )}
+
+                                    {/* Signature and Rejection History */}
+                                    <div className="mt-4 grid grid-cols-2 gap-4">
+                                        {selectedOrder.signedBy && (
+                                            <div className="p-3 bg-blue-50 border border-blue-200 rounded">
+                                                <p className="text-[10px] uppercase font-bold text-blue-800 mb-1">Originally Performed By:</p>
+                                                <p className="text-sm font-semibold text-blue-900">
+                                                    {selectedOrder.signedBy.name}
+                                                </p>
+                                                <p className="text-[10px] text-blue-700">
+                                                    {new Date(selectedOrder.signedAt).toLocaleString()}
+                                                </p>
+                                            </div>
+                                        )}
+                                        {selectedOrder.status === 'rejected' && selectedOrder.rejectedBy && (
+                                            <div className="p-3 bg-red-50 border border-red-200 rounded">
+                                                <p className="text-[10px] uppercase font-bold text-red-800 mb-1">Rejected By:</p>
+                                                <p className="text-sm font-semibold text-red-900">
+                                                    {typeof selectedOrder.rejectedBy === 'object' && selectedOrder.rejectedBy?.name
+                                                        ? selectedOrder.rejectedBy.name
+                                                        : (selectedOrder.rejectedBy === user._id ? user.name : 'Abubakar Nuhu')}
+                                                </p>
+                                                <p className="text-[10px] text-red-700">
+                                                    {selectedOrder.rejectedAt ? new Date(selectedOrder.rejectedAt).toLocaleString() : ''}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {selectedOrder.lastModifiedBy && (
+                                        <p className="text-xs text-orange-700 mt-2 text-center">
+                                            Last modified by: {selectedOrder.lastModifiedBy.name} on {new Date(selectedOrder.lastModifiedAt).toLocaleString()}
+                                        </p>
+                                    )}
+                                </div>
+
+                                {selectedOrder.result && (
+                                    <div className="flex gap-2 mb-4">
+                                        <button
+                                            onClick={() => setViewResultModal(selectedOrder)}
+                                            className="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center justify-center gap-2"
+                                        >
+                                            <FaFileAlt /> View Result
+                                        </button>
+                                        <button
+                                            onClick={() => handleUniversalPrint(selectedOrder)}
+                                            className="flex-1 bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 flex items-center justify-center gap-2"
+                                        >
+                                            <FaFileAlt /> Print Result
+                                        </button>
+                                    </div>
+                                )}
+
+                                <button
+                                    onClick={handleSaveResults}
+                                    className="w-full bg-green-600 text-white px-6 py-3 rounded hover:bg-green-700 font-bold flex items-center justify-center gap-2"
+                                >
+                                    <FaSave /> {selectedOrder.result ? 'Update & Re-sign Results' : 'Save & Sign Results'}
+                                </button>
+                                <p className="text-xs text-gray-600 mt-2 text-center">
+                                    {selectedOrder.result ? (
+                                        <span className="text-orange-600 font-semibold">⚠️ Editing will update the signature timestamp</span>
+                                    ) : (
+                                        <span>By saving, you are electronically signing these results as {user.name}</span>
+                                    )}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                )
+            }
+
+
+            {/* View Result Modal */}
+            {
+                viewResultModal && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 no-print">
+                        <div className="bg-white rounded-lg p-8 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-2xl font-bold">Lab Result</h3>
+                                <button onClick={() => setViewResultModal(null)} className="text-gray-500 hover:text-gray-700">
+                                    <FaTimes size={24} />
+                                </button>
+                            </div>
+
+                            {/* PRINT AREA START */}
+                            <div ref={resultRef} className="print-area">
+                                <div className="text-center mb-6">
+                                    {systemSettings?.hospitalLogo && (
+                                        <img src={systemSettings.hospitalLogo} alt="Logo" className="h-32 mx-auto mb-0 object-contain" />
+                                    )}
+                                    <h1 className="text-3xl font-bold text-gray-800 m-0">{systemSettings?.reportHeader || 'Laboratory Report'}</h1>
+                                    <p className="text-sm text-gray-600 mt-2">{systemSettings?.address || 'Hospital Name'}</p>
+                                    <p className="text-sm text-gray-600">
+                                        {systemSettings?.phone ? `Phone: ${systemSettings.phone}` : ''}
+                                        {systemSettings?.phone && systemSettings?.email ? ' | ' : ''}
+                                        {systemSettings?.email ? `Email: ${systemSettings.email}` : ''}
+                                    </p>
+                                    <h2 className="text-xl font-semibold mt-4 border-t pt-2">LABORATORY REPORT</h2>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4 mb-6 text-sm">
+                                    <div>
+                                        <p><strong>Patient Name:</strong> {viewResultModal.patient?.name}</p>
+                                        <p><strong>MRN:</strong> {viewResultModal.patient?.mrn}</p>
+                                        <p><strong>Age:</strong> {viewResultModal.patient?.age || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p><strong>Test Name:</strong> {viewResultModal.testName}</p>
+                                        <p><strong>Date Ordered:</strong> {new Date(viewResultModal.createdAt).toLocaleDateString()}</p>
+                                        <p><strong>Gender:</strong> {viewResultModal.patient?.gender || 'N/A'}</p>
+                                    </div>
+                                </div>
+
+                                {viewResultModal.clinicalDetails && (
+                                    <div className="mb-6 p-4 bg-gray-50 border-l-4 border-gray-400 text-sm italic">
+                                        <p className="font-bold text-gray-700 not-italic mb-1">Clinical Detail:</p>
+                                        <p>{viewResultModal.clinicalDetails}</p>
+                                    </div>
+                                )}
+
+                                <div className="border-t border-b border-gray-300 py-4 mb-6">
+                                    <h3 className="font-bold text-lg mb-3">Test Results:</h3>
+                                    {(() => {
+                                        try {
+                                            const parsed = JSON.parse(viewResultModal.result);
+                                            if (parsed.format === 'table' && Array.isArray(parsed.parameters)) {
+                                                return (
+                                                    <div className="overflow-x-auto">
+                                                        <table className="w-full border-collapse">
+                                                            <thead className="bg-gray-100">
+                                                                <tr>
+                                                                    <th className="text-left p-3 font-semibold border">Parameter</th>
+                                                                    <th className="text-left p-3 font-semibold border w-32">Value</th>
+                                                                    <th className="text-left p-3 font-semibold border w-24">Unit</th>
+                                                                    <th className="text-left p-3 font-semibold border w-40">Normal Range</th>
+                                                                    <th className="text-center p-3 font-semibold border w-24">Status</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {parsed.parameters.map((param, index) => {
+                                                                    const rangeStatus = checkRange(param.value, param.normalRange);
+                                                                    const colorClass = getRangeColorClass(rangeStatus);
+
+                                                                    return (
+                                                                        <tr key={index} className={`${param.value ? colorClass : ''} border`}>
+                                                                            <td className="p-3 font-medium border">{param.name}</td>
+                                                                            <td className="p-3 font-semibold border">{param.value || '-'}</td>
+                                                                            <td className="p-3 text-gray-600 border">{param.unit}</td>
+                                                                            <td className="p-3 text-gray-600 border">{param.normalRange}</td>
+                                                                            <td className="p-3 text-center border">
+                                                                                {param.value && (
+                                                                                    <span className={`text-xs px-2 py-1 rounded font-semibold ${rangeStatus === 'low' ? 'bg-orange-200 text-orange-900' :
+                                                                                        rangeStatus === 'high' ? 'bg-red-200 text-red-900' :
+                                                                                            'bg-green-200 text-green-900'
+                                                                                        }`}>
+                                                                                        {rangeStatus === 'low' ? '↓ LOW' :
+                                                                                            rangeStatus === 'high' ? '↑ HIGH' :
+                                                                                                (param.name.toLowerCase().trim().includes('blood group') || param.name.toLowerCase().trim().includes('genotype')) ? '' : '✓ Normal'}
+                                                                                    </span>
+                                                                                )}
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                );
+                                            }
+                                        } catch (e) {
+                                            // Not JSON - try to parse as text-to-table
+                                            const parsedParams = parseTextTemplate(viewResultModal.result);
+                                            if (parsedParams.length > 0) {
+                                                return (
+                                                    <div className="overflow-x-auto">
+                                                        <table className="w-full border-collapse">
+                                                            <thead className="bg-gray-100">
+                                                                <tr>
+                                                                    <th className="text-left p-3 font-semibold border">Parameter</th>
+                                                                    <th className="text-left p-3 font-semibold border w-48">Result</th>
+                                                                    <th className="text-left p-3 font-semibold border w-48">Normal Range</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {parsedParams.map((param, index) => (
+                                                                    <tr key={index} className="border hover:bg-gray-50">
+                                                                        <td className="p-3 font-medium border">{param.name}</td>
+                                                                        <td className="p-3 font-semibold border">{param.value || '-'}</td>
+                                                                        <td className="p-3 text-gray-600 border">{param.normalRange}</td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                );
+                                            }
+                                        }
+                                        return (
+                                            <pre className="whitespace-pre-wrap font-mono text-sm bg-gray-50 p-4 rounded">
+                                                {viewResultModal.result}
+                                            </pre>
+                                        );
+                                    })()}
+                                </div>
+
+                                <div className="mt-8 pt-6 border-t-2 border-gray-800">
+                                    <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4">Audit Trail & Electronic Signatures</h4>
+                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                        {viewResultModal.signedBy && (
+                                            <div className="p-3 bg-blue-50 border border-blue-100 rounded">
+                                                <p className="text-[9px] font-bold text-blue-700 uppercase mb-1">Performed By</p>
+                                                <p className="text-sm font-semibold">{viewResultModal.signedBy.name}</p>
+                                                <p className="text-[10px] text-gray-500">{new Date(viewResultModal.signedAt).toLocaleString()}</p>
+                                            </div>
+                                        )}
+                                        {viewResultModal.rejectedBy && (
+                                            <div className="p-3 bg-red-50 border border-red-100 rounded">
+                                                <p className="text-[9px] font-bold text-red-700 uppercase mb-1">Rejected By</p>
+                                                <p className="text-sm font-semibold">
+                                                    {viewResultModal.rejectedBy?.name || (viewResultModal.rejectedBy === user._id ? user.name : 'Abubakar Nuhu')}
+                                                </p>
+                                                <p className="text-[10px] text-red-500 italic mb-1">Reason: {viewResultModal.rejectionReason}</p>
+                                                <p className="text-[10px] text-gray-500">{new Date(viewResultModal.rejectedAt).toLocaleString()}</p>
+                                            </div>
+                                        )}
+                                        {viewResultModal.lastModifiedBy && (
+                                            <div className="p-3 bg-amber-50 border border-amber-100 rounded">
+                                                <p className="text-[9px] font-bold text-amber-700 uppercase mb-1">Last Edited By</p>
+                                                <p className="text-sm font-semibold">{viewResultModal.lastModifiedBy.name}</p>
+                                                <p className="text-[10px] text-gray-500">{new Date(viewResultModal.lastModifiedAt).toLocaleString()}</p>
+                                            </div>
+                                        )}
+                                        {viewResultModal.approvedBy && (
+                                            <div className="p-3 bg-green-50 border border-green-100 rounded">
+                                                <p className="text-[9px] font-bold text-green-700 uppercase mb-1">Verified & Approved By</p>
+                                                <p className="text-sm font-semibold">{viewResultModal.approvedBy.name}</p>
+                                                <p className="text-[10px] text-gray-500">{new Date(viewResultModal.approvedAt).toLocaleString()}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="mt-6 text-xs text-gray-500 text-center">
+                                    <p>This is an electronically signed document. No handwritten signature is required.</p>
+                                </div>
+                            </div>
+                            {/* PRINT AREA END */}
+
+                            <div className="flex gap-2 mt-6 no-print">
+                                <button
+                                    onClick={() => handleUniversalPrint(viewResultModal)}
+                                    className="flex-1 bg-purple-600 text-white px-6 py-3 rounded hover:bg-purple-700 font-semibold"
+                                >
+                                    Print
+                                </button>
+                                <button
+                                    onClick={() => setViewResultModal(null)}
+                                    className="flex-1 bg-gray-400 text-white px-6 py-3 rounded hover:bg-gray-500 font-semibold"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            {/* Edit Result Modal */}
+            {
+                editResultModal && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-white rounded-lg p-8 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-2xl font-bold">Edit Lab Result</h3>
+                                <button onClick={() => setEditResultModal(null)} className="text-gray-500 hover:text-gray-700">
+                                    <FaTimes size={24} />
+                                </button>
+                            </div>
+
+                            <div className="mb-4">
+                                <p className="text-sm text-gray-600 mb-2">
+                                    <strong>Test:</strong> {editResultModal.testName}
+                                </p>
+                                <p className="text-sm text-gray-600 mb-2">
+                                    <strong>Patient:</strong> {editResultModal.patient?.name} (MRN: {editResultModal.patient?.mrn})
+                                </p>
+                                {editResultModal.approvedBy && (
+                                    <div className="bg-yellow-50 border border-yellow-200 p-3 rounded mb-4">
+                                        <p className="text-sm text-yellow-800">
+                                            ⚠️ <strong>Warning:</strong> This result has been approved by {editResultModal.approvedBy.name}.
+                                            Editing will require re-approval.
+                                        </p>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="mb-6">
@@ -868,7 +1238,7 @@ const LabDashboard = () => {
                                     <FaEdit /> Lab Results
                                 </label>
 
-                                {isTableFormat ? (
+                                {isEditTableFormat ? (
                                     <div className="border rounded overflow-hidden">
                                         <table className="w-full">
                                             <thead className="bg-gray-100">
@@ -881,7 +1251,7 @@ const LabDashboard = () => {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {tableResults.map((param, index) => {
+                                                {editTableResults.map((param, index) => {
                                                     const rangeStatus = checkRange(param.value, param.normalRange);
                                                     const colorClass = getRangeColorClass(rangeStatus);
 
@@ -893,9 +1263,9 @@ const LabDashboard = () => {
                                                                     type="text"
                                                                     value={param.value}
                                                                     onChange={(e) => {
-                                                                        const newResults = [...tableResults];
+                                                                        const newResults = [...editTableResults];
                                                                         newResults[index].value = e.target.value;
-                                                                        setTableResults(newResults);
+                                                                        setEditTableResults(newResults);
                                                                     }}
                                                                     className="w-full border p-2 rounded text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                                                                     placeholder="Enter value"
@@ -910,7 +1280,7 @@ const LabDashboard = () => {
                                                                             'bg-green-200 text-green-900'
                                                                         }`}>
                                                                         {rangeStatus === 'low' ? '↓ LOW' :
-                                                                            rangeStatus === 'high' ? '↑ HIGH' :
+                                                                            rangeStatus === 'high' ? 'High' :
                                                                                 (param.name.toLowerCase().trim().includes('blood group') || param.name.toLowerCase().trim().includes('genotype')) ? '' : '✓ Normal'}
                                                                     </span>
                                                                 )}
@@ -925,395 +1295,37 @@ const LabDashboard = () => {
                                     <textarea
                                         className="w-full border p-3 rounded font-mono text-sm"
                                         rows="20"
-                                        value={results}
-                                        onChange={(e) => setResults(e.target.value)}
+                                        value={editResults}
+                                        onChange={(e) => setEditResults(e.target.value)}
                                         placeholder="Enter lab test results here..."
                                     ></textarea>
                                 )}
-
-                                {/* Signature and Rejection History */}
-                                <div className="mt-4 grid grid-cols-2 gap-4">
-                                    {selectedOrder.signedBy && (
-                                        <div className="p-3 bg-blue-50 border border-blue-200 rounded">
-                                            <p className="text-[10px] uppercase font-bold text-blue-800 mb-1">Originally Performed By:</p>
-                                            <p className="text-sm font-semibold text-blue-900">
-                                                {selectedOrder.signedBy.name}
-                                            </p>
-                                            <p className="text-[10px] text-blue-700">
-                                                {new Date(selectedOrder.signedAt).toLocaleString()}
-                                            </p>
-                                        </div>
-                                    )}
-                                    {selectedOrder.status === 'rejected' && selectedOrder.rejectedBy && (
-                                        <div className="p-3 bg-red-50 border border-red-200 rounded">
-                                            <p className="text-[10px] uppercase font-bold text-red-800 mb-1">Rejected By:</p>
-                                            <p className="text-sm font-semibold text-red-900">
-                                                {typeof selectedOrder.rejectedBy === 'object' && selectedOrder.rejectedBy?.name
-                                                    ? selectedOrder.rejectedBy.name
-                                                    : (selectedOrder.rejectedBy === user._id ? user.name : 'Abubakar Nuhu')}
-                                            </p>
-                                            <p className="text-[10px] text-red-700">
-                                                {selectedOrder.rejectedAt ? new Date(selectedOrder.rejectedAt).toLocaleString() : ''}
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
-                                {selectedOrder.lastModifiedBy && (
-                                    <p className="text-xs text-orange-700 mt-2 text-center">
-                                        Last modified by: {selectedOrder.lastModifiedBy.name} on {new Date(selectedOrder.lastModifiedAt).toLocaleString()}
-                                    </p>
-                                )}
                             </div>
 
-                            {selectedOrder.result && (
-                                <div className="flex gap-2 mb-4">
-                                    <button
-                                        onClick={() => setViewResultModal(selectedOrder)}
-                                        className="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center justify-center gap-2"
-                                    >
-                                        <FaFileAlt /> View Result
-                                    </button>
-                                    <button
-                                        onClick={() => handleUniversalPrint(selectedOrder)}
-                                        className="flex-1 bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 flex items-center justify-center gap-2"
-                                    >
-                                        <FaFileAlt /> Print Result
-                                    </button>
-                                </div>
-                            )}
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handleEditResult}
+                                    className="flex-1 bg-green-600 text-white px-6 py-3 rounded hover:bg-green-700 font-semibold flex items-center justify-center gap-2"
+                                >
+                                    <FaSave /> Save & Re-sign
+                                </button>
+                                <button
+                                    onClick={() => setEditResultModal(null)}
+                                    className="flex-1 bg-gray-400 text-white px-6 py-3 rounded hover:bg-gray-500 font-semibold"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
 
-                            <button
-                                onClick={handleSaveResults}
-                                className="w-full bg-green-600 text-white px-6 py-3 rounded hover:bg-green-700 font-bold flex items-center justify-center gap-2"
-                            >
-                                <FaSave /> {selectedOrder.result ? 'Update & Re-sign Results' : 'Save & Sign Results'}
-                            </button>
                             <p className="text-xs text-gray-600 mt-2 text-center">
-                                {selectedOrder.result ? (
-                                    <span className="text-orange-600 font-semibold">⚠️ Editing will update the signature timestamp</span>
-                                ) : (
-                                    <span>By saving, you are electronically signing these results as {user.name}</span>
-                                )}
+                                <span className="text-orange-600 font-semibold">⚠️ Editing will update the signature timestamp and reset approval status</span>
                             </p>
-                        </div>
-                    )}
-                </div>
-            )}
-
-
-            {/* View Result Modal */}
-            {viewResultModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 no-print">
-                    <div className="bg-white rounded-lg p-8 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-2xl font-bold">Lab Result</h3>
-                            <button onClick={() => setViewResultModal(null)} className="text-gray-500 hover:text-gray-700">
-                                <FaTimes size={24} />
-                            </button>
-                        </div>
-
-                        {/* PRINT AREA START */}
-                        <div ref={resultRef} className="print-area">
-                            <div className="text-center mb-6">
-                                {systemSettings?.hospitalLogo && (
-                                    <img src={systemSettings.hospitalLogo} alt="Logo" className="h-32 mx-auto mb-0 object-contain" />
-                                )}
-                                <h1 className="text-3xl font-bold text-gray-800 m-0">{systemSettings?.reportHeader || 'Laboratory Report'}</h1>
-                                <p className="text-sm text-gray-600 mt-2">{systemSettings?.address || 'Hospital Name'}</p>
-                                <p className="text-sm text-gray-600">
-                                    {systemSettings?.phone ? `Phone: ${systemSettings.phone}` : ''}
-                                    {systemSettings?.phone && systemSettings?.email ? ' | ' : ''}
-                                    {systemSettings?.email ? `Email: ${systemSettings.email}` : ''}
-                                </p>
-                                <h2 className="text-xl font-semibold mt-4 border-t pt-2">LABORATORY REPORT</h2>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4 mb-6 text-sm">
-                                <div>
-                                    <p><strong>Patient Name:</strong> {viewResultModal.patient?.name}</p>
-                                    <p><strong>MRN:</strong> {viewResultModal.patient?.mrn}</p>
-                                    <p><strong>Age:</strong> {viewResultModal.patient?.age || 'N/A'}</p>
-                                </div>
-                                <div>
-                                    <p><strong>Test Name:</strong> {viewResultModal.testName}</p>
-                                    <p><strong>Date Ordered:</strong> {new Date(viewResultModal.createdAt).toLocaleDateString()}</p>
-                                    <p><strong>Gender:</strong> {viewResultModal.patient?.gender || 'N/A'}</p>
-                                </div>
-                            </div>
-
-                            {viewResultModal.clinicalDetails && (
-                                <div className="mb-6 p-4 bg-gray-50 border-l-4 border-gray-400 text-sm italic">
-                                    <p className="font-bold text-gray-700 not-italic mb-1">Clinical Detail:</p>
-                                    <p>{viewResultModal.clinicalDetails}</p>
-                                </div>
-                            )}
-
-                            <div className="border-t border-b border-gray-300 py-4 mb-6">
-                                <h3 className="font-bold text-lg mb-3">Test Results:</h3>
-                                {(() => {
-                                    try {
-                                        const parsed = JSON.parse(viewResultModal.result);
-                                        if (parsed.format === 'table' && Array.isArray(parsed.parameters)) {
-                                            return (
-                                                <div className="overflow-x-auto">
-                                                    <table className="w-full border-collapse">
-                                                        <thead className="bg-gray-100">
-                                                            <tr>
-                                                                <th className="text-left p-3 font-semibold border">Parameter</th>
-                                                                <th className="text-left p-3 font-semibold border w-32">Value</th>
-                                                                <th className="text-left p-3 font-semibold border w-24">Unit</th>
-                                                                <th className="text-left p-3 font-semibold border w-40">Normal Range</th>
-                                                                <th className="text-center p-3 font-semibold border w-24">Status</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {parsed.parameters.map((param, index) => {
-                                                                const rangeStatus = checkRange(param.value, param.normalRange);
-                                                                const colorClass = getRangeColorClass(rangeStatus);
-
-                                                                return (
-                                                                    <tr key={index} className={`${param.value ? colorClass : ''} border`}>
-                                                                        <td className="p-3 font-medium border">{param.name}</td>
-                                                                        <td className="p-3 font-semibold border">{param.value || '-'}</td>
-                                                                        <td className="p-3 text-gray-600 border">{param.unit}</td>
-                                                                        <td className="p-3 text-gray-600 border">{param.normalRange}</td>
-                                                                        <td className="p-3 text-center border">
-                                                                            {param.value && (
-                                                                                <span className={`text-xs px-2 py-1 rounded font-semibold ${rangeStatus === 'low' ? 'bg-orange-200 text-orange-900' :
-                                                                                    rangeStatus === 'high' ? 'bg-red-200 text-red-900' :
-                                                                                        'bg-green-200 text-green-900'
-                                                                                    }`}>
-                                                                                    {rangeStatus === 'low' ? '↓ LOW' :
-                                                                                        rangeStatus === 'high' ? '↑ HIGH' :
-                                                                                            (param.name.toLowerCase().trim().includes('blood group') || param.name.toLowerCase().trim().includes('genotype')) ? '' : '✓ Normal'}
-                                                                                </span>
-                                                                            )}
-                                                                        </td>
-                                                                    </tr>
-                                                                );
-                                                            })}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            );
-                                        }
-                                    } catch (e) {
-                                        // Not JSON - try to parse as text-to-table
-                                        const parsedParams = parseTextTemplate(viewResultModal.result);
-                                        if (parsedParams.length > 0) {
-                                            return (
-                                                <div className="overflow-x-auto">
-                                                    <table className="w-full border-collapse">
-                                                        <thead className="bg-gray-100">
-                                                            <tr>
-                                                                <th className="text-left p-3 font-semibold border">Parameter</th>
-                                                                <th className="text-left p-3 font-semibold border w-48">Result</th>
-                                                                <th className="text-left p-3 font-semibold border w-48">Normal Range</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {parsedParams.map((param, index) => (
-                                                                <tr key={index} className="border hover:bg-gray-50">
-                                                                    <td className="p-3 font-medium border">{param.name}</td>
-                                                                    <td className="p-3 font-semibold border">{param.value || '-'}</td>
-                                                                    <td className="p-3 text-gray-600 border">{param.normalRange}</td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            );
-                                        }
-                                    }
-                                    return (
-                                        <pre className="whitespace-pre-wrap font-mono text-sm bg-gray-50 p-4 rounded">
-                                            {viewResultModal.result}
-                                        </pre>
-                                    );
-                                })()}
-                            </div>
-
-                            <div className="mt-8 pt-6 border-t-2 border-gray-800">
-                                <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4">Audit Trail & Electronic Signatures</h4>
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                                    {viewResultModal.signedBy && (
-                                        <div className="p-3 bg-blue-50 border border-blue-100 rounded">
-                                            <p className="text-[9px] font-bold text-blue-700 uppercase mb-1">Performed By</p>
-                                            <p className="text-sm font-semibold">{viewResultModal.signedBy.name}</p>
-                                            <p className="text-[10px] text-gray-500">{new Date(viewResultModal.signedAt).toLocaleString()}</p>
-                                        </div>
-                                    )}
-                                    {viewResultModal.rejectedBy && (
-                                        <div className="p-3 bg-red-50 border border-red-100 rounded">
-                                            <p className="text-[9px] font-bold text-red-700 uppercase mb-1">Rejected By</p>
-                                            <p className="text-sm font-semibold">
-                                                {viewResultModal.rejectedBy?.name || (viewResultModal.rejectedBy === user._id ? user.name : 'Abubakar Nuhu')}
-                                            </p>
-                                            <p className="text-[10px] text-red-500 italic mb-1">Reason: {viewResultModal.rejectionReason}</p>
-                                            <p className="text-[10px] text-gray-500">{new Date(viewResultModal.rejectedAt).toLocaleString()}</p>
-                                        </div>
-                                    )}
-                                    {viewResultModal.lastModifiedBy && (
-                                        <div className="p-3 bg-amber-50 border border-amber-100 rounded">
-                                            <p className="text-[9px] font-bold text-amber-700 uppercase mb-1">Last Edited By</p>
-                                            <p className="text-sm font-semibold">{viewResultModal.lastModifiedBy.name}</p>
-                                            <p className="text-[10px] text-gray-500">{new Date(viewResultModal.lastModifiedAt).toLocaleString()}</p>
-                                        </div>
-                                    )}
-                                    {viewResultModal.approvedBy && (
-                                        <div className="p-3 bg-green-50 border border-green-100 rounded">
-                                            <p className="text-[9px] font-bold text-green-700 uppercase mb-1">Verified & Approved By</p>
-                                            <p className="text-sm font-semibold">{viewResultModal.approvedBy.name}</p>
-                                            <p className="text-[10px] text-gray-500">{new Date(viewResultModal.approvedAt).toLocaleString()}</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="mt-6 text-xs text-gray-500 text-center">
-                                <p>This is an electronically signed document. No handwritten signature is required.</p>
-                            </div>
-                        </div>
-                        {/* PRINT AREA END */}
-
-                        <div className="flex gap-2 mt-6 no-print">
-                            <button
-                                onClick={() => handleUniversalPrint(viewResultModal)}
-                                className="flex-1 bg-purple-600 text-white px-6 py-3 rounded hover:bg-purple-700 font-semibold"
-                            >
-                                Print
-                            </button>
-                            <button
-                                onClick={() => setViewResultModal(null)}
-                                className="flex-1 bg-gray-400 text-white px-6 py-3 rounded hover:bg-gray-500 font-semibold"
-                            >
-                                Close
-                            </button>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
-            {/* Edit Result Modal */}
-            {editResultModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-8 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-2xl font-bold">Edit Lab Result</h3>
-                            <button onClick={() => setEditResultModal(null)} className="text-gray-500 hover:text-gray-700">
-                                <FaTimes size={24} />
-                            </button>
-                        </div>
-
-                        <div className="mb-4">
-                            <p className="text-sm text-gray-600 mb-2">
-                                <strong>Test:</strong> {editResultModal.testName}
-                            </p>
-                            <p className="text-sm text-gray-600 mb-2">
-                                <strong>Patient:</strong> {editResultModal.patient?.name} (MRN: {editResultModal.patient?.mrn})
-                            </p>
-                            {editResultModal.approvedBy && (
-                                <div className="bg-yellow-50 border border-yellow-200 p-3 rounded mb-4">
-                                    <p className="text-sm text-yellow-800">
-                                        ⚠️ <strong>Warning:</strong> This result has been approved by {editResultModal.approvedBy.name}.
-                                        Editing will require re-approval.
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="mb-6">
-                            <label className="block text-gray-700 mb-2 font-semibold flex items-center gap-2">
-                                <FaEdit /> Lab Results
-                            </label>
-
-                            {isEditTableFormat ? (
-                                <div className="border rounded overflow-hidden">
-                                    <table className="w-full">
-                                        <thead className="bg-gray-100">
-                                            <tr>
-                                                <th className="text-left p-3 font-semibold border-b">Parameter</th>
-                                                <th className="text-left p-3 font-semibold border-b w-32">Value</th>
-                                                <th className="text-left p-3 font-semibold border-b w-24">Unit</th>
-                                                <th className="text-left p-3 font-semibold border-b w-40">Normal Range</th>
-                                                <th className="text-left p-3 font-semibold border-b w-24">Status</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {editTableResults.map((param, index) => {
-                                                const rangeStatus = checkRange(param.value, param.normalRange);
-                                                const colorClass = getRangeColorClass(rangeStatus);
-
-                                                return (
-                                                    <tr key={index} className={`border-b ${param.value ? colorClass : ''}`}>
-                                                        <td className="p-3 font-medium">{param.name}</td>
-                                                        <td className="p-2">
-                                                            <input
-                                                                type="text"
-                                                                value={param.value}
-                                                                onChange={(e) => {
-                                                                    const newResults = [...editTableResults];
-                                                                    newResults[index].value = e.target.value;
-                                                                    setEditTableResults(newResults);
-                                                                }}
-                                                                className="w-full border p-2 rounded text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                                                placeholder="Enter value"
-                                                            />
-                                                        </td>
-                                                        <td className="p-3 text-sm text-gray-600">{param.unit}</td>
-                                                        <td className="p-3 text-sm text-gray-600">{param.normalRange}</td>
-                                                        <td className="p-3">
-                                                            {param.value && (
-                                                                <span className={`text-xs px-2 py-1 rounded font-semibold ${rangeStatus === 'low' ? 'bg-orange-200 text-orange-900' :
-                                                                    rangeStatus === 'high' ? 'bg-red-200 text-red-900' :
-                                                                        'bg-green-200 text-green-900'
-                                                                    }`}>
-                                                                    {rangeStatus === 'low' ? '↓ LOW' :
-                                                                        rangeStatus === 'high' ? 'High' :
-                                                                            (param.name.toLowerCase().trim().includes('blood group') || param.name.toLowerCase().trim().includes('genotype')) ? '' : '✓ Normal'}
-                                                                </span>
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            ) : (
-                                <textarea
-                                    className="w-full border p-3 rounded font-mono text-sm"
-                                    rows="20"
-                                    value={editResults}
-                                    onChange={(e) => setEditResults(e.target.value)}
-                                    placeholder="Enter lab test results here..."
-                                ></textarea>
-                            )}
-                        </div>
-
-                        <div className="flex gap-2">
-                            <button
-                                onClick={handleEditResult}
-                                className="flex-1 bg-green-600 text-white px-6 py-3 rounded hover:bg-green-700 font-semibold flex items-center justify-center gap-2"
-                            >
-                                <FaSave /> Save & Re-sign
-                            </button>
-                            <button
-                                onClick={() => setEditResultModal(null)}
-                                className="flex-1 bg-gray-400 text-white px-6 py-3 rounded hover:bg-gray-500 font-semibold"
-                            >
-                                Cancel
-                            </button>
-                        </div>
-
-                        <p className="text-xs text-gray-600 mt-2 text-center">
-                            <span className="text-orange-600 font-semibold">⚠️ Editing will update the signature timestamp and reset approval status</span>
-                        </p>
-                    </div>
-                </div>
-            )}
-
-        </Layout>
+        </Layout >
     );
 };
 

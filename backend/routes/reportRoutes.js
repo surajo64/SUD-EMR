@@ -12,7 +12,8 @@ const {
     getVisitReport,
     getTheatreRevenue,
     getFamilyRevenue,
-    getRetainershipRevenue
+    getRetainershipRevenue,
+    getUserDashboardStats
 } = require('../controllers/reportsController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
@@ -28,5 +29,6 @@ router.get('/overall-revenue', protect, admin, getOverallRevenue);
 router.get('/dashboard-stats', protect, admin, getDashboardStats);
 router.get('/clinical-report', protect, admin, getClinicalReport);
 router.get('/visit-report', protect, admin, getVisitReport);
+router.get('/user-stats', protect, getUserDashboardStats);
 
 module.exports = router;

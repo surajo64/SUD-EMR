@@ -44,7 +44,8 @@ const registerPatient = async (req, res) => {
             emergencyContactName,
             emergencyContactPhone,
             isFamilyMember: !!isFamilyMember,
-            familyFile: familyFileId || undefined
+            familyFile: familyFileId || undefined,
+            registeredBy: req.user._id
         };
 
         const patient = await Patient.create(patientData);
@@ -69,7 +70,7 @@ const getPatients = async (req, res) => {
     try {
         const { familyFile } = req.query;
         let filter = {};
-        
+
         if (familyFile) {
             // If familyFile query is provided, we strictly filter by it
             const mongoose = require('mongoose');

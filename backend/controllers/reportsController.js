@@ -1685,6 +1685,121 @@ const getVisitReport = async (req, res) => {
     }
 };
 
+// @desc    Get user-specific dashboard stats
+// @route   GET /api/reports/user-stats
+// @access  Private
+const getUserDashboardStats = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const role = req.user.role;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        let stats = {};
+
+        if (role === 'receptionist') {
+            const registeredToday = await Patient.countDocuments({
+                registeredBy: userId,
+                createdAt: { $gte: today }
+            });
+            const totalRegistered = await Patient.countDocuments({ registeredBy: userId });
+            const encountersCreated = await Visit.countDocuments({
+                doctor: userId, // Assuming receptionist might create visits where doctor is assigned later, but tracking by creator is better if we had createdBy. For now following previous logic.
+                createdAt: { $gte: today }
+            });
+            const totalEncounters = await Visit.countDocuments({ doctor: userId });
+            stats = { registeredToday, totalRegistered, encountersCreated, totalEncounters };
+        } else if (role === 'nurse') {
+            const vitalsToday = await VitalSign.countDocuments({
+                nurse: userId,
+                createdAt: { $gte: today }
+            });
+            const totalVitals = await VitalSign.countDocuments({ nurse: userId });
+            stats = { vitalsToday, totalVitals };
+        } else if (role === 'doctor') {
+            const patientsSeen = await Visit.countDocuments({
+                $or: [{ doctor: userId }, { consultingPhysician: userId }],
+                updatedAt: { $gte: today },
+                encounterStatus: { $in: ['completed', 'with_doctor', 'awaiting_services', 'in_pharmacy', 'checkout', 'discharged'] }
+            });
+            const totalPatientsSeen = await Visit.countDocuments({
+                $or: [{ doctor: userId }, { consultingPhysician: userId }],
+                encounterStatus: { $in: ['completed', 'with_doctor', 'awaiting_services', 'in_pharmacy', 'checkout', 'discharged'] }
+            });
+            const prescriptionsWritten = await Prescription.countDocuments({
+                doctor: userId,
+                createdAt: { $gte: today }
+            });
+            const totalPrescriptions = await Prescription.countDocuments({ doctor: userId });
+            stats = { patientsSeen, totalPatientsSeen, prescriptionsWritten, totalPrescriptions };
+        } else if (role === 'cashier') {
+            const receiptsIssued = await Receipt.countDocuments({
+                cashier: userId,
+                createdAt: { $gte: today }
+            });
+            const totalReceipts = await Receipt.countDocuments({ cashier: userId });
+            const paymentsCollected = await Receipt.aggregate([
+                { $match: { cashier: userId, createdAt: { $gte: today } } },
+                { $group: { _id: null, total: { $sum: '$amountPaid' } } }
+            ]);
+            const lifetimeRevenue = await Receipt.aggregate([
+                { $match: { cashier: userId } },
+                { $group: { _id: null, total: { $sum: '$amountPaid' } } }
+            ]);
+            stats = {
+                receiptsIssued,
+                totalReceipts,
+                paymentsCollected: paymentsCollected[0]?.total || 0,
+                lifetimeRevenue: lifetimeRevenue[0]?.total || 0
+            };
+        } else if (role === 'pharmacist') {
+            const dispensedToday = await Prescription.countDocuments({
+                dispensedBy: userId,
+                dispensedAt: { $gte: today }
+            });
+            const totalDispensed = await Prescription.countDocuments({ dispensedBy: userId });
+
+            // Pharmacy revenue for this specific pharmacist (based on their validations)
+            const revenueToday = await Receipt.aggregate([
+                { $match: { "validatedBy.user": userId, "validatedBy.department": 'Pharmacy', createdAt: { $gte: today } } },
+                { $group: { _id: null, total: { $sum: '$amountPaid' } } }
+            ]);
+            const lifetimeRevenue = await Receipt.aggregate([
+                { $match: { "validatedBy.user": userId, "validatedBy.department": 'Pharmacy' } },
+                { $group: { _id: null, total: { $sum: '$amountPaid' } } }
+            ]);
+
+            stats = { dispensedToday, totalDispensed, revenueToday: revenueToday[0]?.total || 0, lifetimeRevenue: lifetimeRevenue[0]?.total || 0 };
+        } else if (role === 'lab_technician') {
+            const testsToday = await LabOrder.countDocuments({
+                signedBy: userId,
+                status: 'completed',
+                updatedAt: { $gte: today }
+            });
+            const totalTestsSigned = await LabOrder.countDocuments({
+                signedBy: userId,
+                status: 'completed'
+            });
+            stats = { testsToday, totalTestsSigned };
+        } else if (role === 'radiologist') {
+            const scansToday = await RadiologyOrder.countDocuments({
+                signedBy: userId,
+                status: 'completed',
+                updatedAt: { $gte: today }
+            });
+            const totalScansSigned = await RadiologyOrder.countDocuments({
+                signedBy: userId,
+                status: 'completed'
+            });
+            stats = { scansToday, totalScansSigned };
+        }
+
+        res.json(stats);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 
 module.exports = {
     getLabRevenue,
@@ -1698,5 +1813,6 @@ module.exports = {
     getTheatreRevenue,
     getFamilyRevenue,
     getRetainershipRevenue,
-    getVisitReport
+    getVisitReport,
+    getUserDashboardStats
 };

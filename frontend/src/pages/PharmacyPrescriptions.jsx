@@ -4,8 +4,9 @@ import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import { AppContext } from '../context/AppContext';
 import Layout from '../components/Layout';
-import { FaPills, FaSearch, FaCheckCircle, FaSave, FaBoxOpen, FaPrint, FaChevronDown, FaChevronRight } from 'react-icons/fa';
+import { FaPills, FaSearch, FaCheckCircle, FaSave, FaBoxOpen, FaPrint, FaChevronDown, FaChevronRight, FaClock, FaHistory, FaPrescriptionBottleAlt } from 'react-icons/fa';
 import { toast } from 'react-toastify';
+import { formatCompactNumber, formatCurrency } from '../utils/formatters';
 import LoadingOverlay from '../components/loadingOverlay';
 
 const PharmacyPrescriptions = () => {
@@ -22,6 +23,24 @@ const PharmacyPrescriptions = () => {
     const { user } = useContext(AuthContext);
     const { backendUrl } = useContext(AppContext);
     const location = useLocation();
+
+    const [userStats, setUserStats] = useState({ prescriptionsDispensed: 0, revenueToday: 0 });
+
+    useEffect(() => {
+        if (user && user.token) {
+            fetchUserStats();
+        }
+    }, [user.token, backendUrl]);
+
+    const fetchUserStats = async () => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get(`${backendUrl}/api/reports/user-stats`, config);
+            setUserStats(data);
+        } catch (error) {
+            console.error('Error fetching user stats:', error);
+        }
+    };
 
     useEffect(() => {
         const fetchSystemSettings = async () => {
@@ -477,6 +496,7 @@ const PharmacyPrescriptions = () => {
             <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
                 <FaPills className="text-green-600" /> Pharmacy Dashboard
             </h2>
+
 
             {/* Search */}
             <div className="bg-white p-6 rounded shadow mb-6">

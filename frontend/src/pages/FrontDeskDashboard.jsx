@@ -3,10 +3,11 @@ import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import { AppContext } from '../context/AppContext';
 import Layout from '../components/Layout';
-import { FaUserPlus, FaCalendarCheck, FaDollarSign, FaSearch, FaFileAlt, FaPlus, FaTimes, FaClock, FaCalendarAlt, FaBed } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import LoadingOverlay from '../components/loadingOverlay';
 import { formatAge } from '../utils/patientUtils';
+import { formatCompactNumber } from '../utils/formatters';
+import { FaUserPlus, FaCalendarCheck, FaDollarSign, FaSearch, FaFileAlt, FaPlus, FaTimes, FaClock, FaCalendarAlt, FaBed, FaUserCheck, FaNotesMedical } from 'react-icons/fa';
 
 const FrontDeskDashboard = () => {
     const [loading, setLoading] = useState(false);
@@ -49,6 +50,22 @@ const FrontDeskDashboard = () => {
 
     const { user } = useContext(AuthContext);
     const { backendUrl } = useContext(AppContext);
+
+    const [stats, setStats] = useState({ registeredToday: 0, encountersCreated: 0 });
+
+    useEffect(() => {
+        fetchUserStats();
+    }, [backendUrl, user.token]);
+
+    const fetchUserStats = async () => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get(`${backendUrl}/api/reports/user-stats`, config);
+            setStats(data);
+        } catch (error) {
+            console.error('Error fetching user stats:', error);
+        }
+    };
 
     // New Patient Form
     const [newPatient, setNewPatient] = useState({
@@ -609,7 +626,6 @@ const FrontDeskDashboard = () => {
                 <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                     <FaUserPlus className="text-green-600" /> Front Desk
                 </h2>
-
             </div>
 
             {/* Register Patient Form */}

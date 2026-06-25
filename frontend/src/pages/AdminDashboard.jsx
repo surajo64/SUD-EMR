@@ -8,10 +8,11 @@ import {
     FaChartLine, FaHospital, FaPills, FaFlask, FaXRay,
     FaUserInjured, FaReceipt, FaChartBar
 } from 'react-icons/fa';
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { toast } from 'react-toastify';
 import { Link } from 'react-router-dom';
 import RegisterPatientModal from '../components/RegisterPatientModal';
+import { formatCompactNumber, formatCurrency } from '../utils/formatters';
 
 const AdminDashboard = () => {
     const { user } = useContext(AuthContext);
@@ -134,139 +135,231 @@ const AdminDashboard = () => {
             {activeTab === 'overview' && (
                 <div className="space-y-6">
                     {/* Stats Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         {/* Total Patients */}
-                        <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-lg shadow hover:shadow-md transition">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="text-blue-600 text-sm font-semibold mb-2">Total Patients</p>
-                                    <p className="text-4xl font-bold text-blue-800">{stats.totalPatients}</p>
-                                    <p className="text-sm text-blue-600 mt-2">Registered in system</p>
+                        <div className="group bg-white p-6 rounded-2xl border border-blue-100 shadow-sm hover:shadow-xl hover:border-blue-200 transition-all duration-300 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <FaUserInjured className="text-6xl text-blue-600" />
+                            </div>
+                            <div className="relative z-10">
+                                <p className="text-blue-500 text-xs font-bold uppercase tracking-wider mb-1">Total Patients</p>
+                                <h3 className="text-3xl font-extrabold text-blue-900 mb-1">{formatCompactNumber(stats.totalPatients)}</h3>
+                                <div className="flex items-center text-xs text-blue-400 font-medium">
+                                    <span className="bg-blue-50 px-2 py-0.5 rounded-full">Registered in system</span>
                                 </div>
-                                <FaUserInjured className="text-5xl text-blue-400 opacity-50" />
+                            </div>
+                            <div className="h-1.5 w-full bg-blue-50 absolute bottom-0 left-0">
+                                <div className="h-full bg-blue-500 rounded-r-full group-hover:w-full transition-all duration-700" style={{ width: '40%' }}></div>
                             </div>
                         </div>
 
                         {/* Total Revenue */}
-                        <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-lg shadow hover:shadow-md transition">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="text-green-600 text-sm font-semibold mb-2">Total Revenue</p>
-                                    <p className="text-4xl font-bold text-green-800">₦{stats.totalRevenue.toLocaleString()}</p>
-                                    <p className="text-sm text-green-600 mt-2">All-time collected</p>
+                        <div className="group bg-white p-6 rounded-2xl border border-green-100 shadow-sm hover:shadow-xl hover:border-green-200 transition-all duration-300 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <FaDollarSign className="text-6xl text-green-600" />
+                            </div>
+                            <div className="relative z-10">
+                                <p className="text-green-500 text-xs font-bold uppercase tracking-wider mb-1">Total Revenue</p>
+                                <h3 className="text-3xl font-extrabold text-green-900 mb-1">{formatCurrency(stats.totalRevenue, true)}</h3>
+                                <div className="flex items-center text-xs text-green-400 font-medium">
+                                    <span className="bg-green-50 px-2 py-0.5 rounded-full">All-time collected</span>
                                 </div>
-                                <FaDollarSign className="text-5xl text-green-400 opacity-50" />
+                            </div>
+                            <div className="h-1.5 w-full bg-green-50 absolute bottom-0 left-0">
+                                <div className="h-full bg-green-500 rounded-r-full group-hover:w-full transition-all duration-700" style={{ width: '70%' }}></div>
                             </div>
                         </div>
 
                         {/* Pending Payments */}
-                        <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 p-6 rounded-lg shadow hover:shadow-md transition">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="text-yellow-600 text-sm font-semibold mb-2">Pending Payments</p>
-                                    <p className="text-4xl font-bold text-yellow-800">₦{stats.pendingPayments.toLocaleString()}</p>
-                                    <p className="text-sm text-yellow-600 mt-2">Awaiting collection</p>
+                        <div className="group bg-white p-6 rounded-2xl border border-yellow-100 shadow-sm hover:shadow-xl hover:border-yellow-200 transition-all duration-300 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <FaFileInvoiceDollar className="text-6xl text-yellow-600" />
+                            </div>
+                            <div className="relative z-10">
+                                <p className="text-yellow-500 text-xs font-bold uppercase tracking-wider mb-1">Pending Payments</p>
+                                <h3 className="text-3xl font-extrabold text-yellow-900 mb-1">{formatCurrency(stats.pendingPayments, true)}</h3>
+                                <div className="flex items-center text-xs text-yellow-400 font-medium">
+                                    <span className="bg-yellow-50 px-2 py-0.5 rounded-full">Awaiting collection</span>
                                 </div>
-                                <FaFileInvoiceDollar className="text-5xl text-yellow-400 opacity-50" />
+                            </div>
+                            <div className="h-1.5 w-full bg-yellow-50 absolute bottom-0 left-0">
+                                <div className="h-full bg-yellow-500 rounded-r-full group-hover:w-full transition-all duration-700" style={{ width: '30%' }}></div>
                             </div>
                         </div>
 
                         {/* Pending to HMOs */}
-                        <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-lg shadow hover:shadow-md transition">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="text-orange-600 text-sm font-semibold mb-2">Pending to HMOs</p>
-                                    <p className="text-4xl font-bold text-orange-800">₦{stats.pendingHMOAmount.toLocaleString()}</p>
-                                    <p className="text-sm text-orange-600 mt-2">Unpaid insurance claims</p>
+                        <div className="group bg-white p-6 rounded-2xl border border-orange-100 shadow-sm hover:shadow-xl hover:border-orange-200 transition-all duration-300 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <FaHospital className="text-6xl text-orange-600" />
+                            </div>
+                            <div className="relative z-10">
+                                <p className="text-orange-500 text-xs font-bold uppercase tracking-wider mb-1">Pending to HMOs</p>
+                                <h3 className="text-3xl font-extrabold text-orange-900 mb-1">{formatCurrency(stats.pendingHMOAmount, true)}</h3>
+                                <div className="flex items-center text-xs text-orange-400 font-medium">
+                                    <span className="bg-orange-50 px-2 py-0.5 rounded-full">Unpaid insurance claims</span>
                                 </div>
-                                <FaFileInvoiceDollar className="text-5xl text-orange-400 opacity-50" />
+                            </div>
+                            <div className="h-1.5 w-full bg-orange-50 absolute bottom-0 left-0">
+                                <div className="h-full bg-orange-500 rounded-r-full group-hover:w-full transition-all duration-700" style={{ width: '55%' }}></div>
                             </div>
                         </div>
 
                         {/* Total Deposit Balance */}
-                        <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-lg shadow hover:shadow-md transition">
-                            <div className="flex justify-between items-start">
-                                <div className="w-full">
-                                    <p className="text-purple-600 text-sm font-semibold mb-2">Total Deposit Balance</p>
-                                    <p className="text-4xl font-bold text-purple-800">₦{(totalPatientDeposits + totalRetainershipBalance).toLocaleString()}</p>
-                                    <div className="flex justify-between text-xs text-purple-600 mt-3 border-t border-purple-200 pt-2">
-                                        <span>Patients: ₦{totalPatientDeposits.toLocaleString()}</span>
-                                        <span>Retainership: ₦{totalRetainershipBalance.toLocaleString()}</span>
+                        <div className="group bg-white p-6 rounded-2xl border border-purple-100 shadow-sm hover:shadow-xl hover:border-purple-200 transition-all duration-300 relative overflow-hidden lg:col-span-2">
+                            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <FaReceipt className="text-7xl text-purple-600" />
+                            </div>
+                            <div className="relative z-10">
+                                <p className="text-purple-500 text-xs font-bold uppercase tracking-wider mb-1">Total Deposit Balance</p>
+                                <h3 className="text-4xl font-black text-purple-900 mb-1">{formatCurrency(totalPatientDeposits + totalRetainershipBalance, true)}</h3>
+                                <div className="grid grid-cols-2 gap-4 mt-3">
+                                    <div className="bg-purple-50 p-2 rounded-xl border border-purple-100">
+                                        <p className="text-[10px] text-purple-400 uppercase font-bold">Patients</p>
+                                        <p className="font-bold text-purple-700">{formatCurrency(totalPatientDeposits, true)}</p>
+                                    </div>
+                                    <div className="bg-indigo-50 p-2 rounded-xl border border-indigo-100">
+                                        <p className="text-[10px] text-indigo-400 uppercase font-bold">Retainership</p>
+                                        <p className="font-bold text-indigo-700">{formatCurrency(totalRetainershipBalance, true)}</p>
                                     </div>
                                 </div>
-                                <FaFileInvoiceDollar className="text-5xl text-purple-400 opacity-50 flex-shrink-0 ml-2" />
                             </div>
                         </div>
 
                         {/* System Users */}
-                        <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-lg shadow hover:shadow-md transition">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="text-purple-600 text-sm font-semibold mb-2">System Users</p>
-                                    <p className="text-4xl font-bold text-purple-800">{stats.totalUsers}</p>
-                                    <p className="text-sm text-purple-600 mt-2">Active staff accounts</p>
+                        <div className="group bg-white p-6 rounded-2xl border border-pink-100 shadow-sm hover:shadow-xl hover:border-pink-200 transition-all duration-300 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                <FaUsers className="text-6xl text-pink-600" />
+                            </div>
+                            <div className="relative z-10">
+                                <p className="text-pink-500 text-xs font-bold uppercase tracking-wider mb-1">System Users</p>
+                                <h3 className="text-3xl font-extrabold text-pink-900 mb-1">{stats.totalUsers}</h3>
+                                <div className="flex items-center text-xs text-pink-400 font-medium">
+                                    <span className="bg-pink-50 px-2 py-0.5 rounded-full">Active staff accounts</span>
                                 </div>
-                                <FaUsers className="text-5xl text-purple-400 opacity-50" />
                             </div>
                         </div>
 
-                        {/* Total Invoices */}
-                        <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-6 rounded-lg shadow hover:shadow-md transition">
-                            <div className="flex justify-between items-start">
+                        {/* Total Invoices/Receipts Combined */}
+                        <div className="group bg-white p-6 rounded-2xl border border-indigo-100 shadow-sm hover:shadow-xl hover:border-indigo-200 transition-all duration-300 relative overflow-hidden">
+                            <div className="flex flex-col gap-4">
                                 <div>
-                                    <p className="text-indigo-600 text-sm font-semibold mb-2">Total Invoices</p>
-                                    <p className="text-4xl font-bold text-indigo-800">{stats.totalInvoices}</p>
-                                    <p className="text-sm text-indigo-600 mt-2">Generated invoices</p>
+                                    <p className="text-indigo-500 text-[10px] font-bold uppercase tracking-wider">Total Invoices</p>
+                                    <h4 className="text-xl font-bold text-indigo-900">{formatCompactNumber(stats.totalInvoices)}</h4>
                                 </div>
-                                <FaFileInvoiceDollar className="text-5xl text-indigo-400 opacity-50" />
-                            </div>
-                        </div>
-
-                        {/* Total Receipts */}
-                        <div className="bg-gradient-to-br from-pink-50 to-pink-100 p-6 rounded-lg shadow hover:shadow-md transition">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="text-pink-600 text-sm font-semibold mb-2">Total Receipts</p>
-                                    <p className="text-4xl font-bold text-pink-800">{stats.totalReceipts}</p>
-                                    <p className="text-sm text-pink-600 mt-2">Payment receipts issued</p>
+                                <div className="border-t border-indigo-50 pt-2">
+                                    <p className="text-indigo-500 text-[10px] font-bold uppercase tracking-wider">Total Receipts</p>
+                                    <h4 className="text-xl font-bold text-indigo-900">{formatCompactNumber(stats.totalReceipts)}</h4>
                                 </div>
-                                <FaReceipt className="text-5xl text-pink-400 opacity-50" />
                             </div>
                         </div>
                     </div>
 
+                    {/* Charts Section in Overview */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-lg font-bold text-gray-800">Revenue Performance</h3>
+                                <span className="text-xs bg-green-50 text-green-600 px-3 py-1 rounded-full font-bold">LIVE DATA</span>
+                            </div>
+                            <div className="h-64">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={revenueByDepartment}>
+                                        <defs>
+                                            <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#10b981" stopOpacity={0.1} />
+                                                <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                                            </linearGradient>
+                                        </defs>
+                                        <XAxis dataKey="name" hide />
+                                        <YAxis hide />
+                                        <Tooltip
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                            formatter={(value) => formatCurrency(value)}
+                                        />
+                                        <Area type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorRev)" />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-lg font-bold text-gray-800">Revenue Contribution</h3>
+                                <p className="text-xs text-gray-400">By Department</p>
+                            </div>
+                            <div className="h-64 relative">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={revenueByDepartment}
+                                            innerRadius={60}
+                                            outerRadius={80}
+                                            paddingAngle={5}
+                                            dataKey="revenue"
+                                        >
+                                            {revenueByDepartment.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} cornerRadius={4} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                            formatter={(value) => formatCurrency(value)}
+                                        />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                    <p className="text-[10px] text-gray-400 uppercase font-black">Total</p>
+                                    <p className="text-lg font-black text-gray-800">{formatCurrency(revenueByDepartment.reduce((acc, d) => acc + d.revenue, 0), true)}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+
                     {/* Quick Actions */}
-                    <div className="bg-white p-6 rounded-lg shadow">
-                        <h3 className="text-xl font-bold mb-4 text-gray-800">Quick Actions</h3>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="p-4 border-2 border-green-200 rounded-lg hover:bg-green-50 transition flex flex-col items-center gap-2">
-                                <FaUserInjured className="text-3xl text-green-600" />
-                                <span className="text-sm font-semibold text-gray-700">Manage Patients</span>
-                                <div className="flex gap-2 w-full mt-2">
-                                    <Link to="/admin/patients" className="flex-1 bg-green-600 text-white text-xs px-3 py-1 rounded hover:bg-green-700 text-center">
-                                        View All
+                    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-lg font-bold text-gray-800">Quick Actions</h3>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                            <div className="group p-5 bg-green-50 rounded-2xl border border-green-100 hover:shadow-lg transition-all duration-300 flex flex-col items-center gap-3 relative overflow-hidden">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-green-500 opacity-50"></div>
+                                <FaUserInjured className="text-4xl text-green-600 group-hover:scale-110 transition-transform" />
+                                <span className="text-xs font-black text-green-900 uppercase tracking-widest">Patients</span>
+                                <div className="flex flex-col gap-2 w-full mt-2">
+                                    <Link to="/admin/patients" className="w-full bg-white text-green-600 text-[10px] font-bold py-2 rounded-xl text-center border border-green-200 hover:bg-green-600 hover:text-white shadow-sm transition-colors">
+                                        VIEW RECORDS
                                     </Link>
                                     {user.role !== 'readonly_admin' && (
                                         <button
                                             onClick={() => setShowRegisterPatientModal(true)}
-                                            className="flex-1 bg-blue-600 text-white text-xs px-3 py-1 rounded hover:bg-blue-700"
+                                            className="w-full bg-green-600 text-white text-[10px] font-bold py-2 rounded-xl shadow-md shadow-green-200 hover:bg-green-700 transition-colors"
                                         >
-                                            Register
+                                            NEW REGISTRATION
                                         </button>
                                     )}
                                 </div>
                             </div>
-                            <Link to="/billing" className="p-4 border-2 border-blue-200 rounded-lg hover:bg-blue-50 transition flex flex-col items-center gap-2">
-                                <FaDollarSign className="text-3xl text-blue-600" />
-                                <span className="text-sm font-semibold text-gray-700">View Billing</span>
+
+                            <Link to="/billing" className="group p-5 bg-blue-50 rounded-2xl border border-blue-100 hover:shadow-lg transition-all duration-300 flex flex-col items-center justify-center gap-3 relative overflow-hidden text-center">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-blue-500 opacity-50"></div>
+                                <FaDollarSign className="text-4xl text-blue-600 group-hover:scale-110 transition-transform" />
+                                <span className="text-xs font-black text-blue-900 uppercase tracking-widest">Billing</span>
+                                <p className="text-[10px] text-blue-400 font-medium">Manage Revenue</p>
                             </Link>
-                            <Link to="/admin/users" className="p-4 border-2 border-purple-200 rounded-lg hover:bg-purple-50 transition flex flex-col items-center gap-2">
-                                <FaUsers className="text-3xl text-purple-600" />
-                                <span className="text-sm font-semibold text-gray-700">Manage Users</span>
+
+                            <Link to="/admin/users" className="group p-5 bg-purple-50 rounded-2xl border border-purple-100 hover:shadow-lg transition-all duration-300 flex flex-col items-center justify-center gap-3 relative overflow-hidden text-center">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-purple-500 opacity-50"></div>
+                                <FaUsers className="text-4xl text-purple-600 group-hover:scale-110 transition-transform" />
+                                <span className="text-xs font-black text-purple-900 uppercase tracking-widest">Users</span>
+                                <p className="text-[10px] text-purple-400 font-medium">Staff Accounts</p>
                             </Link>
-                            <Link to="/admin/reports" className="p-4 border-2 border-indigo-200 rounded-lg hover:bg-indigo-50 transition flex flex-col items-center gap-2">
-                                <FaChartLine className="text-3xl text-indigo-600" />
-                                <span className="text-sm font-semibold text-gray-700">View Reports</span>
+
+                            <Link to="/admin/reports" className="group p-5 bg-indigo-50 rounded-2xl border border-indigo-100 hover:shadow-lg transition-all duration-300 flex flex-col items-center justify-center gap-3 relative overflow-hidden text-center">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500 opacity-50"></div>
+                                <FaChartLine className="text-4xl text-indigo-600 group-hover:scale-110 transition-transform" />
+                                <span className="text-xs font-black text-indigo-900 uppercase tracking-widest">Analytic</span>
+                                <p className="text-[10px] text-indigo-400 font-medium">System Reports</p>
                             </Link>
                         </div>
                     </div>
@@ -336,7 +429,7 @@ const AdminDashboard = () => {
                                     return (
                                         <tr key={idx} className="hover:bg-gray-50">
                                             <td className="p-3 border-b font-semibold">{dept.name}</td>
-                                            <td className="p-3 border-b text-green-600 font-bold">${dept.revenue.toFixed(2)}</td>
+                                            <td className="p-3 border-b text-green-600 font-bold">{formatCurrency(dept.revenue)}</td>
                                             <td className="p-3 border-b">{percentage}%</td>
                                         </tr>
                                     );
@@ -344,7 +437,7 @@ const AdminDashboard = () => {
                                 <tr className="bg-gray-100 font-bold">
                                     <td className="p-3 border-b">Total</td>
                                     <td className="p-3 border-b text-green-700">
-                                        ${revenueByDepartment.reduce((acc, d) => acc + d.revenue, 0).toFixed(2)}
+                                        {formatCurrency(revenueByDepartment.reduce((acc, d) => acc + d.revenue, 0))}
                                     </td>
                                     <td className="p-3 border-b">100%</td>
                                 </tr>

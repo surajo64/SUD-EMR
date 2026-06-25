@@ -3,10 +3,11 @@ import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import { AppContext } from '../context/AppContext';
 import Layout from '../components/Layout';
-import { FaDollarSign, FaFileInvoiceDollar, FaCheckCircle, FaUndo, FaWallet, FaPrint, FaSearch, FaUser, FaExclamationTriangle, FaBuilding, FaHistory, FaPlus, FaEdit, FaTrash } from 'react-icons/fa';
+import { FaDollarSign, FaFileInvoiceDollar, FaCheckCircle, FaUndo, FaWallet, FaPrint, FaSearch, FaUser, FaExclamationTriangle, FaBuilding, FaHistory, FaPlus, FaEdit, FaTrash, FaReceipt, FaUsers, FaArrowCircleDown, FaClock } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import LoadingOverlay from '../components/loadingOverlay';
 import { formatAge } from '../utils/patientUtils';
+import { formatCurrency, formatCompactNumber } from '../utils/formatters';
 
 const BillingDashboard = () => {
     const [loading, setLoading] = useState(false);
@@ -936,30 +937,6 @@ const BillingDashboard = () => {
 
             {activeTab === 'invoices' ? (
                 <>
-                    {/* Summary Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-                        <div className="bg-green-50 p-6 rounded shadow">
-                            <p className="text-green-700 text-sm font-semibold">Collected Today</p>
-                            <p className="text-3xl font-bold text-green-800">₦{totalCollectedToday.toLocaleString()}</p>
-                        </div>
-                        <div className="bg-yellow-50 p-6 rounded shadow">
-                            <p className="text-yellow-700 text-sm font-semibold">Pending to HMOs</p>
-                            <p className="text-3xl font-bold text-yellow-800">₦{totalPendingHMO.toLocaleString()}</p>
-                            <p className="text-xs text-yellow-600 mt-1">{pendingHMOReceipts.length} pending receipts</p>
-                        </div>
-                        <div className="bg-blue-50 p-6 rounded shadow">
-                            <p className="text-blue-700 text-sm font-semibold">Total Receipts Today</p>
-                            <p className="text-3xl font-bold text-blue-800">{totalReceiptsToday}</p>
-                        </div>
-                        <div className="bg-purple-50 p-6 rounded shadow">
-                            <p className="text-purple-700 text-sm font-semibold">Total Deposit Balance</p>
-                            <p className="text-3xl font-bold text-purple-800">₦{(totalPatientDeposits + totalRetainershipBalance).toLocaleString()}</p>
-                            <div className="flex justify-between text-xs text-purple-600 mt-2 border-t border-purple-200 pt-2">
-                                <span>Patients: ₦{totalPatientDeposits.toLocaleString()}</span>
-                                <span>Retainership: ₦{totalRetainershipBalance.toLocaleString()}</span>
-                            </div>
-                        </div>
-                    </div>
 
                     {/* Deposit Modal */}
                     {showDepositModal && (

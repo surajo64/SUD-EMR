@@ -3,8 +3,9 @@ import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import { AppContext } from '../context/AppContext';
 import Layout from '../components/Layout';
-import { FaXRay, FaSearch, FaCheckCircle, FaUpload, FaSave, FaImage, FaEdit, FaTimes, FaTrash, FaChevronUp, FaChevronDown, FaFileAlt } from 'react-icons/fa';
+import { FaXRay, FaSearch, FaCheckCircle, FaUpload, FaSave, FaImage, FaEdit, FaTimes, FaTrash, FaChevronUp, FaChevronDown, FaFileAlt, FaClock, FaMicroscope } from 'react-icons/fa';
 import { toast } from 'react-toastify';
+import { formatCompactNumber } from '../utils/formatters';
 
 import LoadingOverlay from '../components/loadingOverlay';
 
@@ -28,6 +29,24 @@ const RadiologyDashboard = () => {
     const [editImageUrl, setEditImageUrl] = useState('');
     const [expandedEncounter, setExpandedEncounter] = useState(null);
     const resultRef = useRef();
+
+    const [userStats, setUserStats] = useState({ scansToday: 0 });
+
+    useEffect(() => {
+        if (user && user.token) {
+            fetchUserStats();
+        }
+    }, [user.token, backendUrl]);
+
+    const fetchUserStats = async () => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get(`${backendUrl}/api/reports/user-stats`, config);
+            setUserStats(data);
+        } catch (error) {
+            console.error('Error fetching user stats:', error);
+        }
+    };
 
     useEffect(() => {
         const fetchSystemSettings = async () => {
@@ -317,20 +336,6 @@ const RadiologyDashboard = () => {
             <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
                 <FaXRay className="text-indigo-600" /> Radiology Dashboard
             </h2>
-
-            {/* Summary */}
-            <div className="grid grid-cols-2 gap-6 mb-6">
-                <div className="bg-yellow-50 p-6 rounded shadow">
-                    <p className="text-yellow-700 text-sm font-semibold">Pending Studies</p>
-                    <p className="text-3xl font-bold text-yellow-800">{pendingOrders.length}</p>
-                </div>
-                <div className="bg-green-50 p-6 rounded shadow">
-                    <p className="text-green-700 text-sm font-semibold">Completed Today</p>
-                    <p className="text-3xl font-bold text-green-800">
-                        {completedOrders.filter(o => new Date(o.updatedAt).toDateString() === new Date().toDateString()).length}
-                    </p>
-                </div>
-            </div>
 
             {/* Search */}
             <div className="bg-white p-6 rounded shadow mb-6">
