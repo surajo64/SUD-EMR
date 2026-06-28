@@ -27,7 +27,11 @@ const addChargeToEncounter = async (req, res) => {
 
         switch (patient.provider) {
             case 'Retainership':
+            case 'Corporate Retainership':
                 fee = charge.retainershipFee;
+                break;
+            case 'Family Retainership':
+                fee = charge.familyRetainershipFee || 0;
                 break;
             case 'NHIA':
                 fee = charge.nhiaFee;
@@ -68,7 +72,7 @@ const addChargeToEncounter = async (req, res) => {
             // If not covered (fee was 0), patient pays 100%
             patientPortion = totalAmount;
             hmoPortion = 0;
-        } else if (patient.provider === 'Retainership') {
+        } else if (patient.provider === 'Retainership' || patient.provider === 'Corporate Retainership' || patient.provider === 'Family Retainership') {
             // Retainership: HMO covers 100% of ALL charges (including drugs)
             patientPortion = 0;
             hmoPortion = totalAmount;

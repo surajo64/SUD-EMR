@@ -6,6 +6,7 @@ const inventorySchema = mongoose.Schema({
     price: { type: Number, required: true }, // Kept for backward compatibility
     standardFee: { type: Number, required: true, default: 0 },
     retainershipFee: { type: Number, default: 0 },
+    familyRetainershipFee: { type: Number, default: 0 },
     nhiaFee: { type: Number, default: 0 },
     kschmaFee: { type: Number, default: 0 },
     purchasingPrice: { type: Number, required: true },

@@ -6,7 +6,7 @@ const xlsx = require('xlsx');
 // @access  Private (Admin only)
 const createCharge = async (req, res) => {
     try {
-        const { name, type, basePrice, department, description, code, resultTemplate, standardFee, retainershipFee, nhiaFee, kschmaFee } = req.body;
+        const { name, type, basePrice, department, description, code, resultTemplate, standardFee, retainershipFee, familyRetainershipFee, nhiaFee, kschmaFee } = req.body;
         console.log('Creating Charge. labSpecialization:', req.body.labSpecialization);
 
         const charge = await Charge.create({
@@ -19,6 +19,7 @@ const createCharge = async (req, res) => {
             resultTemplate,
             standardFee,
             retainershipFee,
+            familyRetainershipFee,
             nhiaFee,
             kschmaFee,
             labSpecialization: req.body.labSpecialization
@@ -70,6 +71,7 @@ const updateCharge = async (req, res) => {
             // Multi-tier pricing updates
             charge.standardFee = req.body.standardFee !== undefined ? req.body.standardFee : charge.standardFee;
             charge.retainershipFee = req.body.retainershipFee !== undefined ? req.body.retainershipFee : charge.retainershipFee;
+            charge.familyRetainershipFee = req.body.familyRetainershipFee !== undefined ? req.body.familyRetainershipFee : charge.familyRetainershipFee;
             charge.nhiaFee = req.body.nhiaFee !== undefined ? req.body.nhiaFee : charge.nhiaFee;
             charge.kschmaFee = req.body.kschmaFee !== undefined ? req.body.kschmaFee : charge.kschmaFee;
 
@@ -154,6 +156,7 @@ const importChargesFromExcel = async (req, res) => {
                     basePrice: standardFee,
                     standardFee,
                     retainershipFee: parseFloat(row['Retainership Fee'] || row['retainershipFee'] || 0),
+                    familyRetainershipFee: parseFloat(row['Family Retainership Fee'] || row['familyRetainershipFee'] || 0),
                     nhiaFee: parseFloat(row['NHIA Fee'] || row['nhiaFee'] || 0),
                     kschmaFee: parseFloat(row['KSCHMA Fee'] || row['kschmaFee'] || 0),
                     department: department || row['Department'] || type,

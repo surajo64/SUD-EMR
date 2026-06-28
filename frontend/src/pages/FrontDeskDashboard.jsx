@@ -1128,38 +1128,59 @@ const FrontDeskDashboard = () => {
                                                 {chargeTypeLabels[type] || type}
                                             </h5>
                                             <div className="space-y-2 pl-4">
-                                                {chargesByType[type].map(charge => (
-                                                    <label
-                                                        key={charge._id}
-                                                        className={`flex items-center justify-between p-3 border rounded cursor-pointer hover:bg-gray-50 ${selectedCharges.includes(charge._id) ? 'bg-blue-50 border-blue-500' : ''
-                                                            }`}
-                                                    >
-                                                        <div className="flex items-center gap-3">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={selectedCharges.includes(charge._id)}
-                                                                onChange={() => handleChargeToggle(charge._id)}
-                                                                className="w-4 h-4"
-                                                            />
-                                                            <div>
-                                                                <p className="font-semibold">{charge.name}</p>
-                                                                {charge.description && (
-                                                                    <p className="text-xs text-gray-600">{charge.description}</p>
-                                                                )}
+                                                {chargesByType[type].map(charge => {
+                                                    // Determine fee based on patient provider
+                                                    const provider = selectedPatient?.provider || 'Standard';
+                                                    let patientFee = charge.standardFee || charge.basePrice || 0;
+                                                    let feeLabel = 'Standard';
+                                                    let feeLabelColor = 'bg-blue-100 text-blue-700';
+                                                    if (provider === 'Corporate Retainership' || provider === 'Retainership') {
+                                                        patientFee = charge.retainershipFee || patientFee;
+                                                        feeLabel = 'Corp Ret.';
+                                                        feeLabelColor = 'bg-purple-100 text-purple-700';
+                                                    } else if (provider === 'Family Retainership') {
+                                                        patientFee = charge.familyRetainershipFee || patientFee;
+                                                        feeLabel = 'Fam Ret.';
+                                                        feeLabelColor = 'bg-pink-100 text-pink-700';
+                                                    } else if (provider === 'NHIA') {
+                                                        patientFee = charge.nhiaFee || patientFee;
+                                                        feeLabel = 'NHIA';
+                                                        feeLabelColor = 'bg-green-100 text-green-700';
+                                                    } else if (provider === 'KSCHMA') {
+                                                        patientFee = charge.kschmaFee || patientFee;
+                                                        feeLabel = 'State Ins.';
+                                                        feeLabelColor = 'bg-orange-100 text-orange-700';
+                                                    }
+                                                    return (
+                                                        <label
+                                                            key={charge._id}
+                                                            className={`flex items-center justify-between p-3 border rounded cursor-pointer hover:bg-gray-50 ${selectedCharges.includes(charge._id) ? 'bg-blue-50 border-blue-500' : ''}`}
+                                                        >
+                                                            <div className="flex items-center gap-3">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={selectedCharges.includes(charge._id)}
+                                                                    onChange={() => handleChargeToggle(charge._id)}
+                                                                    className="w-4 h-4"
+                                                                />
+                                                                <div>
+                                                                    <p className="font-semibold">{charge.name}</p>
+                                                                    {charge.description && (
+                                                                        <p className="text-xs text-gray-600">{charge.description}</p>
+                                                                    )}
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <p className={`font-bold ${charge.basePrice === 0 ? 'text-green-600' : 'text-gray-800'}`}>
-                                                                ${charge.basePrice.toFixed(2)}
-                                                            </p>
-                                                            {charge.basePrice === 0 && (
-                                                                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                                                                    Free
+                                                            <div className="text-right ml-4">
+                                                                <p className={`font-bold text-lg ${patientFee === 0 ? 'text-green-600' : 'text-gray-900'}`}>
+                                                                    ₦{patientFee.toLocaleString()}
+                                                                </p>
+                                                                <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${patientFee === 0 ? 'bg-green-100 text-green-700' : feeLabelColor}`}>
+                                                                    {patientFee === 0 ? 'Free' : feeLabel}
                                                                 </span>
-                                                            )}
-                                                        </div>
-                                                    </label>
-                                                ))}
+                                                            </div>
+                                                        </label>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                     ))}
@@ -1176,14 +1197,22 @@ const FrontDeskDashboard = () => {
                                     <div className="flex justify-between items-center">
                                         <span className="font-semibold text-lg">Total Charges:</span>
                                         <span className="font-bold text-2xl text-blue-700">
-                                            ${charges
+                                            ₦{charges
                                                 .filter(c => selectedCharges.includes(c._id))
-                                                .reduce((sum, c) => sum + c.basePrice, 0)
-                                                .toFixed(2)}
+                                                .reduce((sum, c) => {
+                                                    const prov = selectedPatient?.provider || 'Standard';
+                                                    let fee = c.standardFee || c.basePrice || 0;
+                                                    if (prov === 'Corporate Retainership' || prov === 'Retainership') fee = c.retainershipFee || fee;
+                                                    else if (prov === 'Family Retainership') fee = c.familyRetainershipFee || fee;
+                                                    else if (prov === 'NHIA') fee = c.nhiaFee || fee;
+                                                    else if (prov === 'KSCHMA') fee = c.kschmaFee || fee;
+                                                    return sum + fee;
+                                                }, 0)
+                                                .toLocaleString()}
                                         </span>
                                     </div>
                                     <p className="text-sm text-gray-600 mt-2">
-                                        {selectedCharges.length} charge{selectedCharges.length !== 1 ? 's' : ''} selected
+                                        {selectedCharges.length} charge{selectedCharges.length !== 1 ? 's' : ''} selected &mdash; Rate: <span className="font-semibold">{selectedPatient?.provider || 'Standard'}</span>
                                     </p>
                                 </div>
                             )}
@@ -1336,9 +1365,25 @@ const FrontDeskDashboard = () => {
                                                     const isSelected = selectedAdditionalCharges.includes(charge._id);
                                                     // Determine fee based on patient provider
                                                     let fee = charge.standardFee || charge.basePrice || 0;
-                                                    if (addChargesPatient.provider === 'Retainership') fee = charge.retainershipFee || fee;
-                                                    else if (addChargesPatient.provider === 'NHIA') fee = charge.nhiaFee || fee;
-                                                    else if (addChargesPatient.provider === 'KSCHMA') fee = charge.kschmaFee || fee;
+                                                    let addFeeLabel = 'Standard';
+                                                    let addFeeLabelColor = 'bg-blue-100 text-blue-700';
+                                                    if (addChargesPatient.provider === 'Retainership' || addChargesPatient.provider === 'Corporate Retainership') {
+                                                        fee = charge.retainershipFee || fee;
+                                                        addFeeLabel = 'Corp Ret.';
+                                                        addFeeLabelColor = 'bg-purple-100 text-purple-700';
+                                                    } else if (addChargesPatient.provider === 'Family Retainership') {
+                                                        fee = charge.familyRetainershipFee || fee;
+                                                        addFeeLabel = 'Fam Ret.';
+                                                        addFeeLabelColor = 'bg-pink-100 text-pink-700';
+                                                    } else if (addChargesPatient.provider === 'NHIA') {
+                                                        fee = charge.nhiaFee || fee;
+                                                        addFeeLabel = 'NHIA';
+                                                        addFeeLabelColor = 'bg-green-100 text-green-700';
+                                                    } else if (addChargesPatient.provider === 'KSCHMA') {
+                                                        fee = charge.kschmaFee || fee;
+                                                        addFeeLabel = 'State Ins.';
+                                                        addFeeLabelColor = 'bg-orange-100 text-orange-700';
+                                                    }
                                                     return (
                                                         <label
                                                             key={charge._id}
@@ -1361,9 +1406,12 @@ const FrontDeskDashboard = () => {
                                                                     )}
                                                                 </div>
                                                             </div>
-                                                            <span className="font-bold text-green-700 whitespace-nowrap ml-4">
-                                                                ₦{fee.toLocaleString()}
-                                                            </span>
+                                                            <div className="text-right ml-4">
+                                                                <p className={`font-bold text-lg ${fee === 0 ? 'text-green-600' : 'text-gray-900'}`}>₦{fee.toLocaleString()}</p>
+                                                                <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${fee === 0 ? 'bg-green-100 text-green-700' : addFeeLabelColor}`}>
+                                                                    {fee === 0 ? 'Free' : addFeeLabel}
+                                                                </span>
+                                                            </div>
                                                         </label>
                                                     );
                                                 })}
@@ -1384,7 +1432,8 @@ const FrontDeskDashboard = () => {
                                                 .filter(c => selectedAdditionalCharges.includes(c._id))
                                                 .reduce((sum, c) => {
                                                     let fee = c.standardFee || c.basePrice || 0;
-                                                    if (addChargesPatient.provider === 'Retainership') fee = c.retainershipFee || fee;
+                                                    if (addChargesPatient.provider === 'Retainership' || addChargesPatient.provider === 'Corporate Retainership') fee = c.retainershipFee || fee;
+                                                    else if (addChargesPatient.provider === 'Family Retainership') fee = c.familyRetainershipFee || fee;
                                                     else if (addChargesPatient.provider === 'NHIA') fee = c.nhiaFee || fee;
                                                     else if (addChargesPatient.provider === 'KSCHMA') fee = c.kschmaFee || fee;
                                                     return sum + fee;

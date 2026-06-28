@@ -163,14 +163,19 @@ const generatePrescriptionCharge = async (req, res) => {
 
         let basePrice = 0;
         if (drugCharge) {
-            basePrice = drugCharge.basePrice; // or standardFee
+            basePrice = drugCharge.standardFee || drugCharge.basePrice;
         } else if (inventoryItem) {
-            basePrice = inventoryItem.price;
-            // Create Charge definition since it doesn't exist
+            basePrice = inventoryItem.standardFee || inventoryItem.price;
+            // Create Charge definition since it doesn't exist — include ALL fee tiers from inventory
             drugCharge = await Charge.create({
                 name: medicine.name,
                 type: 'drugs',
                 basePrice: basePrice,
+                standardFee: inventoryItem.standardFee || inventoryItem.price || 0,
+                retainershipFee: inventoryItem.retainershipFee || 0,
+                familyRetainershipFee: inventoryItem.familyRetainershipFee || 0,
+                nhiaFee: inventoryItem.nhiaFee || 0,
+                kschmaFee: inventoryItem.kschmaFee || 0,
                 department: 'Pharmacy',
                 active: true
             });
@@ -178,21 +183,32 @@ const generatePrescriptionCharge = async (req, res) => {
             return res.status(400).json({ message: `Drug ${medicine.name} not found in charges or inventory.` });
         }
 
-        // Calculate Fee logic (reusing logic from encounterChargeController.js roughly, or just calling it?)
-        // Better to replicate crucial logic or extract into a service. 
-        // For now, let's implement the core logic here.
-
+        // Calculate Fee logic based on patient provider
         const patient = prescription.patient;
         let fee = 0;
         let isCovered = true;
 
-        if (patient.provider === 'Retainership') fee = drugCharge.retainershipFee || 0;
-        else if (patient.provider === 'NHIA') fee = drugCharge.nhiaFee || 0;
-        else if (patient.provider === 'KSCHMA') fee = drugCharge.kschmaFee || 0;
-        else fee = drugCharge.standardFee || drugCharge.basePrice;
+        if (patient.provider === 'Retainership' || patient.provider === 'Corporate Retainership') {
+            fee = drugCharge.retainershipFee || 0;
+            // Fallback to inventory if charge has no retainershipFee set
+            if (!fee && inventoryItem) fee = inventoryItem.retainershipFee || 0;
+        } else if (patient.provider === 'Family Retainership') {
+            fee = drugCharge.familyRetainershipFee || 0;
+            // Fallback to inventory if charge has no familyRetainershipFee set
+            if (!fee && inventoryItem) fee = inventoryItem.familyRetainershipFee || 0;
+        } else if (patient.provider === 'NHIA') {
+            fee = drugCharge.nhiaFee || 0;
+            if (!fee && inventoryItem) fee = inventoryItem.nhiaFee || 0;
+        } else if (patient.provider === 'KSCHMA') {
+            fee = drugCharge.kschmaFee || 0;
+            if (!fee && inventoryItem) fee = inventoryItem.kschmaFee || 0;
+        } else {
+            fee = drugCharge.standardFee || drugCharge.basePrice || 0;
+        }
 
-        if (fee === 0 && patient.provider !== 'Standard') {
-            fee = drugCharge.standardFee || drugCharge.basePrice;
+        // Final fallback: if specific tier fee is still 0, use standard fee
+        if (fee === 0) {
+            fee = drugCharge.standardFee || drugCharge.basePrice || (inventoryItem ? inventoryItem.standardFee || inventoryItem.price : 0);
         }
 
         const finalQuantity = quantity || medicine.quantity || 1;
@@ -201,7 +217,7 @@ const generatePrescriptionCharge = async (req, res) => {
         let patientPortion = totalAmount;
         let hmoPortion = 0;
 
-        if (patient.provider === 'Retainership') {
+        if (patient.provider === 'Retainership' || patient.provider === 'Corporate Retainership' || patient.provider === 'Family Retainership') {
             patientPortion = 0;
             hmoPortion = totalAmount;
         } else if (patient.provider === 'NHIA' || patient.provider === 'KSCHMA') {
@@ -435,6 +451,135 @@ const dispenseWithInventory = async (req, res) => {
     }
 };
 
+// @desc    Bulk dispense prescriptions with inventory deduction
+// @route   PUT /api/prescriptions/bulk-dispense
+// @access  Private (Pharmacist)
+const bulkDispenseWithInventory = async (req, res) => {
+    try {
+        const Inventory = require('../models/inventoryModel');
+        const EncounterCharge = require('../models/encounterChargeModel');
+        const { prescriptionIds } = req.body;
+
+        if (!prescriptionIds || !Array.isArray(prescriptionIds) || prescriptionIds.length === 0) {
+            return res.status(400).json({ message: 'Please specify prescription IDs to dispense' });
+        }
+
+        const results = {
+            success: [],
+            failed: []
+        };
+
+        const pharmacyFilter = {};
+        if (req.user.role === 'pharmacist' && req.user.assignedPharmacy) {
+            pharmacyFilter.pharmacy = req.user.assignedPharmacy._id || req.user.assignedPharmacy;
+        }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        for (const id of prescriptionIds) {
+            try {
+                const prescription = await Prescription.findById(id)
+                    .populate('charge')
+                    .populate('patient', 'name mrn');
+
+                if (!prescription) {
+                    results.failed.push({ id, reason: 'Prescription not found' });
+                    continue;
+                }
+
+                // Check pharmacy ownership
+                if (req.user.role === 'pharmacist' && req.user.assignedPharmacy) {
+                    const userPharmacyId = req.user.assignedPharmacy._id || req.user.assignedPharmacy;
+                    const isMain = req.user.assignedPharmacy.isMainPharmacy;
+                    if (!isMain && prescription.pharmacy && prescription.pharmacy.toString() !== userPharmacyId.toString()) {
+                        results.failed.push({ id, name: prescription.patient?.name, reason: 'Not authorized for this pharmacy' });
+                        continue;
+                    }
+                }
+
+                // Verify status
+                if (prescription.status === 'dispensed') {
+                    results.failed.push({ id, name: prescription.patient?.name, reason: 'Already dispensed' });
+                    continue;
+                }
+
+                // Verify payment status
+                if (!prescription.charge || prescription.charge.status !== 'paid') {
+                    results.failed.push({ id, name: prescription.patient?.name, reason: `Status: ${prescription.charge?.status || 'unpaid'}` });
+                    continue;
+                }
+
+                const medicines = prescription.medicines;
+                const batchUpdates = [];
+                let hasStockError = false;
+
+                // Preliminary stock check for all medicines in this prescription
+                for (const med of medicines) {
+                    if (med.buyOutside) continue;
+
+                    const escapedName = med.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const inventoryItems = await Inventory.find({
+                        name: { $regex: new RegExp(escapedName, 'i') },
+                        quantity: { $gt: 0 },
+                        ...pharmacyFilter
+                    }).sort({ expiryDate: 1 });
+
+                    const validStock = inventoryItems.filter(item => new Date(item.expiryDate) >= today);
+                    const totalValidAvailable = validStock.reduce((sum, item) => sum + item.quantity, 0);
+
+                    if (totalValidAvailable < (med.quantity || 1)) {
+                        results.failed.push({ id, name: prescription.patient?.name, medicine: med.name, reason: 'Insufficient stock' });
+                        hasStockError = true;
+                        break;
+                    }
+                    batchUpdates.push({ med, validStock });
+                }
+
+                if (hasStockError) continue;
+
+                // Perform deduction
+                for (const update of batchUpdates) {
+                    let remainingToDispense = update.med.quantity || 1;
+                    for (const item of update.validStock) {
+                        if (remainingToDispense <= 0) break;
+                        const deductAmount = Math.min(item.quantity, remainingToDispense);
+                        item.quantity -= deductAmount;
+                        remainingToDispense -= deductAmount;
+                        await item.save();
+                    }
+                }
+
+                // Update prescription
+                prescription.status = 'dispensed';
+                prescription.dispensedBy = req.user._id;
+                prescription.dispensedAt = new Date();
+                await prescription.save();
+
+                results.success.push({ id, name: prescription.patient?.name });
+
+            } catch (innerError) {
+                console.error(`Error processing prescription ${id}:`, innerError);
+                results.failed.push({ id, reason: innerError.message });
+            }
+        }
+
+        res.json({
+            message: 'Bulk dispense completed',
+            summary: {
+                totalRequested: prescriptionIds.length,
+                successCount: results.success.length,
+                failedCount: results.failed.length
+            },
+            results
+        });
+
+    } catch (error) {
+        console.error('Bulk Dispense Error:', error);
+        res.status(500).json({ message: 'Internal server error during bulk dispense' });
+    }
+};
+
 // @desc    Delete prescription
 // @route   DELETE /api/prescriptions/:id
 // @access  Private (Doctor or Admin)
@@ -479,5 +624,6 @@ module.exports = {
     generatePrescriptionCharge,
     dispensePrescription,
     dispenseWithInventory,
+    bulkDispenseWithInventory,
     deletePrescription,
 };

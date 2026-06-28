@@ -1,0 +1,23 @@
+Connected to DB
+
+--- ALL INVENTORY ITEMS ---
+Drug: Paracetamol 500mg, price/basePrice: 300, Std: 300, Corp: 900, Fam: 0, Qty: 734
+Drug: Paracetamol 500mg, price/basePrice: 300, Std: 300, Corp: 0, Fam: 0, Qty: 7
+Drug: Paracetamol 500mg, price/basePrice: 300, Std: 300, Corp: 0, Fam: 0, Qty: 13
+Drug: Tab carvedalol 25mg, price/basePrice: 3000, Std: 3000, Corp: 6000, Fam: 0, Qty: 49
+Drug: Tab. ALBENDAZOLE ( ZOLAT) 200mg, price/basePrice: 1500, Std: 1500, Corp: 3000, Fam: 0, Qty: 33
+Drug: Tab. ALBENDAZOLE ( ZOLAT) 200mg, price/basePrice: 1500, Std: 1500, Corp: 4500, Fam: 0, Qty: 6
+Drug: Tab carvedalol 25mg, price/basePrice: 3000, Std: 3000, Corp: 0, Fam: 0, Qty: 7
+Drug: Tab carvedalol 25mg, price/basePrice: 3000, Std: 3000, Corp: 0, Fam: 0, Qty: 2
+Drug: Rabeprazole Sodium ( BAROLE 20 ), price/basePrice: 400, Std: 400, Corp: 500, Fam: 0, Qty: 40
+Drug: Rabeprazole Sodium ( BAROLE 20 ), price/basePrice: 400, Std: 400, Corp: 500, Fam: 0, Qty: 13
+Drug: Rabeprazole Sodium ( BAROLE 20 ), price/basePrice: 400, Std: 400, Corp: 500, Fam: 0, Qty: 10
+Drug: Tab Paracetamol (500mg), price/basePrice: 40, Std: 40, Corp: 50, Fam: 0, Qty: 1395
+Drug: Tab Paracetamol (500mg), price/basePrice: 40, Std: 40, Corp: 50, Fam: 0, Qty: 0
+Drug: VITAMIN C ( EM-VIT-C ), price/basePrice: 50, Std: 50, Corp: 45, Fam: 0, Qty: 100
+Drug: Loratadine, price/basePrice: 500, Std: 500, Corp: 1000, Fam: 800, Qty: 87
+Drug: Paracetamol Injection, price/basePrice: 200, Std: 200, Corp: 300, Fam: 0, Qty: 79
+Drug: Paracetamol Injection, price/basePrice: 200, Std: 200, Corp: 300, Fam: 0, Qty: 11
+Drug: Tab Nipidipine, price/basePrice: 300, Std: 300, Corp: 600, Fam: 0, Qty: 87
+Drug: Tab Nipidipine, price/basePrice: 300, Std: 300, Corp: 600, Fam: 0, Qty: 8
+Drug: Tab Nipidipine, price/basePrice: 300, Std: 300, Corp: 600, Fam: 0, Qty: 90

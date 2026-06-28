@@ -21,6 +21,7 @@ const FrontDeskChargeManagement = () => {
         basePrice: '',
         standardFee: '',
         retainershipFee: '',
+        familyRetainershipFee: '',
         nhiaFee: '',
         kschmaFee: '',
         department: '',
@@ -64,9 +65,10 @@ const FrontDeskChargeManagement = () => {
             const payload = {
                 name: formData.name,
                 type: formData.type,
-                basePrice: parseFloat(formData.standardFee) || 0, // Use standard fee as base price
+                basePrice: parseFloat(formData.standardFee) || 0,
                 standardFee: parseFloat(formData.standardFee) || 0,
                 retainershipFee: parseFloat(formData.retainershipFee) || 0,
+                familyRetainershipFee: parseFloat(formData.familyRetainershipFee) || 0,
                 nhiaFee: parseFloat(formData.nhiaFee) || 0,
                 kschmaFee: parseFloat(formData.kschmaFee) || 0,
                 department: formData.department || 'General',
@@ -102,6 +104,7 @@ const FrontDeskChargeManagement = () => {
             basePrice: charge.basePrice.toString(),
             standardFee: (charge.standardFee || charge.basePrice || 0).toString(),
             retainershipFee: (charge.retainershipFee || 0).toString(),
+            familyRetainershipFee: (charge.familyRetainershipFee || 0).toString(),
             nhiaFee: (charge.nhiaFee || 0).toString(),
             kschmaFee: (charge.kschmaFee || 0).toString(),
             department: charge.department || '',
@@ -146,6 +149,7 @@ const FrontDeskChargeManagement = () => {
             basePrice: '',
             standardFee: '',
             retainershipFee: '',
+            familyRetainershipFee: '',
             nhiaFee: '',
             kschmaFee: '',
             department: '',
@@ -163,6 +167,7 @@ const FrontDeskChargeManagement = () => {
             'Description': 'General consultation fee',
             'Standard Fee': 5000,
             'Retainership Fee': 4000,
+            'Family Retainership Fee': 3500,
             'NHIA Fee': 2000,
             'KSCHMA Fee': 1500
         }];
@@ -180,6 +185,7 @@ const FrontDeskChargeManagement = () => {
             'Description': c.description || '',
             'Standard Fee': c.standardFee || 0,
             'Retainership Fee': c.retainershipFee || 0,
+            'Family Retainership Fee': c.familyRetainershipFee || 0,
             'NHIA Fee': c.nhiaFee || 0,
             'KSCHMA Fee': c.kschmaFee || 0,
             'Status': c.active ? 'Active' : 'Inactive'
@@ -340,7 +346,7 @@ const FrontDeskChargeManagement = () => {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
                             <div>
                                 <label className="block text-gray-700 mb-2 font-semibold">
                                     Standard Fee <span className="text-red-500">*</span>
@@ -359,12 +365,27 @@ const FrontDeskChargeManagement = () => {
                             </div>
                             <div>
                                 <label className="block text-gray-700 mb-2 font-semibold">
-                                    Retainership Fee
+                                    Corp Retainership Fee
                                 </label>
                                 <input
                                     type="number"
                                     name="retainershipFee"
                                     value={formData.retainershipFee}
+                                    onChange={handleInputChange}
+                                    className="w-full border p-2 rounded"
+                                    placeholder="0.00"
+                                    step="0.01"
+                                    min="0"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-gray-700 mb-2 font-semibold">
+                                    Fam Retainership Fee
+                                </label>
+                                <input
+                                    type="number"
+                                    name="familyRetainershipFee"
+                                    value={formData.familyRetainershipFee}
                                     onChange={handleInputChange}
                                     className="w-full border p-2 rounded"
                                     placeholder="0.00"
@@ -534,6 +555,10 @@ const FrontDeskChargeManagement = () => {
                                                     <td className="p-3">
                                                         <div className="text-sm">
                                                             <p><span className="font-semibold">Std:</span> ₦{(charge.standardFee || charge.basePrice || 0).toLocaleString()}</p>
+                                                            <p className="text-xs text-gray-500">
+                                                                Corp Ret: ₦{(charge.retainershipFee || 0).toLocaleString()} |
+                                                                Fam Ret: ₦{(charge.familyRetainershipFee || 0).toLocaleString()}
+                                                            </p>
                                                             <p className="text-xs text-gray-500">
                                                                 NHIA: ₦{(charge.nhiaFee || 0).toLocaleString()} |
                                                                 KSCHMA: ₦{(charge.kschmaFee || 0).toLocaleString()}

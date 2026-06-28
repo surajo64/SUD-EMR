@@ -20,6 +20,7 @@ const RadiologyTestManagement = () => {
         name: '',
         standardFee: '',
         retainershipFee: '',
+        familyRetainershipFee: '',
         nhiaFee: '',
         kschmaFee: '',
         description: '',
@@ -70,6 +71,7 @@ const RadiologyTestManagement = () => {
                 basePrice: parseFloat(formData.standardFee), // For backward compatibility
                 standardFee: parseFloat(formData.standardFee),
                 retainershipFee: parseFloat(formData.retainershipFee) || 0,
+                familyRetainershipFee: parseFloat(formData.familyRetainershipFee) || 0,
                 nhiaFee: parseFloat(formData.nhiaFee) || 0,
                 kschmaFee: parseFloat(formData.kschmaFee) || 0,
                 department: 'Radiology',
@@ -106,6 +108,7 @@ const RadiologyTestManagement = () => {
             name: test.name,
             standardFee: (test.standardFee || test.basePrice || 0).toString(),
             retainershipFee: (test.retainershipFee || 0).toString(),
+            familyRetainershipFee: (test.familyRetainershipFee || 0).toString(),
             nhiaFee: (test.nhiaFee || 0).toString(),
             kschmaFee: (test.kschmaFee || 0).toString(),
             description: test.description || '',
@@ -154,6 +157,7 @@ const RadiologyTestManagement = () => {
             name: '',
             standardFee: '',
             retainershipFee: '',
+            familyRetainershipFee: '',
             nhiaFee: '',
             kschmaFee: '',
             description: '',
@@ -171,6 +175,7 @@ const RadiologyTestManagement = () => {
             'Description': 'Example description',
             'Standard Fee': 5000,
             'Retainership Fee': 4000,
+            'Family Retainership Fee': 3000,
             'NHIA Fee': 3000,
             'KSCHMA Fee': 2500
         }];
@@ -188,6 +193,7 @@ const RadiologyTestManagement = () => {
             'Description': t.description || '',
             'Standard Fee': t.standardFee || 0,
             'Retainership Fee': t.retainershipFee || 0,
+            'Family Retainership Fee': t.familyRetainershipFee || 0,
             'NHIA Fee': t.nhiaFee || 0,
             'KSCHMA Fee': t.kschmaFee || 0,
             'Status': t.active ? 'Active' : 'Inactive'
@@ -488,7 +494,7 @@ _____________________________________
                         </div>
                         <div className="mb-4">
                             <label className="block text-gray-700 mb-2 font-semibold">Pricing Configuration</label>
-                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 bg-gray-50 p-4 rounded border">
+                            <div className="grid grid-cols-3 md:grid-cols-6 gap-4 bg-gray-50 p-4 rounded border">
                                 <div>
                                     <label className="block text-xs font-semibold mb-1 text-blue-600">Standard Fee <span className="text-red-500">*</span></label>
                                     <input
@@ -504,13 +510,26 @@ _____________________________________
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-semibold mb-1 text-purple-600">Retainership</label>
+                                    <label className="block text-xs font-semibold mb-1 text-purple-600">Corp Retainership</label>
                                     <input
                                         type="number"
                                         name="retainershipFee"
                                         value={formData.retainershipFee}
                                         onChange={handleInputChange}
                                         className="w-full border p-2 rounded text-sm border-purple-200 focus:border-purple-500"
+                                        placeholder="0.00"
+                                        step="0.01"
+                                        min="0"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold mb-1 text-pink-600">Fam Retainership</label>
+                                    <input
+                                        type="number"
+                                        name="familyRetainershipFee"
+                                        value={formData.familyRetainershipFee}
+                                        onChange={handleInputChange}
+                                        className="w-full border p-2 rounded text-sm border-pink-200 focus:border-pink-500"
                                         placeholder="0.00"
                                         step="0.01"
                                         min="0"
@@ -682,7 +701,7 @@ _____________________________________"
                                                     <span className="text-gray-500">Standard:</span>
                                                     <span className="font-semibold text-gray-800">₦{(test.standardFee || test.basePrice || 0).toLocaleString()}</span>
                                                 </div>
-                                                {(test.standardFee > 0 || test.retainershipFee > 0 || test.nhiaFee > 0 || test.kschmaFee > 0) && (
+                                                {(test.standardFee > 0 || test.retainershipFee > 0 || test.familyRetainershipFee > 0 || test.nhiaFee > 0 || test.kschmaFee > 0) && (
                                                     <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
                                                         {test.standardFee > 0 && (
                                                             <div className="flex justify-between gap-1">
@@ -692,8 +711,14 @@ _____________________________________"
                                                         )}
                                                         {test.retainershipFee > 0 && (
                                                             <div className="flex justify-between gap-1">
-                                                                <span className="text-purple-600">Ret:</span>
+                                                                <span className="text-purple-600">Corp:</span>
                                                                 <span>₦{test.retainershipFee.toLocaleString()}</span>
+                                                            </div>
+                                                        )}
+                                                        {test.familyRetainershipFee > 0 && (
+                                                            <div className="flex justify-between gap-1">
+                                                                <span className="text-pink-600">Fam:</span>
+                                                                <span>₦{test.familyRetainershipFee.toLocaleString()}</span>
                                                             </div>
                                                         )}
                                                         {test.nhiaFee > 0 && (

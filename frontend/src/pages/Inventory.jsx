@@ -43,6 +43,7 @@ const Inventory = () => {
         quantity: "",
         standardFee: "",
         retainershipFee: "",
+        familyRetainershipFee: "",
         nhiaFee: "",
         kschmaFee: "",
         purchasingPrice: "",
@@ -185,6 +186,7 @@ const Inventory = () => {
             'Drug Unit': 'unit',
             'Standard Fee': 50,
             'Retainership Fee': 45,
+            'Family Retainership Fee': 40,
             'NHIA Fee': 40,
             'KSCHMA Fee': 40,
             'Purchasing Price': 30,
@@ -239,6 +241,7 @@ const Inventory = () => {
                 'Drug Unit': item.drugUnit,
                 'Standard Fee': item.standardFee || item.price || 0,
                 'Retainership Fee': item.retainershipFee || 0,
+                'Family Retainership Fee': item.familyRetainershipFee || 0,
                 'NHIA Fee': item.nhiaFee || 0,
                 'KSCHMA Fee': item.kschmaFee || 0,
                 'Purchasing Price': item.purchasingPrice || 0,
@@ -289,6 +292,7 @@ const Inventory = () => {
             quantity: "",
             standardFee: "",
             retainershipFee: "",
+            familyRetainershipFee: "",
             nhiaFee: "",
             kschmaFee: "",
             purchasingPrice: "",
@@ -313,6 +317,7 @@ const Inventory = () => {
             ...item,
             standardFee: item.standardFee || item.price || "",
             retainershipFee: item.retainershipFee || "",
+            familyRetainershipFee: item.familyRetainershipFee || "",
             nhiaFee: item.nhiaFee || "",
             kschmaFee: item.kschmaFee || "",
             expiryDate: item.expiryDate ? item.expiryDate.substring(0, 10) : "",
@@ -328,6 +333,7 @@ const Inventory = () => {
             quantity: "",
             standardFee: item.standardFee || item.price || "",
             retainershipFee: item.retainershipFee || "",
+            familyRetainershipFee: item.familyRetainershipFee || "",
             nhiaFee: item.nhiaFee || "",
             kschmaFee: item.kschmaFee || "",
             purchasingPrice: item.purchasingPrice || "",
@@ -423,6 +429,7 @@ const Inventory = () => {
                     price: item.price,
                     standardFee: item.standardFee,
                     retainershipFee: item.retainershipFee,
+                    familyRetainershipFee: item.familyRetainershipFee,
                     nhiaFee: item.nhiaFee,
                     kschmaFee: item.kschmaFee,
                     expiryDate: item.expiryDate,
@@ -725,7 +732,7 @@ const Inventory = () => {
                                             <span className="text-gray-500">Standard:</span>
                                             <span className="font-semibold text-gray-800">₦{(item.standardFee || item.price || 0).toLocaleString()}</span>
                                         </div>
-                                        {(item.standardFee > 0 || item.retainershipFee > 0 || item.nhiaFee > 0 || item.kschmaFee > 0) && (
+                                        {(item.standardFee > 0 || item.retainershipFee > 0 || item.familyRetainershipFee > 0 || item.nhiaFee > 0 || item.kschmaFee > 0) && (
                                             <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
                                                 {item.standardFee > 0 && (
                                                     <div className="flex justify-between gap-1">
@@ -735,8 +742,14 @@ const Inventory = () => {
                                                 )}
                                                 {item.retainershipFee > 0 && (
                                                     <div className="flex justify-between gap-1">
-                                                        <span className="text-purple-600">Ret:</span>
+                                                        <span className="text-purple-600">Corp Ret:</span>
                                                         <span>₦{item.retainershipFee.toLocaleString()}</span>
+                                                    </div>
+                                                )}
+                                                {item.familyRetainershipFee > 0 && (
+                                                    <div className="flex justify-between gap-1">
+                                                        <span className="text-pink-600">Fam Ret:</span>
+                                                        <span>₦{item.familyRetainershipFee.toLocaleString()}</span>
                                                     </div>
                                                 )}
                                                 {item.nhiaFee > 0 && (
@@ -847,7 +860,7 @@ const Inventory = () => {
 
                             <div className="md:col-span-5">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Pricing Configuration</label>
-                                <div className="grid grid-cols-5 gap-3 bg-gray-50 p-3 rounded border">
+                                <div className="grid grid-cols-3 md:grid-cols-6 gap-3 bg-gray-50 p-3 rounded border">
                                     <div>
                                         <label className="block text-xs font-semibold mb-1 text-blue-600">Standard Fee</label>
                                         <input
@@ -860,12 +873,22 @@ const Inventory = () => {
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-semibold mb-1 text-purple-600">Retainership</label>
+                                        <label className="block text-xs font-semibold mb-1 text-purple-600">Corp Retainership</label>
                                         <input
                                             type="number"
                                             className="w-full border p-2 rounded text-sm border-purple-200 focus:border-purple-500"
                                             value={currentItem.retainershipFee}
                                             onChange={(e) => setCurrentItem({ ...currentItem, retainershipFee: e.target.value })}
+                                            placeholder="0.00"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold mb-1 text-pink-600">Fam Retainership</label>
+                                        <input
+                                            type="number"
+                                            className="w-full border p-2 rounded text-sm border-pink-200 focus:border-pink-500"
+                                            value={currentItem.familyRetainershipFee}
+                                            onChange={(e) => setCurrentItem({ ...currentItem, familyRetainershipFee: e.target.value })}
                                             placeholder="0.00"
                                         />
                                     </div>

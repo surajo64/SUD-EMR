@@ -68,7 +68,7 @@ const addInventoryItem = async (req, res) => {
         return res.status(403).json({ message: "Access denied. Only main pharmacy pharmacists can add drugs." });
     }
 
-    const { name, quantity, price, standardFee, retainershipFee, nhiaFee, kschmaFee, purchasingPrice, expiryDate, supplier, batchNumber, barcode, reorderLevel, route, form, dosage, frequency, drugUnit, pharmacy } = req.body;
+    const { name, quantity, price, standardFee, retainershipFee, familyRetainershipFee, nhiaFee, kschmaFee, purchasingPrice, expiryDate, supplier, batchNumber, barcode, reorderLevel, route, form, dosage, frequency, drugUnit, pharmacy } = req.body;
 
     if (!name || !quantity || (!price && !standardFee) || !expiryDate || !pharmacy) {
         return res.status(400).json({ message: "Please fill all required fields including pharmacy" });
@@ -81,8 +81,10 @@ const addInventoryItem = async (req, res) => {
         }
     }
 
-    const finalStandardFee = standardFee || price;
-    const finalPrice = price || standardFee;
+    // For backward compatibility, keep price and standardFee in sync
+    // Prioritize standardFee if provided, otherwise use price
+    const finalStandardFee = standardFee ? parseFloat(standardFee) : (price ? parseFloat(price) : 0);
+    const finalPrice = finalStandardFee;
 
     const item = await Inventory.create({
         name,
@@ -91,6 +93,7 @@ const addInventoryItem = async (req, res) => {
         price: finalPrice,
         standardFee: finalStandardFee,
         retainershipFee: retainershipFee || 0,
+        familyRetainershipFee: familyRetainershipFee || 0,
         nhiaFee: nhiaFee || 0,
         kschmaFee: kschmaFee || 0,
         purchasingPrice,
@@ -126,10 +129,12 @@ const updateInventoryItem = async (req, res) => {
     // The specific logic to check if they are editing an item in their pharmacy 
     // can be added here if needed, but usually is protected by the pharmacy field in currentItem.
 
-    const { name, quantity, price, standardFee, retainershipFee, nhiaFee, kschmaFee, purchasingPrice, expiryDate, supplier, batchNumber, barcode, reorderLevel, route, form, dosage, frequency, drugUnit, pharmacy } = req.body;
+    const { name, quantity, price, standardFee, retainershipFee, familyRetainershipFee, nhiaFee, kschmaFee, purchasingPrice, expiryDate, supplier, batchNumber, barcode, reorderLevel, route, form, dosage, frequency, drugUnit, pharmacy } = req.body;
 
-    const finalStandardFee = standardFee || price;
-    const finalPrice = price || standardFee;
+    // For backward compatibility, keep price and standardFee in sync
+    // Prioritize standardFee if provided, otherwise use price
+    const finalStandardFee = standardFee ? parseFloat(standardFee) : (price ? parseFloat(price) : 0);
+    const finalPrice = finalStandardFee;
 
     const updatedItem = await Inventory.findByIdAndUpdate(
         req.params.id,
@@ -139,6 +144,7 @@ const updateInventoryItem = async (req, res) => {
             price: finalPrice,
             standardFee: finalStandardFee,
             retainershipFee: retainershipFee || 0,
+            familyRetainershipFee: familyRetainershipFee || 0,
             nhiaFee: nhiaFee || 0,
             kschmaFee: kschmaFee || 0,
             purchasingPrice,
@@ -486,6 +492,7 @@ const importInventoryFromExcel = async (req, res) => {
                     price: standardFee,
                     standardFee,
                     retainershipFee: parseFloat(row['Retainership Fee'] || row['retainershipFee'] || 0),
+                    familyRetainershipFee: parseFloat(row['Family Retainership Fee'] || row['familyRetainershipFee'] || 0),
                     nhiaFee: parseFloat(row['NHIA Fee'] || row['nhiaFee'] || 0),
                     kschmaFee: parseFloat(row['KSCHMA Fee'] || row['kschmaFee'] || 0),
                     purchasingPrice,

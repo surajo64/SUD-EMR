@@ -182,6 +182,15 @@ const deletePatient = async (req, res) => {
             return res.status(404).json({ message: 'Patient not found' });
         }
 
+        // Decrement member count if linked to a family file
+        if (patient.familyFile) {
+            const familyFile = await FamilyFile.findById(patient.familyFile);
+            if (familyFile) {
+                familyFile.memberCount = Math.max(0, familyFile.memberCount - 1);
+                await familyFile.save();
+            }
+        }
+
         await patient.deleteOne();
         res.json({ message: 'Patient deleted successfully' });
     } catch (error) {

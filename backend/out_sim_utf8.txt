@@ -1,0 +1,12 @@
+Connected to DB
+
+--- SIMULATING FOR PRESCRIPTION ---
+Prescription ID: 6a411d4d574acf618e3835a0
+Patient Name: Muhammad Ayuba
+Patient Provider: Family Retainership
+Medicines: [{"name":"Loratadine","dosage":"2 Tablet","frequency":"OD","duration":"2 days","route":"Oral","form":"Tablet","quantity":2,"buyOutside":false,"_id":"6a411d4d574acf618e3835a1"}]
+Target Medicine Name: Loratadine
+Found Drug Charge in DB: {"_id":"6a3427642b0aec5dd36cae68","name":"Loratadine","standardFee":0,"retainershipFee":0,"familyRetainershipFee":0,"basePrice":500}
+Found Inventory Item in DB: {"_id":"69dc006f122d5053d6f9bde0","name":"Loratadine","price":500,"standardFee":500,"retainershipFee":1000,"familyRetainershipFee":800,"quantity":87}
+Calculated Step 1 Fee: 800
+Calculated Final Fee: 800

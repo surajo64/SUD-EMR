@@ -124,7 +124,13 @@ const PharmacyPOS = () => {
                 const earliestActive = drugGroup.batches.find(b => b.quantity > 0) || drugGroup.batches[0];
                 if (earliestActive) {
                     drugGroup._id = earliestActive._id;
-                    drugGroup.price = earliestActive.price;
+                    // Prioritize standardFee to match Inventory.jsx logic
+                    drugGroup.price = earliestActive.standardFee || earliestActive.price || 0;
+                    drugGroup.standardFee = earliestActive.standardFee;
+                    drugGroup.retainershipFee = earliestActive.retainershipFee;
+                    drugGroup.familyRetainershipFee = earliestActive.familyRetainershipFee;
+                    drugGroup.nhiaFee = earliestActive.nhiaFee;
+                    drugGroup.kschmaFee = earliestActive.kschmaFee;
                 }
             });
 
@@ -153,7 +159,7 @@ const PharmacyPOS = () => {
             setCart([...cart, {
                 inventoryId: drug._id,
                 name: drug.name,
-                unitPrice: drug.price || drug.standardFee || 0,
+                unitPrice: drug.standardFee || drug.price || 0,
                 quantity: 1,
                 maxQty: drug.quantity,
                 form: drug.form || '',
@@ -231,7 +237,8 @@ const PharmacyPOS = () => {
                     inventoryId: c.inventoryId,
                     name: c.name,
                     quantity: c.quantity,
-                    unitPrice: c.unitPrice
+                    unitPrice: c.unitPrice,
+                    standardFee: c.unitPrice // Ensure standardFee is passed for reporting
                 })),
                 discount: discountAmt,
                 tax: taxAmt,
@@ -403,14 +410,27 @@ const PharmacyPOS = () => {
                                         >
                                             <div>
                                                 <p className="font-semibold text-gray-800 text-sm">{drug.name}</p>
-                                                <p className="text-xs text-gray-500">
-                                                    {drug.form && `${drug.form} · `}
-                                                    Total Stock: {drug.quantity} {drug.drugUnit || 'units'} {drug.batches.length > 1 && `(${drug.batches.length} batches)`}
+                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                    {drug.form && <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">{drug.form}</span>}
+                                                    {drug.dosage && <span className="text-[10px] bg-blue-50 px-1.5 py-0.5 rounded text-blue-600">{drug.dosage}</span>}
+                                                    {drug.expiryDate && (
+                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${new Date(drug.expiryDate) < new Date() ? 'bg-red-100 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                                                            Exp: {new Date(drug.expiryDate).toLocaleDateString()}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-[11px] text-gray-500 mt-1">
+                                                    Stock: <span className="font-bold text-gray-700">{drug.quantity}</span> {drug.drugUnit || 'units'}
+                                                    {drug.batches.length > 1 && <span className="ml-1 italic">({drug.batches.length} batches)</span>}
                                                 </p>
                                             </div>
                                             <div className="text-right">
-                                                <p className="font-bold text-green-600 text-sm">₦{(drug.price || drug.standardFee || 0).toLocaleString()}</p>
-                                                <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">In Stock</span>
+                                                <p className="font-bold text-green-600 text-base">₦{(drug.standardFee || drug.price || 0).toLocaleString()}</p>
+                                                <div className="flex flex-col items-end gap-0.5 mt-0.5">
+                                                    <span className="text-[9px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">In Stock</span>
+                                                    {drug.retainershipFee > 0 && <span className="text-[9px] text-purple-500 font-medium tracking-tight">Corp: ₦{drug.retainershipFee.toLocaleString()}</span>}
+                                                    {drug.familyRetainershipFee > 0 && <span className="text-[9px] text-pink-500 font-medium tracking-tight">Fam: ₦{drug.familyRetainershipFee.toLocaleString()}</span>}
+                                                </div>
                                             </div>
                                         </div>
                                     ))}

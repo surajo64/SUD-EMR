@@ -1,0 +1,49 @@
+Connected to DB
+
+--- PATIENTS WITH RETAINERSHIP ---
+Patient: Zainab Ibarhim, Provider: Retainership, MRN: PAT-030219-5144
+Patient: Maryam Ibrahim, Provider: Retainership, MRN: PAT-961811-9892
+Patient: Rahama Yusuf Ahmed, Provider: Retainership, MRN: KIRCT-2026-0006
+Patient: Rahinatu Yahaya Ismail, Provider: Retainership, MRN: AHL-2026-0031
+Patient: muhamad sani, Provider: Retainership, MRN: AHL-2026-0037
+Patient: ZAINAB UMAR CHEDI, Provider: Retainership, MRN: AHL-2026-0051
+Patient: ZAINAB UMAR CHEDI, Provider: Retainership, MRN: AHL-2026-0052
+Patient: MUHAMMAD ISMAIL, Provider: Retainership, MRN: AHL-2026-0055
+Patient: HAUWAU YUSUF CHEDI, Provider: Retainership, MRN: AHL-2026-0059
+Patient: YUSUF CHEDI, Provider: Retainership, MRN: AHL-2026-0085
+Patient: Yunusa Yusuf, Provider: Retainership, MRN: AHL-2026-0086
+Patient: Dr dalha wada Chedi, Provider: Retainership, MRN: AHL-2026-0089
+Patient: Abdullahi Umar, Provider: Retainership, MRN: AH20260105
+Patient: Hassana dangana , Provider: Retainership, MRN: AH20260106
+Patient: Muhammad Ayuba, Provider: Family Retainership, MRN: SH20260108
+
+--- DRUG CHARGES IN CHARGES COLLECTION ---
+DrugCharge: Tab. ALBENDAZOLE ( ZOLAT) 200mg, Std: 0, Corp: 0, Fam: 0
+DrugCharge: Tab carvedalol 25mg, Std: 0, Corp: 0, Fam: 0
+DrugCharge: Paracetamol 500mg, Std: 0, Corp: 0, Fam: 0
+DrugCharge: Paracetamol Injection, Std: 0, Corp: 0, Fam: 0
+DrugCharge: Tab Nipidipine, Std: 0, Corp: 0, Fam: 0
+DrugCharge: Loratadine, Std: 0, Corp: 0, Fam: 0
+DrugCharge: Tab Paracetamol (500mg), Std: 0, Corp: 0, Fam: 0
+
+--- LATEST PRESCRIPTIONS ---
+Prescription: ID: 6a411d4d574acf618e3835a0, Patient: Muhammad Ayuba, Provider: Family Retainership, Medicines: Loratadine, Status: pending
+  -> Charge: Loratadine, UnitPrice: 500, Total: 1000, PatPortion: 0, HmoPortion: 1000
+Prescription: ID: 6a3d0692d14986d2e436e397, Patient: Yusuf Idris Umar, Provider: Standard, Medicines: Tab Paracetamol (500mg), Status: dispensed
+  -> Charge: Tab Paracetamol (500mg), UnitPrice: 40, Total: 200, PatPortion: 200, HmoPortion: 0
+Prescription: ID: 6a34273f2b0aec5dd36cad98, Patient: MANSURAT DAUDA, Provider: Standard, Medicines: Loratadine, Status: dispensed
+  -> Charge: undefined, UnitPrice: 500, Total: 2000, PatPortion: 2000, HmoPortion: 0
+Prescription: ID: 6a0dbf0492484c776bf44fa3, Patient: Ibrahim Muazu, Provider: Standard, Medicines: Tab Nipidipine, Status: pending
+  -> Charge: undefined, UnitPrice: 300, Total: 2700, PatPortion: 2700, HmoPortion: 0
+Prescription: ID: 6a0dafca92484c776bf446d4, Patient: Yunusa Yusuf, Provider: Retainership, Medicines: Tab carvedalol 25mg, Status: dispensed
+  -> Charge: undefined, UnitPrice: 3000, Total: 18000, PatPortion: 0, HmoPortion: 18000
+Prescription: ID: 6a0dafca92484c776bf446cf, Patient: Yunusa Yusuf, Provider: Retainership, Medicines: Tab. ALBENDAZOLE ( ZOLAT) 200mg, Status: dispensed
+  -> Charge: undefined, UnitPrice: 1500, Total: 6000, PatPortion: 0, HmoPortion: 6000
+Prescription: ID: 6a03865a1807cbcab88bbfee, Patient: layla bayaro , Provider: Standard, Medicines: Paracetamol 500mg, Status: pending
+  -> No charge generated yet
+Prescription: ID: 6a0252367e4e97676f54f75b, Patient: Yahanasu Sulaiman Bayero, Provider: Standard, Medicines: Paracetamol 500mg, Status: pending
+  -> No charge generated yet
+Prescription: ID: 6a01a2e1bbaa810bb3055e64, Patient: Yahanasu Sulaiman Bayero, Provider: Standard, Medicines: Tab. ALBENDAZOLE ( ZOLAT) 200mg, Status: pending
+  -> No charge generated yet
+Prescription: ID: 6a01a2e0bbaa810bb3055e5f, Patient: Yahanasu Sulaiman Bayero, Provider: Standard, Medicines: Paracetamol Injection, Status: pending
+  -> No charge generated yet

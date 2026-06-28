@@ -206,13 +206,13 @@ const RegisterPatientModal = ({ isOpen, onClose, onSuccess, userToken }) => {
         e.preventDefault();
 
         // Validate HMO field for Retainership, NHIA and KSCHMA
-        if ((formData.provider === 'Retainership' || formData.provider === 'NHIA' || formData.provider === 'KSCHMA') && !formData.hmo) {
+        if ((['Retainership', 'Corporate Retainership', 'Family Retainership', 'NHIA', 'KSCHMA'].includes(formData.provider)) && !formData.hmo) {
             toast.error('HMO is required for Retainership, NHIA and KSCHMA providers');
             return;
         }
 
         // Validate that the selected Retainership HMO has made an initial deposit
-        if (formData.provider === 'Retainership' && formData.hmo) {
+        if ((formData.provider === 'Retainership' || formData.provider === 'Corporate Retainership' || formData.provider === 'Family Retainership') && formData.hmo) {
             const depositInfo = retainershipDepositStatus.find(s => s.name === formData.hmo);
             if (depositInfo && !depositInfo.hasDeposit) {
                 toast.error(`"${formData.hmo}" has not made an initial deposit. Please record a deposit first before assigning patients.`);
@@ -543,14 +543,15 @@ const RegisterPatientModal = ({ isOpen, onClose, onSuccess, userToken }) => {
                                             className="w-full border p-2 rounded"
                                         >
                                             <option value="Standard">Standard</option>
-                                            <option value="Retainership">Retainership</option>
+                                            <option value="Corporate Retainership">Corporate Retainership</option>
+                                            <option value="Family Retainership">Family Retainership</option>
                                             <option value="NHIA">NHIA</option>
                                             <option value="KSCHMA">KSCHMA</option>
                                         </select>
                                     </div>
 
                                     {/* HMO - Shown for Retainership, NHIA and KSCHMA */}
-                                    {(formData.provider === 'Retainership' || formData.provider === 'NHIA' || formData.provider === 'KSCHMA') && (
+                                    {(['Retainership', 'Corporate Retainership', 'Family Retainership', 'NHIA', 'KSCHMA'].includes(formData.provider)) && (
                                         <div>
                                             <label className="block text-sm font-semibold mb-1">
                                                 HMO <span className="text-red-500">*</span>
@@ -560,14 +561,26 @@ const RegisterPatientModal = ({ isOpen, onClose, onSuccess, userToken }) => {
                                                 value={formData.hmo}
                                                 onChange={handleChange}
                                                 className="w-full border p-2 rounded"
-                                                required={formData.provider === 'Retainership' || formData.provider === 'NHIA' || formData.provider === 'KSCHMA'}
+                                                required={['Retainership', 'Corporate Retainership', 'Family Retainership', 'NHIA', 'KSCHMA'].includes(formData.provider)}
                                             >
                                                 <option value="">Select HMO *</option>
                                                 {hmos
                                                     .filter(hmo => {
                                                         // Strict filtering based on category for NHIA and Retainership
-                                                        if (formData.provider === 'NHIA' || formData.provider === 'Retainership') {
-                                                            return hmo.category === formData.provider;
+                                                        if (formData.provider === 'NHIA') {
+                                                            return hmo.category === 'NHIA';
+                                                        }
+                                                        if (formData.provider === 'Corporate Retainership') {
+                                                            // Show only HMOs with retainershipType === 'Corporate' (or blank for legacy data)
+                                                            return hmo.category === 'Retainership' && (hmo.retainershipType === 'Corporate' || hmo.retainershipType === '');
+                                                        }
+                                                        if (formData.provider === 'Family Retainership') {
+                                                            // Show only HMOs with retainershipType === 'Family'
+                                                            return hmo.category === 'Retainership' && hmo.retainershipType === 'Family';
+                                                        }
+                                                        if (formData.provider === 'Retainership') {
+                                                            // Legacy: show all retainership HMOs
+                                                            return hmo.category === 'Retainership';
                                                         }
                                                         // For KSCHMA, show only KSCHMA HMO
                                                         if (formData.provider === 'KSCHMA') {
@@ -577,7 +590,7 @@ const RegisterPatientModal = ({ isOpen, onClose, onSuccess, userToken }) => {
                                                     })
                                                     .map(hmo => {
                                                         // For Retainership, check if deposit has been made
-                                                        const depositInfo = formData.provider === 'Retainership'
+                                                        const depositInfo = (formData.provider === 'Retainership' || formData.provider === 'Corporate Retainership' || formData.provider === 'Family Retainership')
                                                             ? retainershipDepositStatus.find(s => s.name === hmo.name)
                                                             : null;
                                                         const noDeposit = depositInfo && !depositInfo.hasDeposit;

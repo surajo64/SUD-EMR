@@ -20,6 +20,7 @@ const NursingServiceManagement = () => {
         basePrice: '',
         standardFee: '',
         retainershipFee: '',
+        familyRetainershipFee: '',
         nhiaFee: '',
         kschmaFee: '',
         description: '',
@@ -69,6 +70,7 @@ const NursingServiceManagement = () => {
                 basePrice: parseFloat(formData.standardFee) || 0, // Set basePrice to standardFee for schema compatibility
                 standardFee: parseFloat(formData.standardFee) || 0,
                 retainershipFee: parseFloat(formData.retainershipFee) || 0,
+                familyRetainershipFee: parseFloat(formData.familyRetainershipFee) || 0,
                 nhiaFee: parseFloat(formData.nhiaFee) || 0,
                 kschmaFee: parseFloat(formData.kschmaFee) || 0,
                 department: 'Nursing',
@@ -105,6 +107,7 @@ const NursingServiceManagement = () => {
             basePrice: service.basePrice.toString(),
             standardFee: (service.standardFee || 0).toString(),
             retainershipFee: (service.retainershipFee || 0).toString(),
+            familyRetainershipFee: (service.familyRetainershipFee || 0).toString(),
             nhiaFee: (service.nhiaFee || 0).toString(),
             kschmaFee: (service.kschmaFee || 0).toString(),
             description: service.description || '',
@@ -153,6 +156,7 @@ const NursingServiceManagement = () => {
             basePrice: '',
             standardFee: '',
             retainershipFee: '',
+            familyRetainershipFee: '',
             nhiaFee: '',
             kschmaFee: '',
             description: '',
@@ -169,6 +173,7 @@ const NursingServiceManagement = () => {
             'Description': 'Example description',
             'Standard Fee': 2000,
             'Retainership Fee': 1500,
+            'Family Retainership Fee': 1200,
             'NHIA Fee': 1000,
             'KSCHMA Fee': 800
         }];
@@ -186,6 +191,7 @@ const NursingServiceManagement = () => {
             'Description': s.description || '',
             'Standard Fee': s.standardFee || 0,
             'Retainership Fee': s.retainershipFee || 0,
+            'Family Retainership Fee': s.familyRetainershipFee || 0,
             'NHIA Fee': s.nhiaFee || 0,
             'KSCHMA Fee': s.kschmaFee || 0,
             'Status': s.active ? 'Active' : 'Inactive'
@@ -284,7 +290,7 @@ const NursingServiceManagement = () => {
 
                         <div className="mb-4">
                             <label className="block text-gray-700 mb-2 font-semibold">Pricing Configuration</label>
-                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 bg-gray-50 p-4 rounded border">
+                            <div className="grid grid-cols-3 md:grid-cols-6 gap-4 bg-gray-50 p-4 rounded border">
                                 <div>
                                     <label className="block text-xs font-semibold mb-1 text-blue-600">Standard Fee <span className="text-red-500">*</span></label>
                                     <input
@@ -300,13 +306,26 @@ const NursingServiceManagement = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-semibold mb-1 text-purple-600">Retainership</label>
+                                    <label className="block text-xs font-semibold mb-1 text-purple-600">Corp Retainership</label>
                                     <input
                                         type="number"
                                         name="retainershipFee"
                                         value={formData.retainershipFee}
                                         onChange={handleInputChange}
                                         className="w-full border p-2 rounded text-sm border-purple-200 focus:border-purple-500"
+                                        placeholder="0.00"
+                                        step="0.01"
+                                        min="0"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold mb-1 text-pink-600">Fam Retainership</label>
+                                    <input
+                                        type="number"
+                                        name="familyRetainershipFee"
+                                        value={formData.familyRetainershipFee}
+                                        onChange={handleInputChange}
+                                        className="w-full border p-2 rounded text-sm border-pink-200 focus:border-pink-500"
                                         placeholder="0.00"
                                         step="0.01"
                                         min="0"
@@ -423,7 +442,7 @@ const NursingServiceManagement = () => {
                                                     <span className="text-gray-500">Standard:</span>
                                                     <span className="font-semibold text-gray-800">₦{(service.standardFee || 0).toLocaleString()}</span>
                                                 </div>
-                                                {(service.standardFee > 0 || service.retainershipFee > 0 || service.nhiaFee > 0 || service.kschmaFee > 0) && (
+                                                {(service.standardFee > 0 || service.retainershipFee > 0 || service.familyRetainershipFee > 0 || service.nhiaFee > 0 || service.kschmaFee > 0) && (
                                                     <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
                                                         {service.standardFee > 0 && (
                                                             <div className="flex justify-between gap-1">
@@ -433,8 +452,14 @@ const NursingServiceManagement = () => {
                                                         )}
                                                         {service.retainershipFee > 0 && (
                                                             <div className="flex justify-between gap-1">
-                                                                <span className="text-purple-600">Ret:</span>
+                                                                <span className="text-purple-600">Corp:</span>
                                                                 <span>₦{service.retainershipFee.toLocaleString()}</span>
+                                                            </div>
+                                                        )}
+                                                        {service.familyRetainershipFee > 0 && (
+                                                            <div className="flex justify-between gap-1">
+                                                                <span className="text-pink-600">Fam:</span>
+                                                                <span>₦{service.familyRetainershipFee.toLocaleString()}</span>
                                                             </div>
                                                         )}
                                                         {service.nhiaFee > 0 && (
