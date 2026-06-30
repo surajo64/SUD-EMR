@@ -99,7 +99,7 @@ const getPrescriptionsByVisit = async (req, res) => {
 // @access  Private (Pharmacist)
 const generatePrescriptionCharge = async (req, res) => {
     try {
-        const { quantity } = req.body;
+        const { quantity, unitPrice } = req.body;
         const prescription = await Prescription.findById(req.params.id)
             .populate('patient');
 
@@ -188,27 +188,43 @@ const generatePrescriptionCharge = async (req, res) => {
         let fee = 0;
         let isCovered = true;
 
-        if (patient.provider === 'Retainership' || patient.provider === 'Corporate Retainership') {
-            fee = drugCharge.retainershipFee || 0;
-            // Fallback to inventory if charge has no retainershipFee set
-            if (!fee && inventoryItem) fee = inventoryItem.retainershipFee || 0;
-        } else if (patient.provider === 'Family Retainership') {
-            fee = drugCharge.familyRetainershipFee || 0;
-            // Fallback to inventory if charge has no familyRetainershipFee set
-            if (!fee && inventoryItem) fee = inventoryItem.familyRetainershipFee || 0;
-        } else if (patient.provider === 'NHIA') {
-            fee = drugCharge.nhiaFee || 0;
-            if (!fee && inventoryItem) fee = inventoryItem.nhiaFee || 0;
-        } else if (patient.provider === 'KSCHMA') {
-            fee = drugCharge.kschmaFee || 0;
-            if (!fee && inventoryItem) fee = inventoryItem.kschmaFee || 0;
+        if (unitPrice !== undefined && unitPrice !== null && !isNaN(parseFloat(unitPrice))) {
+            fee = parseFloat(unitPrice);
         } else {
-            fee = drugCharge.standardFee || drugCharge.basePrice || 0;
-        }
+            // Prioritize Inventory price for drugs if available
+            if (inventoryItem) {
+                if (patient.provider === 'Retainership' || patient.provider === 'Corporate Retainership') {
+                    fee = inventoryItem.retainershipFee || 0;
+                } else if (patient.provider === 'Family Retainership') {
+                    fee = inventoryItem.familyRetainershipFee || 0;
+                } else if (patient.provider === 'NHIA') {
+                    fee = inventoryItem.nhiaFee || 0;
+                } else if (patient.provider === 'KSCHMA') {
+                    fee = inventoryItem.kschmaFee || 0;
+                } else {
+                    fee = inventoryItem.standardFee || inventoryItem.price || 0;
+                }
+            }
 
-        // Final fallback: if specific tier fee is still 0, use standard fee
-        if (fee === 0) {
-            fee = drugCharge.standardFee || drugCharge.basePrice || (inventoryItem ? inventoryItem.standardFee || inventoryItem.price : 0);
+            // Fallback to drugCharge if fee is still 0
+            if (fee === 0 && drugCharge) {
+                if (patient.provider === 'Retainership' || patient.provider === 'Corporate Retainership') {
+                    fee = drugCharge.retainershipFee || 0;
+                } else if (patient.provider === 'Family Retainership') {
+                    fee = drugCharge.familyRetainershipFee || 0;
+                } else if (patient.provider === 'NHIA') {
+                    fee = drugCharge.nhiaFee || 0;
+                } else if (patient.provider === 'KSCHMA') {
+                    fee = drugCharge.kschmaFee || 0;
+                } else {
+                    fee = drugCharge.standardFee || drugCharge.basePrice || 0;
+                }
+            }
+
+            // Final fallback: if specific tier fee is still 0, use standard fee
+            if (fee === 0) {
+                fee = drugCharge ? (drugCharge.standardFee || drugCharge.basePrice) : (inventoryItem ? (inventoryItem.standardFee || inventoryItem.price) : 0);
+            }
         }
 
         const finalQuantity = quantity || medicine.quantity || 1;

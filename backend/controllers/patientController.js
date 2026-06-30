@@ -19,7 +19,9 @@ const registerPatient = async (req, res) => {
                 return res.status(404).json({ message: 'Family File not found' });
             }
 
-            if (linkedFamilyFile.type === 'Family of 5' && linkedFamilyFile.memberCount >= 5) {
+            // Count actual patients dynamically instead of relying on file.memberCount
+            const actualCount = await Patient.countDocuments({ familyFile: familyFileId });
+            if (linkedFamilyFile.type === 'Family of 5' && actualCount >= 5) {
                 return res.status(400).json({ message: 'This Family File has reached its limit of 5 members' });
             }
         }
@@ -50,9 +52,10 @@ const registerPatient = async (req, res) => {
 
         const patient = await Patient.create(patientData);
 
-        // Increment member count if linked to a family file
+        // Update member count dynamically if linked to a family file
         if (linkedFamilyFile) {
-            linkedFamilyFile.memberCount += 1;
+            const actualCount = await Patient.countDocuments({ familyFile: linkedFamilyFile._id });
+            linkedFamilyFile.memberCount = actualCount;
             await linkedFamilyFile.save();
         }
 
@@ -127,15 +130,6 @@ const updatePatient = async (req, res) => {
         const newFamilyFileId = req.body.isFamilyMember ? req.body.familyFileId : null;
 
         if (oldFamilyFileId !== newFamilyFileId) {
-            // Unlink from old family file
-            if (oldFamilyFileId) {
-                const oldFile = await FamilyFile.findById(oldFamilyFileId);
-                if (oldFile) {
-                    oldFile.memberCount = Math.max(0, oldFile.memberCount - 1);
-                    await oldFile.save();
-                }
-            }
-
             // Link to new family file
             if (newFamilyFileId) {
                 const newFile = await FamilyFile.findById(newFamilyFileId);
@@ -143,12 +137,12 @@ const updatePatient = async (req, res) => {
                     return res.status(404).json({ message: 'New Family File not found' });
                 }
 
-                if (newFile.type === 'Family of 5' && newFile.memberCount >= 5) {
+                // Check actual count dynamically
+                const actualCount = await Patient.countDocuments({ familyFile: newFile._id });
+                if (newFile.type === 'Family of 5' && actualCount >= 5) {
                     return res.status(400).json({ message: 'This Family File has reached its limit of 5 members' });
                 }
 
-                newFile.memberCount += 1;
-                await newFile.save();
                 patient.familyFile = newFamilyFileId;
                 patient.isFamilyMember = true;
             } else {
@@ -165,6 +159,23 @@ const updatePatient = async (req, res) => {
         }
 
         const updatedPatient = await patient.save();
+
+        // Update counts dynamically to ensure they are correct
+        if (oldFamilyFileId && oldFamilyFileId !== newFamilyFileId) {
+            const oldFile = await FamilyFile.findById(oldFamilyFileId);
+            if (oldFile) {
+                oldFile.memberCount = await Patient.countDocuments({ familyFile: oldFile._id });
+                await oldFile.save();
+            }
+        }
+        if (newFamilyFileId && oldFamilyFileId !== newFamilyFileId) {
+            const newFile = await FamilyFile.findById(newFamilyFileId);
+            if (newFile) {
+                newFile.memberCount = await Patient.countDocuments({ familyFile: newFile._id });
+                await newFile.save();
+            }
+        }
+
         res.json(updatedPatient);
     } else {
         res.status(404).json({ message: 'Patient not found' });
@@ -182,16 +193,19 @@ const deletePatient = async (req, res) => {
             return res.status(404).json({ message: 'Patient not found' });
         }
 
-        // Decrement member count if linked to a family file
-        if (patient.familyFile) {
-            const familyFile = await FamilyFile.findById(patient.familyFile);
+        const familyFileId = patient.familyFile;
+
+        await patient.deleteOne();
+
+        // Recount member count dynamically if linked to a family file
+        if (familyFileId) {
+            const familyFile = await FamilyFile.findById(familyFileId);
             if (familyFile) {
-                familyFile.memberCount = Math.max(0, familyFile.memberCount - 1);
+                familyFile.memberCount = await Patient.countDocuments({ familyFile: familyFile._id });
                 await familyFile.save();
             }
         }
 
-        await patient.deleteOne();
         res.json({ message: 'Patient deleted successfully' });
     } catch (error) {
         res.status(500).json({ message: error.message });

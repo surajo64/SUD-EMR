@@ -196,7 +196,7 @@ const markChargePaid = async (req, res) => {
 // @access  Private
 const updateEncounterCharge = async (req, res) => {
     try {
-        const { quantity, notes } = req.body;
+        const { quantity, unitPrice, notes } = req.body;
         const charge = await EncounterCharge.findById(req.params.id).populate('charge');
 
         if (!charge) {
@@ -207,15 +207,66 @@ const updateEncounterCharge = async (req, res) => {
             return res.status(400).json({ message: 'Cannot update a processed charge' });
         }
 
-        if (quantity) {
+        let updatedQty = charge.quantity;
+        let updatedPrice = charge.unitPrice !== undefined ? charge.unitPrice : (charge.charge ? charge.charge.basePrice : 0);
+
+        if (quantity !== undefined) {
+            updatedQty = quantity;
             charge.quantity = quantity;
-            charge.totalAmount = charge.charge.basePrice * quantity;
         }
+
+        if (unitPrice !== undefined) {
+            updatedPrice = unitPrice;
+            charge.unitPrice = unitPrice;
+        }
+
+        if (quantity !== undefined || unitPrice !== undefined) {
+            const totalAmount = updatedPrice * updatedQty;
+            charge.totalAmount = totalAmount;
+
+            // Recalculate portions based on patient provider
+            const patient = await Patient.findById(charge.patient);
+            if (patient) {
+                let patientPortion = totalAmount;
+                let hmoPortion = 0;
+
+                if (patient.provider === 'Retainership' || patient.provider === 'Corporate Retainership' || patient.provider === 'Family Retainership') {
+                    patientPortion = 0;
+                    hmoPortion = totalAmount;
+                } else if (patient.provider === 'NHIA' || patient.provider === 'KSCHMA') {
+                    if (charge.itemType === 'drugs' || (charge.charge && charge.charge.type === 'drugs')) {
+                        patientPortion = totalAmount * 0.1;
+                        hmoPortion = totalAmount * 0.9;
+                    } else {
+                        patientPortion = 0;
+                        hmoPortion = totalAmount;
+                    }
+                }
+                charge.patientPortion = patientPortion;
+                charge.hmoPortion = hmoPortion;
+            }
+        }
+
         if (notes !== undefined) {
             charge.notes = notes;
         }
 
         const updatedCharge = await charge.save();
+
+        // Sync with related Prescription if one exists
+        if (quantity !== undefined) {
+            try {
+                const Prescription = require('../models/prescriptionModel');
+                const prescription = await Prescription.findOne({ charge: charge._id });
+                if (prescription && prescription.medicines && prescription.medicines.length > 0) {
+                    prescription.medicines[0].quantity = updatedQty;
+                    await prescription.save();
+                }
+            } catch (syncError) {
+                console.error('Error syncing prescription quantity:', syncError);
+            }
+        }
+
         const populatedCharge = await EncounterCharge.findById(updatedCharge._id)
             .populate('charge')
             .populate('patient', 'name mrn')

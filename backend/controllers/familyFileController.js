@@ -60,7 +60,19 @@ const getFamilyFiles = async (req, res) => {
         const familyFiles = await FamilyFile.find(filter)
             .populate('familyCharge')
             .sort({ createdAt: -1 });
-        res.json(familyFiles);
+
+        // Update counts dynamically to avoid drifts
+        const updatedFiles = [];
+        for (const file of familyFiles) {
+            const actualCount = await Patient.countDocuments({ familyFile: file._id });
+            if (file.memberCount !== actualCount) {
+                file.memberCount = actualCount;
+                await file.save();
+            }
+            updatedFiles.push(file);
+        }
+
+        res.json(updatedFiles);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -75,6 +87,14 @@ const getFamilyFileById = async (req, res) => {
         if (!familyFile) {
             return res.status(404).json({ message: 'Family File not found' });
         }
+
+        // Update count dynamically to avoid drifts
+        const actualCount = await Patient.countDocuments({ familyFile: familyFile._id });
+        if (familyFile.memberCount !== actualCount) {
+            familyFile.memberCount = actualCount;
+            await familyFile.save();
+        }
+
         res.json(familyFile);
     } catch (error) {
         res.status(500).json({ message: error.message });

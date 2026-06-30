@@ -25,6 +25,8 @@ const PharmacyPrescriptions = () => {
     const location = useLocation();
 
     const [userStats, setUserStats] = useState({ prescriptionsDispensed: 0, revenueToday: 0 });
+    const [editQuantity, setEditQuantity] = useState(1);
+    const [editUnitPrice, setEditUnitPrice] = useState(0);
 
     useEffect(() => {
         if (user && user.token) {
@@ -69,6 +71,16 @@ const PharmacyPrescriptions = () => {
         }
     }, [searchTerm, prescriptions.length]);
 
+    // Synchronize edit price and quantity when prescription changes
+    useEffect(() => {
+        if (selectedPrescription && selectedPrescription.charge) {
+            setEditQuantity(selectedPrescription.charge.quantity || 1);
+            const medName = selectedPrescription.medicines?.[0]?.name;
+            const inventoryPrice = medName ? getMedicineFee(medName, selectedPrescription.patient?.provider) : 0;
+            setEditUnitPrice(inventoryPrice || selectedPrescription.charge.unitPrice || 0);
+        }
+    }, [selectedPrescription, inventoryAvailability]);
+
     const fetchPrescriptions = async () => {
         if (!user) return;
         try {
@@ -78,6 +90,7 @@ const PharmacyPrescriptions = () => {
             // Sort by creation date (newest first)
             data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             setPrescriptions(data);
+            return data;
         } catch (error) {
             console.error(error);
             toast.error('Error fetching prescriptions');
@@ -323,6 +336,51 @@ const PharmacyPrescriptions = () => {
         }
     };
 
+    const handleUpdateCharge = async () => {
+        if (!selectedPrescription || !selectedPrescription.charge) return;
+        
+        const qty = parseInt(editQuantity);
+        const price = parseFloat(editUnitPrice);
+        
+        if (isNaN(qty) || qty < 1) {
+            toast.error("Quantity must be at least 1");
+            return;
+        }
+        
+        if (isNaN(price) || price < 0) {
+            toast.error("Unit price must be a valid non-negative number");
+            return;
+        }
+
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            await axios.put(
+                `${backendUrl}/api/encounter-charges/${selectedPrescription.charge._id}`,
+                {
+                    quantity: qty,
+                    unitPrice: price
+                },
+                config
+            );
+            toast.success('Charge updated successfully!');
+
+            // Refresh prescriptions and keep selected prescription updated
+            const refreshed = await fetchPrescriptions();
+            if (refreshed) {
+                const updatedPres = refreshed.find(p => p._id === selectedPrescription._id);
+                if (updatedPres) {
+                    setSelectedPrescription(updatedPres);
+                }
+            }
+        } catch (error) {
+            console.error(error);
+            toast.error(error.response?.data?.message || 'Error updating charge');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleDispenseWithInventory = async () => {
         if (!selectedPrescription) return;
 
@@ -524,7 +582,8 @@ const PharmacyPrescriptions = () => {
 
     // Calculate grand totals for preview
     const grandTotals = dispensingMedicines.reduce((acc, med) => {
-        const unitPrice = getMedicineFee(med.name, selectedPrescription?.patient?.provider);
+        const defaultUnitPrice = getMedicineFee(med.name, selectedPrescription?.patient?.provider);
+        const unitPrice = med.customUnitPrice !== undefined ? med.customUnitPrice : defaultUnitPrice;
         const total = unitPrice * (med.quantityDispensed || 0);
         const { patientPortion, hmoPortion } = calculatePortions(total, selectedPrescription?.patient?.provider);
 
@@ -773,7 +832,8 @@ const PharmacyPrescriptions = () => {
                                     <div className="bg-white p-4 rounded border mb-4">
                                         <h4 className="font-bold text-lg mb-3">Medication Details</h4>
                                         {dispensingMedicines.map((med, index) => {
-                                            const unitPrice = getMedicineFee(med.name, selectedPrescription?.patient?.provider);
+                                            const defaultPrice = getMedicineFee(med.name, selectedPrescription?.patient?.provider);
+                                            const unitPrice = med.customUnitPrice !== undefined ? med.customUnitPrice : defaultPrice;
                                             const totalCost = unitPrice * (med.quantityDispensed || 0);
                                             const { patientPortion } = calculatePortions(totalCost, selectedPrescription?.patient?.provider);
 
@@ -789,7 +849,7 @@ const PharmacyPrescriptions = () => {
                                                             )}
                                                         </div>
                                                     </div>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
                                                         <div>
                                                             <label className="block text-sm font-semibold text-gray-700 mb-1">
                                                                 Quantity to Charge
@@ -799,11 +859,29 @@ const PharmacyPrescriptions = () => {
                                                                 min="1"
                                                                 className="border p-2 rounded w-full"
                                                                 value={med.quantityDispensed}
-                                                                onChange={(e) => updateMedicine(index, 'quantityDispensed', parseInt(e.target.value) || 0)}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    updateMedicine(index, 'quantityDispensed', val === "" ? "" : parseInt(val));
+                                                                }}
                                                             />
                                                             <p className="text-xs text-gray-600 mt-1">
                                                                 Available Stock: {inventoryAvailability[med.name]?.available || 0}
                                                             </p>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                                                Unit Price (₦)
+                                                            </label>
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                className="border p-2 rounded w-full"
+                                                                value={med.customUnitPrice !== undefined ? med.customUnitPrice : unitPrice}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    updateMedicine(index, 'customUnitPrice', val === "" ? "" : parseFloat(val));
+                                                                }}
+                                                            />
                                                         </div>
                                                         <div>
                                                             <label className="block text-sm font-semibold text-gray-700 mb-1">
@@ -859,11 +937,26 @@ const PharmacyPrescriptions = () => {
                                                 setLoading(true);
                                                 const config = { headers: { Authorization: `Bearer ${user.token}` } };
                                                 // Assume single drug per prescription for now as per current structure
-                                                const qty = dispensingMedicines[0]?.quantityDispensed || 1;
+                                                const rawQty = dispensingMedicines[0]?.quantityDispensed;
+                                                const qty = parseInt(rawQty);
+                                                const rawPrice = dispensingMedicines[0]?.customUnitPrice;
+                                                const customPrice = rawPrice !== undefined && rawPrice !== "" ? parseFloat(rawPrice) : undefined;
+
+                                                if (isNaN(qty) || qty < 1) {
+                                                    toast.error("Quantity must be at least 1");
+                                                    setLoading(false);
+                                                    return;
+                                                }
+                                                
+                                                if (customPrice !== undefined && (isNaN(customPrice) || customPrice < 0)) {
+                                                    toast.error("Unit price must be a valid non-negative number");
+                                                    setLoading(false);
+                                                    return;
+                                                }
 
                                                 await axios.put(
                                                     `${backendUrl}/api/prescriptions/${selectedPrescription._id}/generate-charge`,
-                                                    { quantity: qty },
+                                                    { quantity: qty, unitPrice: customPrice },
                                                     config
                                                 );
                                                 toast.success('Charge generated successfully!');
@@ -885,20 +978,113 @@ const PharmacyPrescriptions = () => {
                                     </button>
                                 </div>
                             ) : selectedPrescription.charge.status !== 'paid' ? (
-                                <div className="border-2 border-red-300 bg-red-50 p-6 rounded mb-6">
+                                <div className="border-2 border-red-300 bg-red-50 p-6 rounded mb-6 text-gray-800">
                                     <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-red-800">
                                         <FaCheckCircle /> Payment Required
                                     </h3>
                                     <p className="text-sm text-gray-700 mb-4">
                                         This prescription has not been paid for yet. Please ask the patient to pay at the cashier before dispensing.
                                     </p>
-                                    <div className="flex gap-2 items-center">
+                                    <div className="flex gap-2 items-center mb-6">
                                         <span className="font-bold text-red-600">Status: Unpaid</span>
                                         <button
                                             onClick={fetchPrescriptions}
                                             className="text-blue-600 hover:underline text-sm ml-4"
                                         >
                                             Refresh Status
+                                        </button>
+                                    </div>
+
+                                    <div className="border-t border-red-200 pt-4 mt-4">
+                                        <h4 className="font-bold text-lg mb-3 flex items-center gap-2 text-gray-800">
+                                            <FaPrescriptionBottleAlt className="text-blue-600" /> Edit Drug Charge Details
+                                        </h4>
+                                        <p className="text-xs text-gray-600 mb-4">
+                                            You can modify the charge quantity or unit price before the patient makes the payment. Portion totals will update automatically.
+                                        </p>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                            <div>
+                                                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                                    Quantity to Charge
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    className="border p-2 rounded w-full bg-white text-gray-800"
+                                                    value={editQuantity}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setEditQuantity(val === "" ? "" : parseInt(val));
+                                                    }}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-semibold text-gray-700 mb-1 flex justify-between items-center">
+                                                    <span>Unit Price (₦)</span>
+                                                    {(() => {
+                                                        const medName = selectedPrescription.medicines?.[0]?.name;
+                                                        const inventoryPrice = medName ? getMedicineFee(medName, selectedPrescription.patient?.provider) : 0;
+                                                        return inventoryPrice > 0 ? (
+                                                            <span className="text-xs font-normal text-gray-500">
+                                                                {editUnitPrice !== inventoryPrice ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setEditUnitPrice(inventoryPrice)}
+                                                                        className="text-blue-600 hover:underline font-medium"
+                                                                    >
+                                                                        Use Inventory: ₦{inventoryPrice}
+                                                                    </button>
+                                                                ) : (
+                                                                    <span className="text-green-600 font-medium">✓ Matching Inventory (₦{inventoryPrice})</span>
+                                                                )}
+                                                            </span>
+                                                        ) : null;
+                                                    })()}
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    className="border p-2 rounded w-full bg-white text-gray-800"
+                                                    value={editUnitPrice}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setEditUnitPrice(val === "" ? "" : parseFloat(val));
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Dynamic Price Preview */}
+                                        {(() => {
+                                            const total = (editQuantity || 0) * (editUnitPrice || 0);
+                                            const { patientPortion, hmoPortion } = calculatePortions(total, selectedPrescription?.patient?.provider);
+                                            return (
+                                                <div className="bg-white p-4 rounded border text-sm space-y-2 mb-4">
+                                                    <div className="flex justify-between">
+                                                        <span className="text-gray-600 font-medium">New Total Cost:</span>
+                                                        <span className="font-bold text-gray-800">₦{total.toLocaleString()}</span>
+                                                    </div>
+                                                    {selectedPrescription?.patient?.provider !== 'Standard' && (
+                                                        <>
+                                                            <div className="flex justify-between text-xs">
+                                                                <span className="text-gray-500 font-medium">HMO Portion:</span>
+                                                                <span className="font-semibold text-blue-600">₦{hmoPortion.toLocaleString()}</span>
+                                                            </div>
+                                                            <div className="flex justify-between border-t pt-2">
+                                                                <span className="text-gray-700 font-bold">New Patient Portion:</span>
+                                                                <span className="font-bold text-green-600 text-lg">₦{patientPortion.toLocaleString()}</span>
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+
+                                        <button
+                                            onClick={handleUpdateCharge}
+                                            className="w-full bg-blue-600 text-white px-4 py-2.5 rounded hover:bg-blue-700 font-bold text-sm flex items-center justify-center gap-2"
+                                        >
+                                            <FaSave /> Save Changes to Charge
                                         </button>
                                     </div>
                                 </div>

@@ -3,7 +3,7 @@ import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import { AppContext } from '../context/AppContext';
 import Layout from '../components/Layout';
-import { FaDollarSign, FaReceipt, FaPrint, FaSearch, FaCheckCircle, FaTrashAlt, FaUserFriends, FaHospital, FaHistory, FaClock, FaChartBar } from 'react-icons/fa';
+import { FaDollarSign, FaReceipt, FaPrint, FaSearch, FaCheckCircle, FaTrashAlt, FaUserFriends, FaHospital, FaHistory, FaClock, FaChartBar, FaSync } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import LoadingOverlay from '../components/loadingOverlay';
 import { formatAge } from '../utils/patientUtils';
@@ -661,7 +661,15 @@ const CashierDashboard = () => {
 
                             {encounterCharges.filter(c => c.status === 'pending').length > 0 && (
                                 <div className="bg-gray-50 p-4 rounded">
-                                    <p className="font-semibold mb-2">Pending Charges:</p>
+                                    <div className="flex justify-between items-center mb-3">
+                                        <p className="font-semibold text-gray-800">Pending Charges:</p>
+                                        <button
+                                            onClick={() => handleSelectEncounter(selectedEncounter)}
+                                            className="text-blue-600 hover:text-blue-800 text-xs font-semibold flex items-center gap-1.5 bg-white border px-3 py-1.5 rounded shadow-sm hover:shadow transition-all"
+                                        >
+                                            <FaSync className={loading ? 'animate-spin' : ''} /> Refresh Charges
+                                        </button>
+                                    </div>
                                     <div className="space-y-2 mb-4">
                                         {encounterCharges.filter(c => c.status === 'pending').map(charge => (
                                             <div
