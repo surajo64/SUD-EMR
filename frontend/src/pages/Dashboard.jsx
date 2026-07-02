@@ -5,7 +5,7 @@ import { AppContext } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import AdminDashboard from './AdminDashboard';
-import { FaUserMd, FaPrescription, FaVials, FaCreditCard, FaUserNurse, FaCalendarDay, FaUserCheck, FaNotesMedical, FaClock, FaCalendarAlt, FaFlask, FaMicroscope, FaHistory, FaBriefcaseMedical, FaChartBar, FaFileInvoiceDollar, FaReceipt, FaCheckCircle } from 'react-icons/fa';
+import { FaUserMd, FaPrescription, FaVials, FaCreditCard, FaUserNurse, FaCalendarDay, FaUserCheck, FaNotesMedical, FaClock, FaCalendarAlt, FaFlask, FaMicroscope, FaHistory, FaBriefcaseMedical, FaChartBar, FaFileInvoiceDollar, FaReceipt, FaCheckCircle, FaXRay } from 'react-icons/fa';
 import { formatCompactNumber, formatCurrency } from '../utils/formatters';
 
 const Dashboard = () => {
