@@ -29,6 +29,15 @@ const FrontDeskDashboard = () => {
     const [reasonForVisit, setReasonForVisit] = useState('');
     const [isANC, setIsANC] = useState(false);
 
+    const [specialityClinics, setSpecialityClinics] = useState([]);
+    const [doctors, setDoctors] = useState([]);
+
+    const [waiveConsultationFee, setWaiveConsultationFee] = useState(false);
+    const [needSpeciality, setNeedSpeciality] = useState(false);
+    const [selectedSpecialityClinic, setSelectedSpecialityClinic] = useState('');
+    const [needSpecificDoctor, setNeedSpecificDoctor] = useState(false);
+    const [selectedSpecificDoctor, setSelectedSpecificDoctor] = useState('');
+
     const [selectedWard, setSelectedWard] = useState('');
     const [selectedBed, setSelectedBed] = useState('');
     const [wards, setWards] = useState([]);
@@ -43,6 +52,7 @@ const FrontDeskDashboard = () => {
     const [addChargesPatient, setAddChargesPatient] = useState(null);
     const [addChargesEncounterId, setAddChargesEncounterId] = useState(null);
     const [selectedAdditionalCharges, setSelectedAdditionalCharges] = useState([]);
+    const [addChargesSearchQuery, setAddChargesSearchQuery] = useState('');
 
     // Change Encounter Type State
     const [showChangeEncounterModal, setShowChangeEncounterModal] = useState(false);
@@ -88,6 +98,8 @@ const FrontDeskDashboard = () => {
         fetchCharges();
         fetchClinics();
         fetchWards();
+        fetchSpecialityClinics();
+        fetchDoctors();
     }, []);
 
     const calculateAge = (dob) => {
@@ -219,6 +231,26 @@ const FrontDeskDashboard = () => {
         }
     };
 
+    const fetchSpecialityClinics = async () => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get(`${backendUrl}/api/speciality-clinics?active=true`, config);
+            setSpecialityClinics(data);
+        } catch (error) {
+            console.error('Error fetching speciality clinics:', error);
+        }
+    };
+
+    const fetchDoctors = async () => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get(`${backendUrl}/api/users/doctors`, config);
+            setDoctors(data);
+        } catch (error) {
+            console.error('Error fetching doctors:', error);
+        }
+    };
+
     const fetchPatientEncounters = async (patientId) => {
         if (!patientId) return [];
         try {
@@ -319,6 +351,11 @@ const FrontDeskDashboard = () => {
         setSelectedWard('');
         setSelectedBed('');
         setIsANC(false);
+        setWaiveConsultationFee(false);
+        setNeedSpeciality(false);
+        setSelectedSpecialityClinic('');
+        setNeedSpecificDoctor(false);
+        setSelectedSpecificDoctor('');
     };
 
     const handleChargeToggle = (chargeId) => {
@@ -337,7 +374,7 @@ const FrontDeskDashboard = () => {
             return;
         }
 
-        if (!isANC && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && selectedCharges.length === 0) {
+        if (!isANC && !waiveConsultationFee && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && selectedCharges.length === 0) {
             toast.error('Please select at least one charge, or check the ANC checkbox to skip charges');
             return;
         }
@@ -358,7 +395,12 @@ const FrontDeskDashboard = () => {
                 encounterStatus: 'registered',
                 ward: encounterType === 'Inpatient' ? selectedWard : undefined,
                 bed: encounterType === 'Inpatient' ? selectedBed : undefined,
-                isANC: isANC
+                isANC: isANC,
+                waiveConsultationFee,
+                needSpeciality,
+                specialityClinic: needSpeciality ? (selectedSpecialityClinic || undefined) : undefined,
+                needSpecificDoctor: needSpeciality && needSpecificDoctor,
+                specificDoctor: (needSpeciality && needSpecificDoctor) ? (selectedSpecificDoctor || undefined) : undefined
             };
             const visitResponse = await axios.post(`${backendUrl}/api/visits`, visitData, config);
 
@@ -374,12 +416,15 @@ const FrontDeskDashboard = () => {
                 await axios.post(`${backendUrl}/api/encounter-charges`, chargeData, config);
             }
 
-            // 3. Calculate total and update encounter status
+            // 3. Calculate total and update encounter status (excluding waived consultation)
             const selectedChargeObjects = charges.filter(c => selectedCharges.includes(c._id));
-            const totalAmount = selectedChargeObjects.reduce((sum, c) => sum + c.basePrice, 0);
+            const totalAmount = selectedChargeObjects.reduce((sum, c) => {
+                if (waiveConsultationFee && c.type === 'consultation') return sum;
+                return sum + c.basePrice;
+            }, 0);
 
             if (!['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType)) {
-                const newStatus = isANC ? 'in_nursing' : (totalAmount > 0 ? 'payment_pending' : 'in_nursing');
+                const newStatus = isANC || waiveConsultationFee ? 'in_nursing' : (totalAmount > 0 ? 'payment_pending' : 'in_nursing');
                 await axios.put(
                     `${backendUrl}/api/visits/${visitResponse.data._id}`,
                     { encounterStatus: newStatus, isANC: isANC || undefined },
@@ -400,7 +445,7 @@ const FrontDeskDashboard = () => {
     };
 
     // Group charges by type (Filter out Lab, Radiology, Drugs, Nursing for Front Desk)
-    const allowedFrontDeskTypes = ['consultation', 'labour', 'theatre', 'other'];
+    const allowedFrontDeskTypes = ['consultation'];
     const chargesByType = charges.reduce((acc, charge) => {
         if (!allowedFrontDeskTypes.includes(charge.type)) return acc;
         if (!acc[charge.type]) {
@@ -437,6 +482,7 @@ const FrontDeskDashboard = () => {
         setAddChargesPatient(patient);
         setAddChargesEncounterId(activeEncounter._id);
         setSelectedAdditionalCharges([]);
+        setAddChargesSearchQuery('');
         setShowAddChargesModal(true);
     };
 
@@ -476,9 +522,20 @@ const FrontDeskDashboard = () => {
         }
     };
 
-    // Group all charges by type for the add-charges modal (Filter out Lab, Radiology, Drugs, Nursing)
+    // Group all charges by type for the add-charges modal (Filter out Lab, Radiology, Drugs)
     const allChargesByType = charges.reduce((acc, charge) => {
-        if (!allowedFrontDeskTypes.includes(charge.type)) return acc;
+        if (!charge.active) return acc;
+        if (['drugs', 'lab', 'radiology'].includes(charge.type)) return acc;
+
+        // Filter by search query if present
+        if (addChargesSearchQuery) {
+            const query = addChargesSearchQuery.toLowerCase();
+            const nameMatch = charge.name?.toLowerCase().includes(query);
+            const descMatch = charge.description?.toLowerCase().includes(query);
+            const typeMatch = (chargeTypeLabels[charge.type] || charge.type)?.toLowerCase().includes(query);
+            if (!nameMatch && !descMatch && !typeMatch) return acc;
+        }
+
         if (!acc[charge.type]) acc[charge.type] = [];
         acc[charge.type].push(charge);
         return acc;
@@ -1042,8 +1099,9 @@ const FrontDeskDashboard = () => {
                                 />
                             </div>
 
-                            {/* ANC Checkbox */}
-                            <div className="mb-6">
+                            {/* ANC and Waive Consultation Row */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                {/* ANC Checkbox */}
                                 <label className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${isANC ? 'bg-pink-50 border-pink-400' : 'bg-gray-50 border-gray-200 hover:border-pink-300'
                                     }`}>
                                     <input
@@ -1053,13 +1111,116 @@ const FrontDeskDashboard = () => {
                                             setIsANC(e.target.checked);
                                             if (e.target.checked) setSelectedCharges([]);
                                         }}
-                                        className="w-5 h-5 accent-pink-600"
+                                        className="w-5 h-5 accent-pink-600 flex-shrink-0"
                                     />
                                     <div>
-                                        <p className="font-bold text-pink-700 text-sm">🤰 Antenatal Care (ANC) Follow-Up Visit</p>
-                                        <p className="text-xs text-pink-500 mt-0.5">Check for ANC patients — no charges now. Uncheck when doctor consultation charges are needed.</p>
+                                        <p className="font-bold text-pink-700 text-sm">🤰 Antenatal Care (ANC) Follow-Up</p>
+                                        <p className="text-[10px] text-pink-500 mt-0.5">Check for ANC patients — no charges now.</p>
                                     </div>
                                 </label>
+
+                                {/* Waive Consultation Fee Checkbox */}
+                                <label className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${waiveConsultationFee ? 'bg-green-50 border-green-400' : 'bg-gray-50 border-gray-200 hover:border-green-300'
+                                    }`}>
+                                    <input
+                                        type="checkbox"
+                                        checked={waiveConsultationFee}
+                                        onChange={(e) => setWaiveConsultationFee(e.target.checked)}
+                                        className="w-5 h-5 accent-green-600 flex-shrink-0"
+                                    />
+                                    <div>
+                                        <p className="font-bold text-green-700 text-sm">💸 Waive Consultation Fee</p>
+                                        <p className="text-[10px] text-green-500 mt-0.5">Allow consultation without payment.</p>
+                                    </div>
+                                </label>
+                            </div>
+
+                            {/* Speciality Restrictions */}
+                            <div className="mb-6 bg-blue-50 p-4 rounded-lg border border-blue-200">
+                                <label className="flex items-center gap-3 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={needSpeciality}
+                                        onChange={(e) => {
+                                            setNeedSpeciality(e.target.checked);
+                                            if (!e.target.checked) {
+                                                setSelectedSpecialityClinic('');
+                                                setNeedSpecificDoctor(false);
+                                                setSelectedSpecificDoctor('');
+                                            }
+                                        }}
+                                        className="w-5 h-5 accent-blue-600"
+                                    />
+                                    <div>
+                                        <p className="font-bold text-blue-800 text-sm">🏥 Need Speciality Clinic Restriction?</p>
+                                        <p className="text-xs text-blue-600 mt-0.5">Restrict search and visibility of this patient to doctors within a specific clinic.</p>
+                                    </div>
+                                </label>
+
+                                {needSpeciality && (
+                                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-semibold mb-1 text-blue-900">Select Speciality Clinic</label>
+                                            <select
+                                                className="w-full border p-2 rounded bg-white"
+                                                value={selectedSpecialityClinic}
+                                                onChange={(e) => {
+                                                    setSelectedSpecialityClinic(e.target.value);
+                                                    setNeedSpecificDoctor(false);
+                                                    setSelectedSpecificDoctor('');
+                                                }}
+                                            >
+                                                <option value="">-- Select Speciality Clinic --</option>
+                                                {specialityClinics.map(sc => (
+                                                    <option key={sc._id} value={sc._id}>
+                                                        {sc.name} ({sc.department})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {selectedSpecialityClinic && (
+                                            <div className="flex flex-col justify-end">
+                                                <label className="flex items-center gap-3 cursor-pointer p-2 border rounded bg-white border-blue-200">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={needSpecificDoctor}
+                                                        onChange={(e) => {
+                                                            setNeedSpecificDoctor(e.target.checked);
+                                                            if (!e.target.checked) setSelectedSpecificDoctor('');
+                                                        }}
+                                                        className="w-4 h-4 accent-indigo-600"
+                                                    />
+                                                    <div>
+                                                        <p className="font-semibold text-indigo-900 text-xs">Need Specific Doctor?</p>
+                                                        <p className="text-[10px] text-indigo-600">Restrict access to a single doctor.</p>
+                                                    </div>
+                                                </label>
+                                            </div>
+                                        )}
+
+                                        {needSpecificDoctor && selectedSpecialityClinic && (
+                                            <div className="md:col-span-2">
+                                                <label className="block text-sm font-semibold mb-1 text-indigo-900">Select Specific Doctor</label>
+                                                <select
+                                                    className="w-full border p-2 rounded bg-white"
+                                                    value={selectedSpecificDoctor}
+                                                    onChange={(e) => setSelectedSpecificDoctor(e.target.value)}
+                                                >
+                                                    <option value="">-- Select Doctor --</option>
+                                                    {doctors
+                                                        .filter(doc => (doc.assignedSpecialityClinic?._id || doc.assignedSpecialityClinic) === selectedSpecialityClinic)
+                                                        .map(doc => (
+                                                            <option key={doc._id} value={doc._id}>
+                                                                {doc.name}
+                                                            </option>
+                                                        ))
+                                                    }
+                                                </select>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             {/* Inpatient Ward Selection */}
@@ -1151,6 +1312,11 @@ const FrontDeskDashboard = () => {
                                                         feeLabel = 'State Ins.';
                                                         feeLabelColor = 'bg-orange-100 text-orange-700';
                                                     }
+                                                    if (waiveConsultationFee && charge.type === 'consultation') {
+                                                        patientFee = 0;
+                                                        feeLabel = 'Waived';
+                                                        feeLabelColor = 'bg-yellow-100 text-yellow-800';
+                                                    }
                                                     return (
                                                         <label
                                                             key={charge._id}
@@ -1200,6 +1366,7 @@ const FrontDeskDashboard = () => {
                                             ₦{charges
                                                 .filter(c => selectedCharges.includes(c._id))
                                                 .reduce((sum, c) => {
+                                                    if (waiveConsultationFee && c.type === 'consultation') return sum;
                                                     const prov = selectedPatient?.provider || 'Standard';
                                                     let fee = c.standardFee || c.basePrice || 0;
                                                     if (prov === 'Corporate Retainership' || prov === 'Retainership') fee = c.retainershipFee || fee;
@@ -1228,10 +1395,22 @@ const FrontDeskDashboard = () => {
                             </button>
                             <button
                                 onClick={handleCreateEncounter}
-                                className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 flex items-center gap-2"
-                                disabled={!isANC && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && selectedCharges.length === 0}
+                                className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled={loading || (!isANC && !waiveConsultationFee && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && selectedCharges.length === 0)}
                             >
-                                <FaPlus /> {isANC ? '🤰 Create ANC Encounter' : 'Create Encounter'}
+                                {loading ? (
+                                    <>
+                                        <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Creating...
+                                    </>
+                                ) : (
+                                    <>
+                                        <FaPlus /> {isANC ? '🤰 Create ANC Encounter' : 'Create Encounter'}
+                                    </>
+                                )}
                             </button>
                         </div>
                     </div>
@@ -1257,12 +1436,31 @@ const FrontDeskDashboard = () => {
                                 <p className="text-sm">Converting active encounter to Inpatient admission.</p>
                             </div>
 
+                            {/* Deposit Balance status */}
+                            <div className="mb-4">
+                                <label className="block text-gray-700 font-bold mb-1">Financial Deposit Balance</label>
+                                <div className={`p-3 rounded border text-sm font-semibold flex justify-between items-center ${
+                                    (selectedPatient?.depositBalance || 0) <= 0 
+                                        ? 'bg-red-50 text-red-800 border-red-200' 
+                                        : 'bg-green-50 text-green-800 border-green-200'
+                                }`}>
+                                    <span>Current Deposit:</span>
+                                    <span className="text-base font-bold">₦{selectedPatient?.depositBalance?.toLocaleString() || '0'}</span>
+                                </div>
+                                {(selectedPatient?.depositBalance || 0) <= 0 && (
+                                    <p className="text-xs text-red-600 mt-1 font-semibold">
+                                        ⚠️ Patient has no deposit balance. Admission is blocked until a deposit is paid.
+                                    </p>
+                                )}
+                            </div>
+
                             <div className="mb-4">
                                 <label className="block text-gray-700 font-bold mb-2">Select Ward</label>
                                 <select
                                     className="w-full border p-2 rounded"
                                     value={selectedWard}
                                     onChange={(e) => setSelectedWard(e.target.value)}
+                                    disabled={(selectedPatient?.depositBalance || 0) <= 0}
                                 >
                                     <option value="">-- Select Ward --</option>
                                     {wards.map(ward => (
@@ -1313,8 +1511,8 @@ const FrontDeskDashboard = () => {
                                 </button>
                                 <button
                                     onClick={handleConvertFromFrontDesk}
-                                    disabled={!selectedWard || !selectedBed}
-                                    className={`px-4 py-2 rounded text-white ${!selectedWard || !selectedBed ? 'bg-purple-300 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}
+                                    disabled={!selectedWard || !selectedBed || (selectedPatient?.depositBalance || 0) <= 0}
+                                    className={`px-4 py-2 rounded text-white ${(!selectedWard || !selectedBed || (selectedPatient?.depositBalance || 0) <= 0) ? 'bg-purple-300 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}
                                 >
                                     Convert & Admit
                                 </button>
@@ -1327,9 +1525,9 @@ const FrontDeskDashboard = () => {
             {/* ===================== ADD CHARGES MODAL ===================== */}
             {showAddChargesModal && addChargesPatient && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col">
+                    <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full h-[80vh] max-h-[650px] flex flex-col font-sans">
                         {/* Modal Header */}
-                        <div className="bg-green-600 text-white p-4 rounded-t-lg flex justify-between items-center">
+                        <div className="bg-green-600 text-white p-4 rounded-t-lg flex justify-between items-center flex-shrink-0">
                             <div>
                                 <h3 className="text-xl font-bold flex items-center gap-2">
                                     <FaDollarSign /> Add Charges to Patient
@@ -1342,6 +1540,7 @@ const FrontDeskDashboard = () => {
                                 onClick={() => {
                                     setShowAddChargesModal(false);
                                     setSelectedAdditionalCharges([]);
+                                    setAddChargesSearchQuery('');
                                 }}
                                 className="text-white hover:text-gray-200"
                             >
@@ -1350,84 +1549,193 @@ const FrontDeskDashboard = () => {
                         </div>
 
                         {/* Modal Body */}
-                        <div className="p-6 overflow-y-auto flex-1">
-                            {charges.filter(c => c.active).length === 0 ? (
-                                <p className="text-gray-500 text-center py-8">No charges available. Ask an admin to create charges first.</p>
-                            ) : (
-                                <div className="space-y-5">
-                                    {Object.keys(allChargesByType).sort().map(type => (
-                                        <div key={type}>
-                                            <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wide mb-2 border-b pb-1">
-                                                {chargeTypeLabels[type] || type}
-                                            </h4>
-                                            <div className="space-y-2">
-                                                {allChargesByType[type].filter(c => c.active).map(charge => {
-                                                    const isSelected = selectedAdditionalCharges.includes(charge._id);
-                                                    // Determine fee based on patient provider
-                                                    let fee = charge.standardFee || charge.basePrice || 0;
-                                                    let addFeeLabel = 'Standard';
-                                                    let addFeeLabelColor = 'bg-blue-100 text-blue-700';
-                                                    if (addChargesPatient.provider === 'Retainership' || addChargesPatient.provider === 'Corporate Retainership') {
-                                                        fee = charge.retainershipFee || fee;
-                                                        addFeeLabel = 'Corp Ret.';
-                                                        addFeeLabelColor = 'bg-purple-100 text-purple-700';
-                                                    } else if (addChargesPatient.provider === 'Family Retainership') {
-                                                        fee = charge.familyRetainershipFee || fee;
-                                                        addFeeLabel = 'Fam Ret.';
-                                                        addFeeLabelColor = 'bg-pink-100 text-pink-700';
-                                                    } else if (addChargesPatient.provider === 'NHIA') {
-                                                        fee = charge.nhiaFee || fee;
-                                                        addFeeLabel = 'NHIA';
-                                                        addFeeLabelColor = 'bg-green-100 text-green-700';
-                                                    } else if (addChargesPatient.provider === 'KSCHMA') {
-                                                        fee = charge.kschmaFee || fee;
-                                                        addFeeLabel = 'State Ins.';
-                                                        addFeeLabelColor = 'bg-orange-100 text-orange-700';
-                                                    }
-                                                    return (
-                                                        <label
-                                                            key={charge._id}
-                                                            className={`flex items-center justify-between p-3 rounded border cursor-pointer transition-colors ${isSelected
-                                                                ? 'bg-green-50 border-green-400'
-                                                                : 'bg-white border-gray-200 hover:bg-gray-50'
+                        <div className="p-6 overflow-y-auto flex-1 flex flex-col min-h-0">
+                            {/* Search Input and Dropdown */}
+                            <div className="relative flex-shrink-0 mb-4">
+                                <label className="block text-gray-700 font-semibold mb-1 text-sm">
+                                    Search Services / Fees
+                                </label>
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        placeholder="Type name, type or description (e.g. consultation, nursing)..."
+                                        value={addChargesSearchQuery}
+                                        onChange={(e) => setAddChargesSearchQuery(e.target.value)}
+                                        className="w-full border border-gray-300 rounded-lg p-2.5 pl-10 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                                    />
+                                    <div className="absolute left-3 top-3.5 text-gray-400">
+                                        <FaSearch />
+                                    </div>
+                                    {addChargesSearchQuery && (
+                                        <button
+                                            onClick={() => setAddChargesSearchQuery('')}
+                                            className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 font-bold px-1 rounded-full text-base"
+                                        >
+                                            ✕
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Autocomplete Search Dropdown */}
+                                {addChargesSearchQuery && (
+                                    <>
+                                        {charges.filter(charge => {
+                                            if (!charge.active) return false;
+                                            if (['drugs', 'lab', 'radiology'].includes(charge.type)) return false;
+                                            const query = addChargesSearchQuery.toLowerCase();
+                                            const nameMatch = charge.name?.toLowerCase().includes(query);
+                                            const descMatch = charge.description?.toLowerCase().includes(query);
+                                            const typeMatch = (chargeTypeLabels[charge.type] || charge.type)?.toLowerCase().includes(query);
+                                            return nameMatch || descMatch || typeMatch;
+                                        }).length === 0 ? (
+                                            <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-4 z-50 text-center text-sm text-gray-500">
+                                                No charges found matching "{addChargesSearchQuery}"
+                                            </div>
+                                        ) : (
+                                            <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto z-50">
+                                                {charges
+                                                    .filter(charge => {
+                                                        if (!charge.active) return false;
+                                                        if (['drugs', 'lab', 'radiology'].includes(charge.type)) return false;
+                                                        const query = addChargesSearchQuery.toLowerCase();
+                                                        const nameMatch = charge.name?.toLowerCase().includes(query);
+                                                        const descMatch = charge.description?.toLowerCase().includes(query);
+                                                        const typeMatch = (chargeTypeLabels[charge.type] || charge.type)?.toLowerCase().includes(query);
+                                                        return nameMatch || descMatch || typeMatch;
+                                                    })
+                                                    .map(charge => {
+                                                        // Determine fee based on patient provider
+                                                        let fee = charge.standardFee || charge.basePrice || 0;
+                                                        if (addChargesPatient.provider === 'Retainership' || addChargesPatient.provider === 'Corporate Retainership') fee = charge.retainershipFee || fee;
+                                                        else if (addChargesPatient.provider === 'Family Retainership') fee = charge.familyRetainershipFee || fee;
+                                                        else if (addChargesPatient.provider === 'NHIA') fee = charge.nhiaFee || fee;
+                                                        else if (addChargesPatient.provider === 'KSCHMA') fee = charge.kschmaFee || fee;
+
+                                                        const isAlreadySelected = selectedAdditionalCharges.includes(charge._id);
+
+                                                        return (
+                                                            <button
+                                                                key={charge._id}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    if (!isAlreadySelected) {
+                                                                        setSelectedAdditionalCharges(prev => [...prev, charge._id]);
+                                                                    }
+                                                                    setAddChargesSearchQuery(''); // Clear and close dropdown
+                                                                }}
+                                                                className={`w-full text-left p-3 hover:bg-gray-50 flex justify-between items-center border-b border-gray-100 last:border-b-0 transition-colors ${
+                                                                    isAlreadySelected ? 'opacity-50 cursor-not-allowed bg-green-50/20' : ''
                                                                 }`}
-                                                        >
-                                                            <div className="flex items-center gap-3">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={isSelected}
-                                                                    onChange={() => handleToggleAdditionalCharge(charge._id)}
-                                                                    className="w-4 h-4 accent-green-600"
-                                                                />
+                                                                disabled={isAlreadySelected}
+                                                            >
                                                                 <div>
-                                                                    <p className="font-semibold text-gray-800">{charge.name}</p>
-                                                                    {charge.description && (
-                                                                        <p className="text-xs text-gray-500">{charge.description}</p>
-                                                                    )}
+                                                                    <p className="font-semibold text-sm text-gray-800">{charge.name}</p>
+                                                                    <p className="text-xs text-gray-500 capitalize">{chargeTypeLabels[charge.type] || charge.type}</p>
                                                                 </div>
-                                                            </div>
-                                                            <div className="text-right ml-4">
-                                                                <p className={`font-bold text-lg ${fee === 0 ? 'text-green-600' : 'text-gray-900'}`}>₦{fee.toLocaleString()}</p>
-                                                                <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${fee === 0 ? 'bg-green-100 text-green-700' : addFeeLabelColor}`}>
+                                                                <div className="text-right">
+                                                                    <span className="font-bold text-sm text-gray-900">₦{fee.toLocaleString()}</span>
+                                                                    {isAlreadySelected && <span className="ml-2 text-xs text-green-600 font-bold">(Added)</span>}
+                                                                </div>
+                                                            </button>
+                                                        );
+                                                    })}
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Selected Charges List */}
+                            <div className="flex-1 flex flex-col min-h-0 mt-2">
+                                <h4 className="font-bold text-sm text-gray-700 mb-2 flex justify-between items-center flex-shrink-0">
+                                    <span>Selected Services &amp; Charges ({selectedAdditionalCharges.length})</span>
+                                    {selectedAdditionalCharges.length > 0 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedAdditionalCharges([])}
+                                            className="text-xs text-red-500 hover:text-red-700 font-semibold"
+                                        >
+                                            Clear All
+                                        </button>
+                                    )}
+                                </h4>
+
+                                {selectedAdditionalCharges.length === 0 ? (
+                                    <div className="border border-dashed border-gray-200 rounded-lg p-8 text-center text-gray-400 text-sm flex flex-col items-center justify-center flex-grow">
+                                        <FaDollarSign size={32} className="mb-2 text-gray-300" />
+                                        <p>No services selected yet.</p>
+                                        <p className="text-xs mt-1 text-gray-400">Search and select services above to add them to this encounter.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2 overflow-y-auto flex-grow pr-1">
+                                        {charges
+                                            .filter(c => selectedAdditionalCharges.includes(c._id))
+                                            .map(charge => {
+                                                // Determine fee
+                                                let fee = charge.standardFee || charge.basePrice || 0;
+                                                let addFeeLabel = 'Standard';
+                                                let addFeeLabelColor = 'bg-blue-100 text-blue-700';
+                                                if (addChargesPatient.provider === 'Retainership' || addChargesPatient.provider === 'Corporate Retainership') {
+                                                    fee = charge.retainershipFee || fee;
+                                                    addFeeLabel = 'Corp Ret.';
+                                                    addFeeLabelColor = 'bg-purple-100 text-purple-700';
+                                                } else if (addChargesPatient.provider === 'Family Retainership') {
+                                                    fee = charge.familyRetainershipFee || fee;
+                                                    addFeeLabel = 'Fam Ret.';
+                                                    addFeeLabelColor = 'bg-pink-100 text-pink-700';
+                                                } else if (addChargesPatient.provider === 'NHIA') {
+                                                    fee = charge.nhiaFee || fee;
+                                                    addFeeLabel = 'NHIA';
+                                                    addFeeLabelColor = 'bg-green-100 text-green-700';
+                                                } else if (addChargesPatient.provider === 'KSCHMA') {
+                                                    fee = charge.kschmaFee || fee;
+                                                    addFeeLabel = 'State Ins.';
+                                                    addFeeLabelColor = 'bg-orange-100 text-orange-700';
+                                                }
+
+                                                return (
+                                                    <div
+                                                        key={charge._id}
+                                                        className="flex justify-between items-center p-3 rounded-lg border border-gray-200 bg-gray-50/50 hover:bg-gray-50 transition-colors"
+                                                    >
+                                                        <div className="flex-1 min-w-0 pr-4">
+                                                            <p className="font-semibold text-sm text-gray-800 truncate">{charge.name}</p>
+                                                            <div className="flex items-center gap-2 mt-1">
+                                                                <span className="text-[10px] bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded uppercase font-semibold">
+                                                                    {chargeTypeLabels[charge.type] || charge.type}
+                                                                </span>
+                                                                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${fee === 0 ? 'bg-green-100 text-green-700' : addFeeLabelColor}`}>
                                                                     {fee === 0 ? 'Free' : addFeeLabel}
                                                                 </span>
                                                             </div>
-                                                        </label>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
+                                                        </div>
+                                                        <div className="flex items-center gap-4 flex-shrink-0">
+                                                            <span className={`font-bold text-base ${fee === 0 ? 'text-green-600' : 'text-gray-900'}`}>
+                                                                ₦{fee.toLocaleString()}
+                                                            </span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setSelectedAdditionalCharges(prev => prev.filter(id => id !== charge._id))}
+                                                                className="text-red-500 hover:text-red-700 p-1.5 rounded-full hover:bg-red-50 transition-colors"
+                                                                title="Remove service"
+                                                            >
+                                                                <FaTimes size={14} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         {/* Modal Footer */}
-                        <div className="p-4 border-t bg-gray-50 rounded-b-lg flex justify-between items-center">
+                        <div className="p-4 border-t bg-gray-50 rounded-b-lg flex justify-between items-center flex-shrink-0">
                             <div className="text-sm text-gray-600">
                                 {selectedAdditionalCharges.length > 0 ? (
                                     <span className="font-semibold text-green-700">
-                                        {selectedAdditionalCharges.length} charge(s) selected &mdash; Total: ₦{
+                                        Total: ₦{
                                             charges
                                                 .filter(c => selectedAdditionalCharges.includes(c._id))
                                                 .reduce((sum, c) => {
@@ -1449,17 +1757,18 @@ const FrontDeskDashboard = () => {
                                     onClick={() => {
                                         setShowAddChargesModal(false);
                                         setSelectedAdditionalCharges([]);
+                                        setAddChargesSearchQuery('');
                                     }}
-                                    className="bg-gray-300 text-gray-800 px-4 py-2 rounded hover:bg-gray-400"
+                                    className="bg-gray-300 text-gray-800 px-4 py-2 rounded hover:bg-gray-400 text-sm font-semibold transition"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     onClick={handleSubmitAdditionalCharges}
                                     disabled={selectedAdditionalCharges.length === 0}
-                                    className={`px-6 py-2 rounded text-white font-semibold flex items-center gap-2 ${selectedAdditionalCharges.length === 0
+                                    className={`px-6 py-2 rounded text-white font-semibold flex items-center gap-2 text-sm transition ${selectedAdditionalCharges.length === 0
                                         ? 'bg-green-300 cursor-not-allowed'
-                                        : 'bg-green-600 hover:bg-green-700'
+                                        : 'bg-green-600 hover:bg-green-700 shadow-sm'
                                         }`}
                                 >
                                     <FaDollarSign /> Add to Encounter

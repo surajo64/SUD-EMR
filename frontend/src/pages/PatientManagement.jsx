@@ -52,6 +52,15 @@ const PatientManagement = () => {
     const [selectedWard, setSelectedWard] = useState('');
     const [selectedBed, setSelectedBed] = useState('');
 
+    const [specialityClinics, setSpecialityClinics] = useState([]);
+    const [doctors, setDoctors] = useState([]);
+
+    const [waiveConsultationFee, setWaiveConsultationFee] = useState(false);
+    const [needSpeciality, setNeedSpeciality] = useState(false);
+    const [selectedSpecialityClinic, setSelectedSpecialityClinic] = useState('');
+    const [needSpecificDoctor, setNeedSpecificDoctor] = useState(false);
+    const [selectedSpecificDoctor, setSelectedSpecificDoctor] = useState('');
+
     // Card Modal State
     const [showCardModal, setShowCardModal] = useState(false);
     const [cardPatient, setCardPatient] = useState(null);
@@ -137,6 +146,8 @@ const PatientManagement = () => {
             fetchClinics();
             fetchCharges();
             fetchWards();
+            fetchSpecialityClinics();
+            fetchDoctors();
         }
     }, [user]);
 
@@ -240,6 +251,26 @@ const PatientManagement = () => {
         }
     };
 
+    const fetchSpecialityClinics = async () => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get(`${backendUrl}/api/speciality-clinics?active=true`, config);
+            setSpecialityClinics(data);
+        } catch (error) {
+            console.error('Error fetching speciality clinics:', error);
+        }
+    };
+
+    const fetchDoctors = async () => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get(`${backendUrl}/api/users/doctors`, config);
+            setDoctors(data);
+        } catch (error) {
+            console.error('Error fetching doctors:', error);
+        }
+    };
+
     const fetchCharges = async () => {
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
@@ -270,6 +301,11 @@ const PatientManagement = () => {
         setSelectedWard('');
         setSelectedBed('');
         setIsANC(false);
+        setWaiveConsultationFee(false);
+        setNeedSpeciality(false);
+        setSelectedSpecialityClinic('');
+        setNeedSpecificDoctor(false);
+        setSelectedSpecificDoctor('');
     };
 
     const handleChargeToggle = (chargeId) => {
@@ -280,7 +316,7 @@ const PatientManagement = () => {
 
     const handleCreateEncounter = async () => {
         if (!encounterPatient) return;
-        if (!isANC && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && selectedCharges.length === 0) {
+        if (!isANC && !waiveConsultationFee && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && selectedCharges.length === 0) {
             toast.error('Please select at least one charge, or check ANC to skip charges');
             return;
         }
@@ -298,7 +334,12 @@ const PatientManagement = () => {
                 encounterStatus: 'registered',
                 ward: encounterType === 'Inpatient' ? selectedWard : undefined,
                 bed: encounterType === 'Inpatient' ? selectedBed : undefined,
-                isANC: isANC
+                isANC: isANC,
+                waiveConsultationFee,
+                needSpeciality,
+                specialityClinic: needSpeciality ? (selectedSpecialityClinic || undefined) : undefined,
+                needSpecificDoctor: needSpeciality && needSpecificDoctor,
+                specificDoctor: (needSpeciality && needSpecificDoctor) ? (selectedSpecificDoctor || undefined) : undefined
             };
             const visitResponse = await axios.post(`${backendUrl}/api/visits`, visitData, config);
             for (const chargeId of selectedCharges) {
@@ -310,10 +351,13 @@ const PatientManagement = () => {
                     notes: 'Added at registration'
                 }, config);
             }
-            const total = charges.filter(c => selectedCharges.includes(c._id)).reduce((s, c) => s + c.basePrice, 0);
+            const total = charges.filter(c => selectedCharges.includes(c._id)).reduce((s, c) => {
+                if (waiveConsultationFee && c.type === 'consultation') return s;
+                return s + c.basePrice;
+            }, 0);
             if (!['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType)) {
                 await axios.put(`${backendUrl}/api/visits/${visitResponse.data._id}`,
-                    { encounterStatus: isANC ? 'in_nursing' : (total > 0 ? 'payment_pending' : 'in_nursing'), isANC: isANC || undefined }, config);
+                    { encounterStatus: isANC || waiveConsultationFee ? 'in_nursing' : (total > 0 ? 'payment_pending' : 'in_nursing'), isANC: isANC || undefined }, config);
             }
             toast.success('Encounter created successfully!');
             closeEncounterModal();
@@ -1296,8 +1340,9 @@ const PatientManagement = () => {
                                 />
                             </div>
 
-                            {/* ANC Checkbox */}
-                            <div className="mb-6">
+                            {/* ANC and Waive Consultation Row */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                {/* ANC Checkbox */}
                                 <label className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${isANC ? 'bg-pink-50 border-pink-400' : 'bg-gray-50 border-gray-200 hover:border-pink-300'
                                     }`}>
                                     <input
@@ -1307,13 +1352,116 @@ const PatientManagement = () => {
                                             setIsANC(e.target.checked);
                                             if (e.target.checked) setSelectedCharges([]);
                                         }}
-                                        className="w-5 h-5 accent-pink-600"
+                                        className="w-5 h-5 accent-pink-600 flex-shrink-0"
                                     />
                                     <div>
-                                        <p className="font-bold text-pink-700 text-sm">🤰 Antenatal Care (ANC) Visit</p>
-                                        <p className="text-xs text-pink-500 mt-0.5">Check for ANC patients — no charges now. Uncheck when doctor consultation charges are needed.</p>
+                                        <p className="font-bold text-pink-700 text-sm">🤰 Antenatal Care (ANC) Follow-Up</p>
+                                        <p className="text-[10px] text-pink-500 mt-0.5">Check for ANC patients — no charges now.</p>
                                     </div>
                                 </label>
+
+                                {/* Waive Consultation Fee Checkbox */}
+                                <label className={`flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${waiveConsultationFee ? 'bg-green-50 border-green-400' : 'bg-gray-50 border-gray-200 hover:border-pink-300'
+                                    }`}>
+                                    <input
+                                        type="checkbox"
+                                        checked={waiveConsultationFee}
+                                        onChange={(e) => setWaiveConsultationFee(e.target.checked)}
+                                        className="w-5 h-5 accent-green-600 flex-shrink-0"
+                                    />
+                                    <div>
+                                        <p className="font-bold text-green-700 text-sm">💸 Waive Consultation Fee</p>
+                                        <p className="text-[10px] text-green-500 mt-0.5">Allow consultation without payment.</p>
+                                    </div>
+                                </label>
+                            </div>
+
+                            {/* Speciality Restrictions */}
+                            <div className="mb-6 bg-blue-50 p-4 rounded-lg border border-blue-200">
+                                <label className="flex items-center gap-3 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={needSpeciality}
+                                        onChange={(e) => {
+                                            setNeedSpeciality(e.target.checked);
+                                            if (!e.target.checked) {
+                                                setSelectedSpecialityClinic('');
+                                                setNeedSpecificDoctor(false);
+                                                setSelectedSpecificDoctor('');
+                                            }
+                                        }}
+                                        className="w-5 h-5 accent-blue-600"
+                                    />
+                                    <div>
+                                        <p className="font-bold text-blue-800 text-sm">🏥 Need Speciality Clinic Restriction?</p>
+                                        <p className="text-xs text-blue-600 mt-0.5">Restrict search and visibility of this patient to doctors within a specific clinic.</p>
+                                    </div>
+                                </label>
+
+                                {needSpeciality && (
+                                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-semibold mb-1 text-blue-900">Select Speciality Clinic</label>
+                                            <select
+                                                className="w-full border p-2 rounded bg-white"
+                                                value={selectedSpecialityClinic}
+                                                onChange={(e) => {
+                                                    setSelectedSpecialityClinic(e.target.value);
+                                                    setNeedSpecificDoctor(false);
+                                                    setSelectedSpecificDoctor('');
+                                                }}
+                                            >
+                                                <option value="">-- Select Speciality Clinic --</option>
+                                                {specialityClinics.map(sc => (
+                                                    <option key={sc._id} value={sc._id}>
+                                                        {sc.name} ({sc.department})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {selectedSpecialityClinic && (
+                                            <div className="flex flex-col justify-end">
+                                                <label className="flex items-center gap-3 cursor-pointer p-2 border rounded bg-white border-blue-200">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={needSpecificDoctor}
+                                                        onChange={(e) => {
+                                                            setNeedSpecificDoctor(e.target.checked);
+                                                            if (!e.target.checked) setSelectedSpecificDoctor('');
+                                                        }}
+                                                        className="w-4 h-4 accent-indigo-600"
+                                                    />
+                                                    <div>
+                                                        <p className="font-semibold text-indigo-900 text-xs">Need Specific Doctor?</p>
+                                                        <p className="text-[10px] text-indigo-600">Restrict access to a single doctor.</p>
+                                                    </div>
+                                                </label>
+                                            </div>
+                                        )}
+
+                                        {needSpecificDoctor && selectedSpecialityClinic && (
+                                            <div className="md:col-span-2">
+                                                <label className="block text-sm font-semibold mb-1 text-indigo-900">Select Specific Doctor</label>
+                                                <select
+                                                    className="w-full border p-2 rounded bg-white"
+                                                    value={selectedSpecificDoctor}
+                                                    onChange={(e) => setSelectedSpecificDoctor(e.target.value)}
+                                                >
+                                                    <option value="">-- Select Doctor --</option>
+                                                    {doctors
+                                                        .filter(doc => (doc.assignedSpecialityClinic?._id || doc.assignedSpecialityClinic) === selectedSpecialityClinic)
+                                                        .map(doc => (
+                                                            <option key={doc._id} value={doc._id}>
+                                                                {doc.name}
+                                                            </option>
+                                                        ))
+                                                    }
+                                                </select>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             {/* Inpatient Ward/Bed */}
@@ -1368,24 +1516,32 @@ const PatientManagement = () => {
                                         <p className="text-gray-500 text-sm">No consultation charges available</p>
                                     ) : (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                            {charges.map(charge => (
-                                                <label key={charge._id} className={`flex items-center gap-3 p-3 border rounded cursor-pointer ${selectedCharges.includes(charge._id) ? 'border-blue-500 bg-blue-50' : 'hover:bg-gray-50'
-                                                    }`}>
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={selectedCharges.includes(charge._id)}
-                                                        onChange={() => handleChargeToggle(charge._id)}
-                                                        className="w-4 h-4"
-                                                    />
-                                                    <span className="flex-1">{charge.name}</span>
-                                                    <span className="font-semibold text-green-600">₦{charge.basePrice?.toLocaleString()}</span>
-                                                </label>
-                                            ))}
+                                            {charges.map(charge => {
+                                                const patientFee = (waiveConsultationFee && charge.type === 'consultation') ? 0 : charge.basePrice;
+                                                return (
+                                                    <label key={charge._id} className={`flex items-center gap-3 p-3 border rounded cursor-pointer ${selectedCharges.includes(charge._id) ? 'border-blue-500 bg-blue-50' : 'hover:bg-gray-50'
+                                                        }`}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selectedCharges.includes(charge._id)}
+                                                            onChange={() => handleChargeToggle(charge._id)}
+                                                            className="w-4 h-4"
+                                                        />
+                                                        <span className="flex-1">{charge.name}</span>
+                                                        <span className="font-semibold text-green-600">
+                                                            {patientFee === 0 ? 'Waived (₦0)' : `₦${patientFee?.toLocaleString()}`}
+                                                        </span>
+                                                    </label>
+                                                );
+                                            })}
                                         </div>
                                     )}
                                     {selectedCharges.length > 0 && (
                                         <p className="mt-2 text-right font-bold text-blue-700">
-                                            Total: ₦{charges.filter(c => selectedCharges.includes(c._id)).reduce((s, c) => s + c.basePrice, 0).toLocaleString()}
+                                            Total: ₦{charges.filter(c => selectedCharges.includes(c._id)).reduce((s, c) => {
+                                                if (waiveConsultationFee && c.type === 'consultation') return s;
+                                                return s + c.basePrice;
+                                            }, 0).toLocaleString()}
                                         </p>
                                     )}
                                 </div>
@@ -1395,10 +1551,22 @@ const PatientManagement = () => {
                             <div className="flex gap-3 pt-4 border-t">
                                 <button
                                     onClick={handleCreateEncounter}
-                                    disabled={loading || (!isANC && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && selectedCharges.length === 0)}
+                                    disabled={loading || (!isANC && !waiveConsultationFee && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && selectedCharges.length === 0)}
                                     className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:bg-gray-400 flex items-center justify-center gap-2"
                                 >
-                                    <FaCalendarCheck /> {loading ? 'Creating...' : (isANC ? '🤰 Create ANC Encounter' : 'Create Encounter')}
+                                    {loading ? (
+                                        <>
+                                            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            Creating...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <FaCalendarCheck /> {isANC ? '🤰 Create ANC Encounter' : 'Create Encounter'}
+                                        </>
+                                    )}
                                 </button>
                                 <button
                                     onClick={closeEncounterModal}

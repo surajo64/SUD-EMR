@@ -6,6 +6,8 @@ import AuthContext from '../context/AuthContext';
 import axios from 'axios';
 import useHospitalSettings from '../hooks/useHospitalSettings';
 import PharmacyNotification from './PharmacyNotification';
+import DoctorNotification from './DoctorNotification';
+import LabNotification from './LabNotification';
 
 
 const Layout = ({ children }) => {
@@ -53,6 +55,8 @@ const Layout = ({ children }) => {
                     </div>
                     <div className="flex items-center gap-6">
                         <PharmacyNotification />
+                        <DoctorNotification />
+                        <LabNotification />
                         <div className="text-sm text-gray-500 hidden sm:block">
                             {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                         </div>

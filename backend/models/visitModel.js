@@ -89,6 +89,54 @@ const visitSchema = mongoose.Schema({
         }
     }],
 
+    // Inpatient Ward Round Notes
+    wardRoundNotes: [{
+        text: String,
+        author: String,
+        role: String,
+        createdAt: { type: Date, default: Date.now }
+    }],
+
+    // Theatre Operation Notes
+    theatreNotes: [{
+        // Operation Details
+        dateOfSurgery: Date,
+        startTime: String,
+        endTime: String,
+        theatreName: String,
+        surgeryType: { type: String, enum: ['Elective', 'Emergency'], default: 'Elective' },
+        procedurePerformed: String,
+        preOperativeDiagnosis: String,
+        postOperativeDiagnosis: String,
+        operativeFindings: String,
+        operativeNotes: String,
+        estimatedBloodLoss: String,
+        bloodTransfusion: String,
+        complications: String,
+        drains: String,
+        specimens: String,
+        implants: String,
+        woundClosure: String,
+        postOperativeCondition: String,
+        postOperativeInstructions: String,
+        // Surgical Team
+        leadSurgeon: String,
+        assistantSurgeons: String,
+        anaesthetist: String,
+        scrubNurse: String,
+        circulatingNurse: String,
+        // Anaesthesia
+        anaesthesiaType: String,
+        anaesthesiaNote: String,
+        // Audit
+        status: { type: String, enum: ['Draft', 'Completed', 'Reviewed'], default: 'Draft' },
+        createdBy: String,
+        createdAt: { type: Date, default: Date.now },
+        updatedBy: String,
+        updatedAt: Date,
+        digitalSignature: String,
+    }],
+
     // Clinic and Encounter Type
     clinic: { type: mongoose.Schema.Types.ObjectId, ref: 'Clinic' },
     encounterType: {
@@ -96,6 +144,15 @@ const visitSchema = mongoose.Schema({
         enum: encounterTypes,
         default: 'Outpatient'
     },
+    waiveConsultationFee: { type: Boolean, default: false },
+    waivedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    needSpeciality: { type: Boolean, default: false },
+    specialityClinic: { type: mongoose.Schema.Types.ObjectId, ref: 'SpecialityClinic' },
+    needSpecificDoctor: { type: Boolean, default: false },
+    specificDoctor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    seen: { type: Boolean, default: false },
+    seenBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    seenAt: { type: Date },
 }, {
     timestamps: true,
 });

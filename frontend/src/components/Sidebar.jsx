@@ -126,6 +126,9 @@ const Sidebar = () => {
                         <Link to="/front-desk/family-files" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/front-desk/family-files')}`}>
                             <FaUserFriends /> Family Files
                         </Link>
+                        <Link to="/front-desk/speciality-clinics" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/front-desk/speciality-clinics')}`}>
+                            <FaHospital /> Speciality Clinics
+                        </Link>
                         <Link to="/hmo-management" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/hmo-management')}`}>
                             <FaHospital size={14} /> HMO/Retainership
                         </Link>
@@ -246,6 +249,9 @@ const Sidebar = () => {
                             <Link to="/admin/clinics" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/clinics')}`}>
                                 <FaHospital size={14} /> Clinics
                             </Link>
+                            <Link to="/admin/speciality-clinics" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/speciality-clinics')}`}>
+                                <FaHospital size={14} /> Speciality Clinics
+                            </Link>
                             <Link to="/admin/wards" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/wards')}`}>
                                 <FaBed size={14} /> Wards
                             </Link>
@@ -344,7 +350,12 @@ const Sidebar = () => {
                     </div>
                     <div>
                         <p className="text-sm font-semibold">{user.name}</p>
-                        <p className="text-xs text-green-300 capitalize">{user.role}</p>
+                        <p className="text-xs text-green-300">
+                            {user.role === 'doctor'
+                                ? `Doctor - ${user.assignedSpecialityClinic?.name || 'General Physician'}`
+                                : user.role.charAt(0).toUpperCase() + user.role.slice(1).replace('_', ' ')
+                            }
+                        </p>
                     </div>
                 </div>
                 <div className="space-y-2">

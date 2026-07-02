@@ -21,45 +21,54 @@ const addChargeToEncounter = async (req, res) => {
             return res.status(404).json({ message: 'Patient not found' });
         }
 
-        // Determine fee based on provider
+        // Check if consultation fee is waived for this encounter
+        const Visit = require('../models/visitModel');
+        const visit = await Visit.findById(encounterId);
+        
         let fee = 0;
-        let isCovered = true; // Flag to track if service is covered by insurance
+        let isCovered = true;
+        let isWaived = false;
 
-        switch (patient.provider) {
-            case 'Retainership':
-            case 'Corporate Retainership':
-                fee = charge.retainershipFee;
-                break;
-            case 'Family Retainership':
-                fee = charge.familyRetainershipFee || 0;
-                break;
-            case 'NHIA':
-                fee = charge.nhiaFee;
-                break;
-            case 'KSCHMA':
-                fee = charge.kschmaFee;
-                break;
-            case 'Standard':
-            default:
-                fee = charge.standardFee;
-                break;
-        }
-
-        // Check if fee is 0 (not covered) for insurance/retainership patients
-        if (fee === 0 && patient.provider !== 'Standard') {
-            // If it's a drug, we assume it's covered and use the standard fee/base price
-            if (charge.type === 'drugs') {
-                fee = charge.standardFee || charge.basePrice;
-                // isCovered remains true
-            } else {
-                isCovered = false;
-                fee = charge.standardFee || charge.basePrice; // Fallback to standard fee
+        if (visit && visit.waiveConsultationFee && charge.type === 'consultation') {
+            fee = 0;
+            isWaived = true;
+        } else {
+            switch (patient.provider) {
+                case 'Retainership':
+                case 'Corporate Retainership':
+                    fee = charge.retainershipFee;
+                    break;
+                case 'Family Retainership':
+                    fee = charge.familyRetainershipFee || 0;
+                    break;
+                case 'NHIA':
+                    fee = charge.nhiaFee;
+                    break;
+                case 'KSCHMA':
+                    fee = charge.kschmaFee;
+                    break;
+                case 'Standard':
+                default:
+                    fee = charge.standardFee;
+                    break;
             }
-        }
 
-        // Fallback to basePrice if fee is still 0 (shouldn't happen if standardFee is set)
-        if (fee === 0 && charge.basePrice) {
-            fee = charge.basePrice;
+            // Check if fee is 0 (not covered) for insurance/retainership patients
+            if (fee === 0 && patient.provider !== 'Standard') {
+                // If it's a drug, we assume it's covered and use the standard fee/base price
+                if (charge.type === 'drugs') {
+                    fee = charge.standardFee || charge.basePrice;
+                    // isCovered remains true
+                } else {
+                    isCovered = false;
+                    fee = charge.standardFee || charge.basePrice; // Fallback to standard fee
+                }
+            }
+
+            // Fallback to basePrice if fee is still 0 (shouldn't happen if standardFee is set)
+            if (fee === 0 && charge.basePrice) {
+                fee = charge.basePrice;
+            }
         }
 
         const totalAmount = fee * (quantity || 1);
@@ -68,7 +77,10 @@ const addChargeToEncounter = async (req, res) => {
         let patientPortion = totalAmount;
         let hmoPortion = 0;
 
-        if (!isCovered) {
+        if (isWaived) {
+            patientPortion = 0;
+            hmoPortion = 0;
+        } else if (!isCovered) {
             // If not covered (fee was 0), patient pays 100%
             patientPortion = totalAmount;
             hmoPortion = 0;
@@ -98,6 +110,7 @@ const addChargeToEncounter = async (req, res) => {
             totalAmount,
             patientPortion,
             hmoPortion,
+            status: isWaived ? 'paid' : 'pending',
             addedBy: req.user._id,
             notes
         });

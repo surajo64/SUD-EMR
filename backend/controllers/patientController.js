@@ -85,6 +85,32 @@ const getPatients = async (req, res) => {
             }
         }
 
+        // Apply encounter restrictions for doctor searches
+        if (req.user && req.user.role === 'doctor') {
+            const startOfDay = new Date();
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date();
+            endOfDay.setHours(23, 59, 59, 999);
+
+            const Visit = require('../models/visitModel');
+            const doctorClinicId = req.user.assignedSpecialityClinic?._id || req.user.assignedSpecialityClinic;
+            const doctorId = req.user._id;
+
+            // Find any active encounters today that this doctor is NOT permitted to see
+            const restrictedVisits = await Visit.find({
+                createdAt: { $gte: startOfDay, $lte: endOfDay },
+                $or: [
+                    { needSpeciality: true, specialityClinic: { $ne: doctorClinicId } },
+                    { needSpecificDoctor: true, specificDoctor: { $ne: doctorId } }
+                ]
+            }).select('patient');
+
+            const excludedPatientIds = restrictedVisits.map(v => v.patient);
+            if (excludedPatientIds.length > 0) {
+                filter._id = { $nin: excludedPatientIds };
+            }
+        }
+
         const patients = await Patient.find(filter).populate('familyFile');
         res.json(patients);
     } catch (error) {
@@ -286,6 +312,32 @@ const getPatientById = async (req, res) => {
         const patient = await Patient.findById(req.params.id).populate('familyFile');
 
         if (patient) {
+            // Apply encounter restrictions for doctor searches
+            if (req.user && req.user.role === 'doctor') {
+                const startOfDay = new Date();
+                startOfDay.setHours(0, 0, 0, 0);
+                const endOfDay = new Date();
+                endOfDay.setHours(23, 59, 59, 999);
+
+                const Visit = require('../models/visitModel');
+                const doctorClinicId = req.user.assignedSpecialityClinic?._id || req.user.assignedSpecialityClinic;
+                const doctorId = req.user._id;
+
+                // Check if patient has any active restricted encounters today that this doctor cannot see
+                const restrictedVisit = await Visit.findOne({
+                    patient: patient._id,
+                    createdAt: { $gte: startOfDay, $lte: endOfDay },
+                    $or: [
+                        { needSpeciality: true, specialityClinic: { $ne: doctorClinicId } },
+                        { needSpecificDoctor: true, specificDoctor: { $ne: doctorId } }
+                    ]
+                });
+
+                if (restrictedVisit) {
+                    return res.status(403).json({ message: 'Access denied: Patient is restricted to a different speciality clinic or doctor today.' });
+                }
+            }
+
             res.json(patient);
         } else {
             res.status(404).json({ message: 'Patient not found' });

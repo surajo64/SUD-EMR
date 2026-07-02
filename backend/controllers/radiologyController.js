@@ -17,7 +17,14 @@ const createRadiologyOrder = async (req, res) => {
         if (!visit || visit.type !== 'External Investigation') {
             return res.status(403).json({ message: 'Radiologists can only order for External Investigations.' });
         }
-    } else if (req.user.role !== 'doctor') {
+    } else if (req.user.role === 'doctor') {
+        // Check for unpaid consultation charges
+        const charges = await EncounterCharge.find({ encounter: visitId }).populate('charge');
+        const hasUnpaid = charges.some(c => c.charge && c.charge.type === 'consultation' && c.status === 'pending');
+        if (hasUnpaid) {
+            return res.status(402).json({ message: 'Access denied: Patient has unpaid consultation charges. Please direct them to the cashier.' });
+        }
+    } else {
         return res.status(403).json({ message: 'Not authorized to order radiology.' });
     }
 

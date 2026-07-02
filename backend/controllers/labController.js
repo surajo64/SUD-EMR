@@ -19,7 +19,14 @@ const createLabOrder = async (req, res) => {
         if (!visit || (visit.type !== 'External Investigation' && visit.type !== 'External Lab/Radiology')) {
             return res.status(403).json({ message: 'Lab staff can only order for External Investigations.' });
         }
-    } else if (req.user.role !== 'doctor') {
+    } else if (req.user.role === 'doctor') {
+        // Check for unpaid consultation charges
+        const charges = await EncounterCharge.find({ encounter: visitId }).populate('charge');
+        const hasUnpaid = charges.some(c => c.charge && c.charge.type === 'consultation' && c.status === 'pending');
+        if (hasUnpaid) {
+            return res.status(402).json({ message: 'Access denied: Patient has unpaid consultation charges. Please direct them to the cashier.' });
+        }
+    } else {
         return res.status(403).json({ message: 'Not authorized to order labs.' });
     }
 

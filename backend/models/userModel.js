@@ -24,6 +24,10 @@ const userSchema = mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Pharmacy'
     },
+    assignedSpecialityClinic: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'SpecialityClinic'
+    },
     labSpecialization: {
         type: String,
         enum: ['', 'All Lab Test', 'Hematology', 'Chemical Pathology', 'Microbiology', 'Histopathology', 'Immunology / Serology', 'Blood Transfusion Science']

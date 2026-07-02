@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import { AppContext } from '../context/AppContext';
@@ -12,8 +12,11 @@ import { FaFlask, FaSearch, FaCheckCircle, FaEdit, FaSave, FaTimes, FaFileAlt, F
 const LabDashboard = () => {
     const resultRef = useRef();
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const orderIdParam = searchParams.get('orderId');
     const [labOrders, setLabOrders] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'pending', 'waiting_approval', 'completed'
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [results, setResults] = useState('');
     const [tableResults, setTableResults] = useState([]);
@@ -44,6 +47,18 @@ const LabDashboard = () => {
             console.error('Error fetching user stats:', error);
         }
     };
+ 
+    useEffect(() => {
+        if (orderIdParam && labOrders.length > 0) {
+            const targetOrder = labOrders.find(o => o._id === orderIdParam);
+            if (targetOrder) {
+                const visitId = targetOrder.visit?._id || 'external-' + (targetOrder.patient?._id || 'unknown');
+                setExpandedEncounter(visitId);
+                handleSelectOrder(targetOrder);
+                setSearchParams({});
+            }
+        }
+    }, [orderIdParam, labOrders, setSearchParams]);
 
 
 
@@ -499,6 +514,39 @@ const LabDashboard = () => {
         }, 250);
     };
 
+    const filteredLabOrders = labOrders.filter(order => {
+        // Search filter
+        if (searchTerm) {
+            const s = searchTerm.toLowerCase();
+            const matchesSearch = (
+                (order.patient?.name?.toLowerCase() || '').includes(s) ||
+                (String(order.patient?.mrn || '').toLowerCase()).includes(s) ||
+                (order.patient?.contact?.toLowerCase() || '').includes(s) ||
+                (order.testName?.toLowerCase() || '').includes(s)
+            );
+            if (!matchesSearch) return false;
+        }
+
+        // Specialization check - Technician or scientist should only see their specialization's tests
+        if (user.role === 'lab_technician' || user.role === 'lab_scientist') {
+            if (user.labSpecialization && user.labSpecialization !== 'All Lab Test') {
+                if (order.labSpecialization && order.labSpecialization !== user.labSpecialization) {
+                    return false;
+                }
+            }
+        }
+
+        // Status filter
+        if (statusFilter === 'pending') {
+            return order.status === 'pending' || order.status === 'rejected';
+        } else if (statusFilter === 'waiting_approval') {
+            return order.status === 'completed' && !order.approvedBy;
+        } else if (statusFilter === 'completed') {
+            return order.status === 'completed' && order.approvedBy;
+        }
+        return true;
+    });
+
     const pendingOrders = labOrders
         .filter(o => o.status === 'pending');
 
@@ -507,17 +555,7 @@ const LabDashboard = () => {
 
     // Group orders for display
     const groupedEncounters = Object.values(
-        labOrders
-            .filter(order => {
-                if (!searchTerm) return true;
-                const s = searchTerm.toLowerCase();
-                return (
-                    (order.patient?.name?.toLowerCase() || '').includes(s) ||
-                    (String(order.patient?.mrn || '').toLowerCase()).includes(s) ||
-                    (order.patient?.contact?.toLowerCase() || '').includes(s) ||
-                    (order.testName?.toLowerCase() || '').includes(s)
-                );
-            })
+        filteredLabOrders
             .reduce((acc, order) => {
                 // Modified grouping to handle visits more robustly
                 const visitId = order.visit?._id || 'external-' + (order.patient?._id || 'unknown');
@@ -555,6 +593,50 @@ const LabDashboard = () => {
                     className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 flex items-center gap-2"
                 >
                     <FaCog /> Manage Lab Tests
+                </button>
+            </div>
+
+            {/* Status Filters */}
+            <div className="flex flex-wrap gap-2 mb-6">
+                <button
+                    onClick={() => setStatusFilter('all')}
+                    className={`px-4 py-2 rounded text-sm font-semibold transition ${
+                        statusFilter === 'all'
+                            ? 'bg-purple-600 text-white shadow'
+                            : 'bg-white text-gray-600 border hover:bg-gray-50'
+                    }`}
+                >
+                    All Orders ({labOrders.length})
+                </button>
+                <button
+                    onClick={() => setStatusFilter('pending')}
+                    className={`px-4 py-2 rounded text-sm font-semibold transition ${
+                        statusFilter === 'pending'
+                            ? 'bg-yellow-600 text-white shadow'
+                            : 'bg-white text-gray-600 border hover:bg-gray-50'
+                    }`}
+                >
+                    Pending ({labOrders.filter(o => o.status === 'pending' || o.status === 'rejected').length})
+                </button>
+                <button
+                    onClick={() => setStatusFilter('waiting_approval')}
+                    className={`px-4 py-2 rounded text-sm font-semibold transition ${
+                        statusFilter === 'waiting_approval'
+                            ? 'bg-indigo-600 text-white shadow'
+                            : 'bg-white text-gray-600 border hover:bg-gray-50'
+                    }`}
+                >
+                    Waiting Review & Approval ({labOrders.filter(o => o.status === 'completed' && !o.approvedBy).length})
+                </button>
+                <button
+                    onClick={() => setStatusFilter('completed')}
+                    className={`px-4 py-2 rounded text-sm font-semibold transition ${
+                        statusFilter === 'completed'
+                            ? 'bg-green-600 text-white shadow'
+                            : 'bg-white text-gray-600 border hover:bg-gray-50'
+                    }`}
+                >
+                    Completed ({labOrders.filter(o => o.status === 'completed' && o.approvedBy).length})
                 </button>
             </div>
 

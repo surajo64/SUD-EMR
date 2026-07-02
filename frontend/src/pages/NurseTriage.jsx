@@ -22,6 +22,11 @@ const NurseTriage = () => {
     const [receiptValidated, setReceiptValidated] = useState(false);
     const [doctors, setDoctors] = useState([]);
     const [selectedDoctor, setSelectedDoctor] = useState('');
+    const [specialityClinics, setSpecialityClinics] = useState([]);
+    const [needSpeciality, setNeedSpeciality] = useState(false);
+    const [selectedSpecialityClinic, setSelectedSpecialityClinic] = useState('');
+    const [needSpecificDoctor, setNeedSpecificDoctor] = useState(false);
+    const [selectedSpecificDoctor, setSelectedSpecificDoctor] = useState('');
     const [nursingNotesList, setNursingNotesList] = useState([]);
     const [noteForm, setNoteForm] = useState({
         selectedServiceId: '',
@@ -96,6 +101,7 @@ const NurseTriage = () => {
         if (user) {
             fetchDoctors();
             fetchNursingCharges();
+            fetchSpecialityClinics();
 
             if (patientId) {
                 handleFetchAndSelectPatient(patientId, encounterId);
@@ -154,6 +160,17 @@ const NurseTriage = () => {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const { data } = await axios.get(`${backendUrl}/api/users/doctors`, config);
             setDoctors(data);
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const fetchSpecialityClinics = async () => {
+        if (!user) return;
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get(`${backendUrl}/api/speciality-clinics?active=true`, config);
+            setSpecialityClinics(data);
         } catch (error) {
             console.error(error);
         }
@@ -241,23 +258,14 @@ const NurseTriage = () => {
         }
     };
 
-    const handleSelectPatient = async (patient) => {
-        setSelectedPatient(patient);
-        setSelectedEncounter(null);
-        setReceiptValidated(false);
-        setReceiptNumber('');
-        setExistingVitals([]);
-
-        // Fetch patient's encounters
+    const fetchPatientEncounters = async (patientId) => {
         try {
             if (!user) return;
-            setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const { data: patientEncounters } = await axios.get(`${backendUrl}/api/visits?patient=${patient._id}`, config);
+            const { data: patientEncounters } = await axios.get(`${backendUrl}/api/visits?patient=${patientId}`, config);
 
             const filteredEncounters = patientEncounters.filter(v =>
                 ['registered', 'payment_pending', 'in_nursing', 'with_doctor', 'awaiting_services', 'in_pharmacy', 'in_lab', 'in_radiology', 'in_ward', 'admitted', 'completed', 'cancelled', 'discharged'].includes(v.encounterStatus)
-
             );
             // Sort encounters by creation date - latest first
             filteredEncounters.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -265,9 +273,24 @@ const NurseTriage = () => {
         } catch (error) {
             console.error(error);
             toast.error('Error fetching encounters');
-        } finally {
-            setLoading(false);
         }
+    };
+
+    const handleSelectPatient = async (patient) => {
+        setSelectedPatient(patient);
+        setSelectedEncounter(null);
+        setReceiptValidated(false);
+        setReceiptNumber('');
+        setExistingVitals([]);
+        setSelectedDoctor('');
+        setNeedSpeciality(false);
+        setSelectedSpecialityClinic('');
+        setNeedSpecificDoctor(false);
+        setSelectedSpecificDoctor('');
+
+        setLoading(true);
+        await fetchPatientEncounters(patient._id);
+        setLoading(false);
     };
 
     const handleSelectEncounter = async (encounter) => {
@@ -303,10 +326,14 @@ const NurseTriage = () => {
                 await fetchDrugAdministrationData(encounter._id);
             }
 
-            // Pre-fill doctor if assigned
+            // Pre-fill doctor and restrictions if assigned
             if (encounter.consultingPhysician) {
                 setSelectedDoctor(encounter.consultingPhysician._id || encounter.consultingPhysician);
             }
+            setNeedSpeciality(!!encounter.needSpeciality);
+            setSelectedSpecialityClinic(encounter.specialityClinic?._id || encounter.specialityClinic || '');
+            setNeedSpecificDoctor(!!encounter.needSpecificDoctor);
+            setSelectedSpecificDoctor(encounter.specificDoctor?._id || encounter.specificDoctor || '');
             // Parse nursing notes from JSON if exists
             if (encounter.nursingNotes) {
                 try {
@@ -770,17 +797,25 @@ const NurseTriage = () => {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
 
-            // Update Visit Status to 'with_doctor' AND save Nursing Notes & Assigned Physician
+            // Update Visit Status to 'with_doctor' AND save Nursing Notes & Assigned Physician & Restrictions
             await axios.put(`${backendUrl}/api/visits/${selectedEncounter._id}`, {
                 encounterStatus: 'with_doctor',
                 consultingPhysician: selectedDoctor, // Set the assigned doctor
-                nursingNotes: JSON.stringify(nursingNotesList) // Save structured notes
+                nursingNotes: JSON.stringify(nursingNotesList), // Save structured notes
+                needSpeciality,
+                specialityClinic: needSpeciality ? (selectedSpecialityClinic || undefined) : undefined,
+                needSpecificDoctor: needSpeciality && needSpecificDoctor,
+                specificDoctor: (needSpeciality && needSpecificDoctor) ? (selectedSpecificDoctor || undefined) : undefined
             }, config);
 
             toast.success('Triage completed! Patient sent to Doctor.');
 
             // Reset states
             setSelectedEncounter(null);
+            setNeedSpeciality(false);
+            setSelectedSpecialityClinic('');
+            setNeedSpecificDoctor(false);
+            setSelectedSpecificDoctor('');
             setVitals({
                 temperature: '',
                 bloodPressure: '',
@@ -925,32 +960,18 @@ const NurseTriage = () => {
                                                 </p>
                                             </div>
                                             <div className="flex flex-col items-end gap-2">
-                                                <span className={`px-3 py-1 rounded text-sm ${(encounter.paymentValidated || encounter.isANC)
-                                                    ? 'bg-green-100 text-green-800'
-                                                    : 'bg-yellow-100 text-yellow-800'
+                                                <span className={`px-3 py-1 rounded text-sm ${encounter.waiveConsultationFee
+                                                    ? 'bg-blue-100 text-blue-800'
+                                                    : (encounter.paymentValidated || encounter.isANC)
+                                                        ? 'bg-green-100 text-green-800'
+                                                        : 'bg-yellow-100 text-yellow-800'
                                                     }`}>
-                                                    {(encounter.paymentValidated || encounter.isANC) ? (encounter.isANC ? 'ANC' : 'Paid') : 'Pending'}
+                                                    {encounter.waiveConsultationFee 
+                                                        ? `Waived by ${encounter.waivedBy?.name || encounter.doctor?.name || 'Staff'}` 
+                                                        : (encounter.paymentValidated || encounter.isANC) 
+                                                            ? (encounter.isANC ? 'ANC' : 'Paid') 
+                                                            : 'Pending'}
                                                 </span>
-
-                                                {/* Admit Button (Active Outpatient/Emergency -> Inpatient) */}
-                                                {(encounter.type === 'Outpatient' || encounter.type === 'Emergency') && isEncounterActive(encounter) && (
-                                                    <button
-                                                        onClick={(e) => handleOpenConvertModal(e, encounter)}
-                                                        className="text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700 z-10"
-                                                    >
-                                                        Admit
-                                                    </button>
-                                                )}
-
-                                                {/* Discharge Button (Active Inpatients) */}
-                                                {encounter.type === 'Inpatient' && isEncounterActive(encounter) && (
-                                                    <button
-                                                        onClick={(e) => handleDischarge(e, encounter)}
-                                                        className="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700 z-10"
-                                                    >
-                                                        Discharge
-                                                    </button>
-                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -1272,25 +1293,130 @@ const NurseTriage = () => {
                                 </div>
                             )}
 
-                            {/* Assign Physician */}
-                            <div className="mb-6">
-                                <label className="block text-gray-700 mb-2 font-semibold">
-                                    Assign Consulting Physician *
+                            {/* Speciality Restrictions */}
+                            <div className="mb-6 bg-blue-50 p-4 rounded-lg border border-blue-200">
+                                <label className="flex items-center gap-3 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={needSpeciality}
+                                        onChange={(e) => {
+                                            setNeedSpeciality(e.target.checked);
+                                            if (!e.target.checked) {
+                                                setSelectedSpecialityClinic('');
+                                                setNeedSpecificDoctor(false);
+                                                setSelectedSpecificDoctor('');
+                                            }
+                                        }}
+                                        className="w-5 h-5 accent-blue-600"
+                                    />
+                                    <div>
+                                        <p className="font-bold text-blue-800 text-sm">🏥 Need Speciality Clinic Restriction?</p>
+                                        <p className="text-xs text-blue-600 mt-0.5">Restrict search and visibility of this patient to doctors within a specific clinic.</p>
+                                    </div>
                                 </label>
-                                <select
-                                    className="w-full border p-3 rounded"
-                                    value={selectedDoctor}
-                                    onChange={(e) => setSelectedDoctor(e.target.value)}
-                                    required
-                                >
-                                    <option value="">-- Select Doctor --</option>
-                                    {doctors.map(doctor => (
-                                        <option key={doctor._id} value={doctor._id}>
-                                            {doctor.name}
-                                        </option>
-                                    ))}
-                                </select>
+
+                                {needSpeciality && (
+                                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-semibold mb-1 text-blue-900">Select Speciality Clinic</label>
+                                            <select
+                                                className="w-full border p-2 rounded bg-white text-sm"
+                                                value={selectedSpecialityClinic}
+                                                onChange={(e) => {
+                                                    setSelectedSpecialityClinic(e.target.value);
+                                                    setNeedSpecificDoctor(false);
+                                                    setSelectedSpecificDoctor('');
+                                                    setSelectedDoctor(''); // reset consulting doctor
+                                                }}
+                                            >
+                                                <option value="">-- Select Speciality Clinic --</option>
+                                                {specialityClinics.map(sc => (
+                                                    <option key={sc._id} value={sc._id}>
+                                                        {sc.name} ({sc.department})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {selectedSpecialityClinic && (
+                                            <div className="flex flex-col justify-end">
+                                                <label className="flex items-center gap-3 cursor-pointer p-2 border rounded bg-white border-blue-200">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={needSpecificDoctor}
+                                                        onChange={(e) => {
+                                                            setNeedSpecificDoctor(e.target.checked);
+                                                            if (!e.target.checked) {
+                                                                setSelectedSpecificDoctor('');
+                                                            } else {
+                                                                setSelectedDoctor(''); // reset consulting doctor
+                                                            }
+                                                        }}
+                                                        className="w-4 h-4 accent-indigo-600"
+                                                    />
+                                                    <div>
+                                                        <p className="font-semibold text-indigo-900 text-xs">Need Specific Doctor?</p>
+                                                        <p className="text-[10px] text-indigo-600">Restrict access to a single doctor.</p>
+                                                    </div>
+                                                </label>
+                                            </div>
+                                        )}
+
+                                        {needSpecificDoctor && selectedSpecialityClinic && (
+                                            <div className="md:col-span-2">
+                                                <label className="block text-sm font-semibold mb-1 text-indigo-900">Select Specific Doctor</label>
+                                                <select
+                                                    className="w-full border p-2 rounded bg-white text-sm"
+                                                    value={selectedSpecificDoctor}
+                                                    onChange={(e) => {
+                                                        setSelectedSpecificDoctor(e.target.value);
+                                                        setSelectedDoctor(e.target.value); // Specific doctor is also the consulting physician
+                                                    }}
+                                                >
+                                                    <option value="">-- Select Doctor --</option>
+                                                    {doctors
+                                                        .filter(doc => (doc.assignedSpecialityClinic?._id || doc.assignedSpecialityClinic) === selectedSpecialityClinic)
+                                                        .map(doc => (
+                                                            <option key={doc._id} value={doc._id}>
+                                                                {doc.name}
+                                                            </option>
+                                                        ))
+                                                    }
+                                                </select>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
+
+                            {/* Assign Physician */}
+                            {!needSpecificDoctor && (
+                                <div className="mb-6">
+                                    <label className="block text-gray-700 mb-2 font-semibold">
+                                        Assign Consulting Physician *
+                                    </label>
+                                    <select
+                                        className="w-full border p-3 rounded bg-white"
+                                        value={selectedDoctor}
+                                        onChange={(e) => setSelectedDoctor(e.target.value)}
+                                        required
+                                    >
+                                        <option value="">-- Select Doctor --</option>
+                                        {doctors
+                                            .filter(doc => {
+                                                if (needSpeciality && selectedSpecialityClinic) {
+                                                    return (doc.assignedSpecialityClinic?._id || doc.assignedSpecialityClinic) === selectedSpecialityClinic;
+                                                }
+                                                return true;
+                                            })
+                                            .map(doctor => (
+                                                <option key={doctor._id} value={doctor._id}>
+                                                    {doctor.name}
+                                                </option>
+                                            ))}
+                                    </select>
+                                </div>
+                            )}
 
                             {/* Vitals Modal moved below */}
 
@@ -1327,6 +1453,22 @@ const NurseTriage = () => {
                                                 >
                                                     <FaNotesMedical /> Add Nurse Note
                                                 </button>
+                                                {(selectedEncounter.type === 'Outpatient' || selectedEncounter.type === 'Emergency') && (
+                                                    <button
+                                                        onClick={(e) => handleOpenConvertModal(e, selectedEncounter)}
+                                                        className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 flex items-center gap-2 text-sm"
+                                                    >
+                                                        Admit Patient
+                                                    </button>
+                                                )}
+                                                {selectedEncounter.type === 'Inpatient' && (
+                                                    <button
+                                                        onClick={(e) => handleDischarge(e, selectedEncounter)}
+                                                        className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 flex items-center gap-2 text-sm"
+                                                    >
+                                                        Discharge Patient
+                                                    </button>
+                                                )}
                                             </>
                                         )}
                                     </div>
@@ -1453,18 +1595,23 @@ const NurseTriage = () => {
                                 </div>
                             )}
 
-                            <div className="flex gap-4 mt-6">
-                                <button
-                                    onClick={async () => {
-                                        if (isReadOnly) return;
-                                        await handleFinishTriage();
-                                    }}
-                                    disabled={isReadOnly}
-                                    className={`flex-1 px-6 py-3 rounded font-bold flex items-center justify-center gap-2 ${isReadOnly ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 text-white'}`}
-                                >
-                                    <FaCheckCircle /> {isReadOnly ? 'Encounter Completed' : 'Finish Triage & Send to Doctor'}
-                                </button>
-                            </div>
+                             <div className="flex flex-col items-center mt-6 w-full">
+                                 <button
+                                     onClick={async () => {
+                                         if (isReadOnly || (!isReadOnly && (!existingVitals || existingVitals.length === 0))) return;
+                                         await handleFinishTriage();
+                                     }}
+                                     disabled={isReadOnly || (!isReadOnly && (!existingVitals || existingVitals.length === 0))}
+                                     className={`w-full px-6 py-3 rounded font-bold flex items-center justify-center gap-2 ${(isReadOnly || (!isReadOnly && (!existingVitals || existingVitals.length === 0))) ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-200' : 'bg-green-600 hover:bg-green-700 text-white shadow-md'}`}
+                                 >
+                                     <FaCheckCircle /> {isReadOnly ? 'Encounter Completed' : 'Finish Triage & Send to Doctor'}
+                                 </button>
+                                 {!isReadOnly && (!existingVitals || existingVitals.length === 0) && (
+                                     <p className="text-red-600 text-xs font-semibold text-center mt-2 flex items-center gap-1.5 bg-red-50 p-2 rounded border border-red-100 w-full justify-center">
+                                         ⚠️ You must record at least one vital sign before sending the patient to the doctor.
+                                     </p>
+                                 )}
+                             </div>
                         </div>
                     )}
                 </div>
@@ -1672,12 +1819,31 @@ const NurseTriage = () => {
                                 <p className="text-sm">Converting {encounterToConvert?.type} encounter to Inpatient admission.</p>
                             </div>
 
+                            {/* Deposit Balance status */}
+                            <div className="mb-4">
+                                <label className="block text-gray-700 font-bold mb-1">Financial Deposit Balance</label>
+                                <div className={`p-3 rounded border text-sm font-semibold flex justify-between items-center ${
+                                    (selectedPatient?.depositBalance || 0) <= 0 
+                                        ? 'bg-red-50 text-red-800 border-red-200' 
+                                        : 'bg-green-50 text-green-800 border-green-200'
+                                }`}>
+                                    <span>Current Deposit:</span>
+                                    <span className="text-base font-bold">₦{selectedPatient?.depositBalance?.toLocaleString() || '0'}</span>
+                                </div>
+                                {(selectedPatient?.depositBalance || 0) <= 0 && (
+                                    <p className="text-xs text-red-600 mt-1 font-semibold">
+                                        ⚠️ Patient has no deposit balance. Admission is blocked until a deposit is paid.
+                                    </p>
+                                )}
+                            </div>
+
                             <div className="mb-4">
                                 <label className="block text-gray-700 font-bold mb-2">Select Ward</label>
                                 <select
                                     className="w-full border p-2 rounded"
                                     value={selectedWard}
                                     onChange={(e) => setSelectedWard(e.target.value)}
+                                    disabled={(selectedPatient?.depositBalance || 0) <= 0}
                                 >
                                     <option value="">-- Select Ward --</option>
                                     {wards.map(ward => (
@@ -1728,8 +1894,8 @@ const NurseTriage = () => {
                                 </button>
                                 <button
                                     onClick={handleConvertFromNurse}
-                                    disabled={!selectedWard || !selectedBed}
-                                    className={`px-4 py-2 rounded text-white ${!selectedWard || !selectedBed ? 'bg-purple-300 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}
+                                    disabled={!selectedWard || !selectedBed || (selectedPatient?.depositBalance || 0) <= 0}
+                                    className={`px-4 py-2 rounded text-white ${(!selectedWard || !selectedBed || (selectedPatient?.depositBalance || 0) <= 0) ? 'bg-purple-300 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}
                                 >
                                     Admit Patient
                                 </button>

@@ -40,6 +40,7 @@ import VisitReport from './pages/VisitReport';
 import PatientManagement from './pages/PatientManagement';
 import PatientFinancialStatement from './pages/PatientFinancialStatement';
 import ClinicManagement from './pages/ClinicManagement';
+import SpecialityClinicManagement from './pages/SpecialityClinicManagement';
 import FrontDeskChargeManagement from './pages/FrontDeskChargeManagement';
 import WardManagement from './pages/WardManagement';
 import DrugMetadataManagement from './pages/DrugMetadataManagement';
@@ -86,6 +87,7 @@ function App() {
             <Route path="/front-desk" element={<FrontDeskDashboard />} />
             <Route path="/front-desk/patients" element={<PatientManagement />} />
             <Route path="/front-desk/family-files" element={<FamilyFileManagement />} />
+            <Route path="/front-desk/speciality-clinics" element={<SpecialityClinicManagement />} />
             <Route path="/cashier" element={<CashierDashboard />} />
 
             {/* Admin Routes */}
@@ -96,6 +98,7 @@ function App() {
             <Route path="/admin/visit-report" element={<VisitReport />} />
             <Route path="/admin/patients" element={<PatientManagement />} />
             <Route path="/admin/clinics" element={<ClinicManagement />} />
+            <Route path="/admin/speciality-clinics" element={<SpecialityClinicManagement />} />
             <Route path="/admin/patient-financial-statement" element={<PatientFinancialStatement />} />
             <Route path="/admin/family-files" element={<FamilyFileManagement />} />
             <Route path="/admin/front-desk-charges" element={<FrontDeskChargeManagement />} />

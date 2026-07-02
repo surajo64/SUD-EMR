@@ -16,6 +16,8 @@ router.route('/:id')
     .delete(protect, admin, deleteVisit);
 
 router.route('/:id/notes').post(protect, require('../controllers/visitController').addNote);
+router.route('/:id/ward-round-notes').post(protect, require('../controllers/visitController').addWardRoundNote);
+router.route('/:id/theatre-notes').post(protect, require('../controllers/visitController').saveTheatreNote);
 router.route('/:id/convert-to-inpatient').put(protect, require('../controllers/visitController').convertToInpatient);
 router.route('/:id/change-type').put(protect, require('../controllers/visitController').changeEncounterType);
 

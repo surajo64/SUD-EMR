@@ -23,11 +23,13 @@ const UserManagement = () => {
         password: '',
         role: '',
         assignedPharmacy: '',
-        labSpecialization: ''
+        labSpecialization: '',
+        assignedSpecialityClinic: ''
     });
     const [newPassword, setNewPassword] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [pharmacies, setPharmacies] = useState([]);
+    const [specialityClinics, setSpecialityClinics] = useState([]);
     const { user } = useContext(AuthContext);
     const { backendUrl } = useContext(AppContext);
     const { settings: hospitalSettings } = useHospitalSettings();
@@ -37,9 +39,10 @@ const UserManagement = () => {
     const [cardStaff, setCardStaff] = useState(null);
 
     useEffect(() => {
-        if (user && (user.role === 'admin' || user.role === 'super_admin' || user.role === 'readonly_admin')) {
+        if (user) {
             fetchUsers();
             fetchPharmacies();
+            fetchSpecialityClinics();
         }
     }, [user]);
 
@@ -64,6 +67,16 @@ const UserManagement = () => {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const { data } = await axios.get(`${backendUrl}/api/pharmacies`, config);
             setPharmacies(data);
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const fetchSpecialityClinics = async () => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get(`${backendUrl}/api/speciality-clinics?active=true`, config);
+            setSpecialityClinics(data);
         } catch (error) {
             console.error(error);
         }
@@ -94,7 +107,7 @@ const UserManagement = () => {
             await axios.post(`${backendUrl}/api/users`, newUser, config);
             toast.success('User created successfully!');
             setShowAddModal(false);
-            setNewUser({ name: '', email: '', password: '', role: '', assignedPharmacy: '', labSpecialization: '' });
+            setNewUser({ name: '', email: '', password: '', role: '', assignedPharmacy: '', labSpecialization: '', assignedSpecialityClinic: '' });
             fetchUsers();
         } catch (error) {
             console.error(error);
@@ -299,6 +312,7 @@ const UserManagement = () => {
                                             }`}>
                                             {u.role.replace('_', ' ').toUpperCase()}
                                             {u.labSpecialization && ` (${u.labSpecialization})`}
+                                            {u.assignedSpecialityClinic && ` (${u.assignedSpecialityClinic.name || u.assignedSpecialityClinic})`}
                                         </span>
                                     </td>
                                     <td className="p-4">
@@ -506,6 +520,24 @@ const UserManagement = () => {
                                     </select>
                                 </div>
                             )}
+                            {newUser.role === 'doctor' && (
+                                <div>
+                                    <label className="block text-sm font-semibold mb-1">Speciality Clinic</label>
+                                    <select
+                                        className="w-full border p-2 rounded"
+                                        value={newUser.assignedSpecialityClinic}
+                                        onChange={(e) => setNewUser({ ...newUser, assignedSpecialityClinic: e.target.value })}
+                                        required
+                                    >
+                                        <option value="">-- Select Speciality Clinic --</option>
+                                        {specialityClinics.map(sc => (
+                                            <option key={sc._id} value={sc._id}>
+                                                {sc.name} ({sc.department})
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                             <div className="flex gap-2">
                                 <button
                                     type="submit"
@@ -612,6 +644,23 @@ const UserManagement = () => {
                                         {pharmacies.map(p => (
                                             <option key={p._id} value={p._id}>
                                                 {p.name} {p.isMainPharmacy && '(Main)'}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                            {selectedUser.role === 'doctor' && (
+                                <div>
+                                    <label className="block text-sm font-semibold mb-1">Speciality Clinic</label>
+                                    <select
+                                        className="w-full border p-2 rounded"
+                                        value={selectedUser.assignedSpecialityClinic?._id || selectedUser.assignedSpecialityClinic || ''}
+                                        onChange={(e) => setSelectedUser({ ...selectedUser, assignedSpecialityClinic: e.target.value })}
+                                    >
+                                        <option value="">-- No Speciality Clinic --</option>
+                                        {specialityClinics.map(sc => (
+                                            <option key={sc._id} value={sc._id}>
+                                                {sc.name} ({sc.department})
                                             </option>
                                         ))}
                                     </select>

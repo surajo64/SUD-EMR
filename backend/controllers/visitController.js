@@ -1,11 +1,24 @@
 // models
 const Visit = require('../models/visitModel');
 
+// Helper to check for unpaid consultation charges
+const checkUnpaidConsultation = async (visitId) => {
+    if (!visitId) return false;
+    const Visit = require('../models/visitModel');
+    const visit = await Visit.findById(visitId);
+    if (visit && visit.waiveConsultationFee) return false;
+
+    const EncounterCharge = require('../models/encounterChargeModel');
+    const charges = await EncounterCharge.find({ encounter: visitId }).populate('charge');
+    return charges.some(c => c.charge && c.charge.type === 'consultation' && c.status === 'pending');
+};
+
 // @desc    Create new visit (Check-in)
 // @route   POST /api/visits
 // @access  Private
 const createVisit = async (req, res) => {
-    const { patientId, appointmentId, type, clinic, encounterType, reasonForVisit, ward, bed, isANC } = req.body;
+    const { patientId, appointmentId, type, clinic, encounterType, reasonForVisit, ward, bed, isANC,
+        waiveConsultationFee, needSpeciality, specialityClinic, needSpecificDoctor, specificDoctor } = req.body;
 
     // Check for existing visit today
     const startOfDay = new Date();
@@ -61,13 +74,19 @@ const createVisit = async (req, res) => {
         admissionDate: type === 'Inpatient' ? new Date() : undefined,
         ward: type === 'Inpatient' ? ward : undefined,
         bed: type === 'Inpatient' ? bed : undefined,
-        paymentValidated: ['External Investigation', 'External Pharmacy', 'External Lab/Radiology'].includes(type),
+        paymentValidated: ['External Investigation', 'External Pharmacy', 'External Lab/Radiology'].includes(type) || !!waiveConsultationFee,
         encounterStatus: ['External Investigation', 'External Pharmacy', 'External Lab/Radiology'].includes(type) 
             ? 'awaiting_services' 
-            : (type === 'Inpatient' ? 'admitted' : (req.body.encounterStatus || 'registered')),
+            : (type === 'Inpatient' ? 'admitted' : (req.body.encounterStatus || (waiveConsultationFee ? 'in_nursing' : 'registered'))),
         status: type === 'Inpatient' ? 'Admitted' : 'In Progress',
         reasonForVisit,
-        isANC: !!isANC
+        isANC: !!isANC,
+        waiveConsultationFee: !!waiveConsultationFee,
+        waivedBy: waiveConsultationFee ? req.user._id : undefined,
+        needSpeciality: !!needSpeciality,
+        specialityClinic: needSpeciality ? (specialityClinic || undefined) : undefined,
+        needSpecificDoctor: !!needSpeciality && !!needSpecificDoctor,
+        specificDoctor: (needSpeciality && needSpecificDoctor) ? (specificDoctor || undefined) : undefined
     });
 
     // Apply Initial Ward Charge for Inpatient
@@ -143,12 +162,67 @@ const getVisits = async (req, res) => {
         }
     }
 
+    // Filter for doctors based on speciality or doctor restrictions
+    if (req.user && req.user.role === 'doctor') {
+        const doctorClinicId = req.user.assignedSpecialityClinic?._id || req.user.assignedSpecialityClinic;
+        const doctorClinicName = req.user.assignedSpecialityClinic?.name;
+        const doctorId = req.user._id;
+
+        query.$and = query.$and || [];
+
+        // Speciality restriction visibility rule:
+        if (doctorClinicId) {
+            if (doctorClinicName === 'General Physician') {
+                // General Physician doctors can see:
+                // 1. Unrestricted general visits (needSpeciality !== true)
+                // 2. Visits restricted to General Physician speciality clinic
+                query.$and.push({
+                    $or: [
+                        { needSpeciality: { $ne: true } },
+                        { specialityClinic: doctorClinicId }
+                    ]
+                });
+            } else {
+                // Non-General Physician doctors (e.g. Obgyn, Pediatrics, etc.) can ONLY see:
+                // Visits explicitly restricted to their clinic
+                query.$and.push({
+                    needSpeciality: true,
+                    specialityClinic: doctorClinicId
+                });
+            }
+        } else {
+            // If the doctor has no assigned clinic, fallback to showing only general visits
+            query.$and.push({
+                needSpeciality: { $ne: true }
+            });
+        }
+
+        // Specific Doctor restriction
+        query.$and.push({
+            $or: [
+                { needSpecificDoctor: { $ne: true } },
+                { specificDoctor: doctorId }
+            ]
+        });
+    }
+
     const visits = await Visit.find(query)
         .populate('patient', 'name mrn age gender contact')
         .populate('doctor', 'name')
         .populate('clinic', 'name department')
-        .populate('ward', 'name dailyRate');
-    res.json(visits);
+        .populate('ward', 'name dailyRate')
+        .populate('waivedBy', 'name')
+        .populate('seenBy', 'name');
+
+    // Fetch unpaid consultation status for each visit
+    const visitsWithPaymentStatus = await Promise.all(visits.map(async (visit) => {
+        const hasUnpaid = await checkUnpaidConsultation(visit._id);
+        const visitObj = visit.toObject();
+        visitObj.hasUnpaidConsultation = hasUnpaid;
+        return visitObj;
+    }));
+
+    res.json(visitsWithPaymentStatus);
 };
 
 // @desc    Update visit (Clinical Data & Workflow)
@@ -159,6 +233,7 @@ const updateVisit = async (req, res) => {
         chiefComplaint, historyOfIllness, diagnosis, status, dischargeDate,
         encounterStatus, paymentValidated, receiptNumber, consultingPhysician, nursingNotes, isANC,
         subjective, objective, assessment, plan,
+        needSpeciality, specialityClinic, needSpecificDoctor, specificDoctor,
         // New structured clinical documentation fields
         presentingComplaints,
         historyOfPresentingComplaint,
@@ -184,9 +259,17 @@ const updateVisit = async (req, res) => {
         skin
     } = req.body;
 
+    console.log('updateVisit body restrictions:', { needSpeciality, specialityClinic, needSpecificDoctor, specificDoctor });
+
     const visit = await Visit.findById(req.params.id);
 
     if (visit) {
+        if (req.user.role === 'doctor') {
+            const hasUnpaid = await checkUnpaidConsultation(visit._id);
+            if (hasUnpaid) {
+                return res.status(402).json({ message: 'Access denied: Patient has unpaid consultation charges. Please direct them to the cashier.' });
+            }
+        }
         // Clinical Data
         if (chiefComplaint) visit.chiefComplaint = chiefComplaint;
         if (historyOfIllness) visit.historyOfIllness = historyOfIllness;
@@ -218,6 +301,22 @@ const updateVisit = async (req, res) => {
         if (consultingPhysician) visit.consultingPhysician = consultingPhysician;
         if (nursingNotes) visit.nursingNotes = nursingNotes;
         if (isANC !== undefined) visit.isANC = !!isANC;
+        if (needSpeciality !== undefined) {
+            visit.needSpeciality = !!needSpeciality;
+            if (needSpeciality) {
+                visit.specialityClinic = specialityClinic || undefined;
+                visit.needSpecificDoctor = !!needSpecificDoctor;
+                if (needSpecificDoctor) {
+                    visit.specificDoctor = specificDoctor || undefined;
+                } else {
+                    visit.specificDoctor = undefined;
+                }
+            } else {
+                visit.specialityClinic = undefined;
+                visit.needSpecificDoctor = false;
+                visit.specificDoctor = undefined;
+            }
+        }
 
         // Structured Clinical Documentation Fields
         if (presentingComplaints !== undefined) visit.presentingComplaints = presentingComplaints;
@@ -250,6 +349,12 @@ const updateVisit = async (req, res) => {
         if (assessment) visit.assessment = assessment;
         if (plan) visit.plan = plan;
 
+        if (req.user.role === 'doctor') {
+            visit.seen = true;
+            visit.seenBy = req.user._id;
+            visit.seenAt = new Date();
+        }
+
         if (status === 'Discharged' && !visit.dischargeDate) {
             visit.dischargeDate = new Date();
         }
@@ -270,10 +375,28 @@ const getVisitById = async (req, res) => {
         .populate('doctor', 'name')
         .populate('consultingPhysician', 'name')
         .populate('clinic', 'name department')
-        .populate('ward', 'name dailyRate');
+        .populate('ward', 'name dailyRate')
+        .populate('waivedBy', 'name')
+        .populate('seenBy', 'name');
 
     if (visit) {
-        res.json(visit);
+        if (req.user && req.user.role === 'doctor') {
+            const doctorClinicId = req.user.assignedSpecialityClinic?._id || req.user.assignedSpecialityClinic;
+            const doctorId = req.user._id;
+
+            if (visit.needSpeciality && visit.specialityClinic && visit.specialityClinic.toString() !== doctorClinicId?.toString()) {
+                return res.status(403).json({ message: 'Access denied: This encounter is restricted to a different speciality clinic.' });
+            }
+
+            if (visit.needSpecificDoctor && visit.specificDoctor && visit.specificDoctor.toString() !== doctorId.toString()) {
+                return res.status(403).json({ message: 'Access denied: This encounter is restricted to a specific doctor.' });
+            }
+        }
+
+        const hasUnpaid = await checkUnpaidConsultation(visit._id);
+        const visitObj = visit.toObject();
+        visitObj.hasUnpaidConsultation = hasUnpaid;
+        res.json(visitObj);
     } else {
         res.status(404).json({ message: 'Visit not found' });
     }
@@ -307,8 +430,17 @@ const getVisitsByPatient = async (req, res) => {
             .populate('doctor', 'name')
             .populate('consultingPhysician', 'name')
             .populate('clinic', 'name department')
-            .populate('ward', 'name');
-        res.json(visits);
+            .populate('ward', 'name')
+            .populate('waivedBy', 'name');
+
+        const visitsWithPaymentStatus = await Promise.all(visits.map(async (visit) => {
+            const hasUnpaid = await checkUnpaidConsultation(visit._id);
+            const visitObj = visit.toObject();
+            visitObj.hasUnpaidConsultation = hasUnpaid;
+            return visitObj;
+        }));
+
+        res.json(visitsWithPaymentStatus);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -324,6 +456,12 @@ const addNote = async (req, res) => {
         const visit = await Visit.findById(req.params.id);
 
         if (visit) {
+            if (req.user.role === 'doctor') {
+                const hasUnpaid = await checkUnpaidConsultation(visit._id);
+                if (hasUnpaid) {
+                    return res.status(402).json({ message: 'Access denied: Patient has unpaid consultation charges. Please direct them to the cashier.' });
+                }
+            }
             const newNote = {
                 text,
                 author: req.user.name,
@@ -353,6 +491,23 @@ const convertToInpatient = async (req, res) => {
 
         if (!visit) {
             return res.status(404).json({ message: 'Visit not found' });
+        }
+
+        const Patient = require('../models/patientModel');
+        const patient = await Patient.findById(visit.patient);
+        if (!patient) {
+            return res.status(404).json({ message: 'Patient not found' });
+        }
+
+        if ((patient.depositBalance || 0) <= 0) {
+            return res.status(400).json({ message: 'Admission denied: Patient must make a deposit at the cashier before admission.' });
+        }
+
+        if (req.user.role === 'doctor') {
+            const hasUnpaid = await checkUnpaidConsultation(visit._id);
+            if (hasUnpaid) {
+                return res.status(402).json({ message: 'Access denied: Patient has unpaid consultation charges. Please direct them to the cashier.' });
+            }
         }
 
         if (visit.type === 'Inpatient') {
@@ -396,8 +551,6 @@ const convertToInpatient = async (req, res) => {
         const updatedVisit = await visit.save();
 
         // 3. Generate Initial Bed Charge
-        const Patient = require('../models/patientModel');
-        const patient = await Patient.findById(visit.patient);
 
         let dailyFee = wardDoc.dailyRate; // Default fallback
 
@@ -439,6 +592,13 @@ const changeEncounterType = async (req, res) => {
 
         if (!visit) {
             return res.status(404).json({ message: 'Visit not found' });
+        }
+
+        if (req.user.role === 'doctor') {
+            const hasUnpaid = await checkUnpaidConsultation(visit._id);
+            if (hasUnpaid) {
+                return res.status(402).json({ message: 'Access denied: Patient has unpaid consultation charges. Please direct them to the cashier.' });
+            }
         }
 
         const oldType = visit.type;
@@ -530,6 +690,68 @@ const changeEncounterType = async (req, res) => {
     }
 };
 
+// @desc    Add a Ward Round Note to a visit
+// @route   POST /api/visits/:id/ward-round-notes
+// @access  Private (Doctor, Nurse)
+const addWardRoundNote = async (req, res) => {
+    const { text } = req.body;
+    if (!text || !text.trim()) {
+        return res.status(400).json({ message: 'Note text is required.' });
+    }
+    try {
+        const visit = await Visit.findById(req.params.id);
+        if (!visit) return res.status(404).json({ message: 'Visit not found' });
+
+        if (req.user.role === 'doctor') {
+            const hasUnpaid = await checkUnpaidConsultation(visit._id);
+            if (hasUnpaid) {
+                return res.status(402).json({ message: 'Access denied: Patient has unpaid consultation charges.' });
+            }
+        }
+
+        const note = { text, author: req.user.name, role: req.user.role, createdAt: new Date() };
+        visit.wardRoundNotes.push(note);
+        await visit.save();
+        res.status(201).json(visit.wardRoundNotes);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Save a Theatre Operation Note to a visit (upsert by _id or create new)
+// @route   POST /api/visits/:id/theatre-notes
+// @access  Private (Doctor)
+const saveTheatreNote = async (req, res) => {
+    try {
+        const visit = await Visit.findById(req.params.id);
+        if (!visit) return res.status(404).json({ message: 'Visit not found' });
+
+        const noteData = {
+            ...req.body,
+            createdBy: req.user.name,
+            updatedBy: req.user.name,
+            updatedAt: new Date(),
+        };
+
+        const noteId = req.body._id;
+        if (noteId) {
+            // Update existing note
+            const idx = visit.theatreNotes.findIndex(n => n._id.toString() === noteId);
+            if (idx >= 0) {
+                Object.assign(visit.theatreNotes[idx], noteData);
+            }
+        } else {
+            noteData.createdAt = new Date();
+            visit.theatreNotes.push(noteData);
+        }
+
+        await visit.save();
+        res.status(201).json(visit.theatreNotes);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     createVisit,
     getVisits,
@@ -538,7 +760,10 @@ module.exports = {
     deleteVisit,
     getVisitsByPatient,
     addNote,
+    addWardRoundNote,
+    saveTheatreNote,
     convertToInpatient,
     changeEncounterType
 };
+
 

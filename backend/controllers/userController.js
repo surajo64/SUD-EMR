@@ -12,7 +12,7 @@ const generateToken = (id) => {
 // @route   POST /api/users
 // @access  Public (or Admin only in real app)
 const registerUser = async (req, res) => {
-    const { name, email, password, role, assignedPharmacy, labSpecialization } = req.body;
+    const { name, email, password, role, assignedPharmacy, labSpecialization, assignedSpecialityClinic } = req.body;
 
     if (!name || !email || !password || !role) {
         return res.status(400).json({ message: 'Please add all fields' });
@@ -36,6 +36,10 @@ const registerUser = async (req, res) => {
         userData.assignedPharmacy = assignedPharmacy;
     }
 
+    if (assignedSpecialityClinic) {
+        userData.assignedSpecialityClinic = assignedSpecialityClinic;
+    }
+
     if (labSpecialization) {
         userData.labSpecialization = labSpecialization;
     }
@@ -49,6 +53,7 @@ const registerUser = async (req, res) => {
             email: user.email,
             role: user.role,
             assignedPharmacy: user.assignedPharmacy,
+            assignedSpecialityClinic: user.assignedSpecialityClinic,
             labSpecialization: user.labSpecialization,
             token: generateToken(user.id),
         });
@@ -57,13 +62,12 @@ const registerUser = async (req, res) => {
     }
 };
 
-// @desc    Authenticate a user
-// @route   POST /api/users/login
-// @access  Public
 const loginUser = async (req, res) => {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email }).populate('assignedPharmacy', 'name isMainPharmacy');
+    const user = await User.findOne({ email })
+        .populate('assignedPharmacy', 'name isMainPharmacy')
+        .populate('assignedSpecialityClinic', 'name department');
 
     if (user && (await user.matchPassword(password))) {
         if (!user.isActive) {
@@ -75,6 +79,7 @@ const loginUser = async (req, res) => {
             email: user.email,
             role: user.role,
             assignedPharmacy: user.assignedPharmacy,
+            assignedSpecialityClinic: user.assignedSpecialityClinic,
             labSpecialization: user.labSpecialization,
             token: generateToken(user.id),
         });
@@ -98,6 +103,7 @@ const getAllUsers = async (req, res) => {
         const users = await User.find({})
             .select('-password')
             .populate('assignedPharmacy', 'name isMainPharmacy')
+            .populate('assignedSpecialityClinic', 'name department')
             .sort({ createdAt: -1 });
         res.json(users);
     } catch (error) {
@@ -110,7 +116,10 @@ const getAllUsers = async (req, res) => {
 // @access  Private
 const getDoctors = async (req, res) => {
     try {
-        const doctors = await User.find({ role: 'doctor' }).select('-password').sort({ name: 1 });
+        const doctors = await User.find({ role: 'doctor' })
+            .select('-password')
+            .populate('assignedSpecialityClinic', 'name department')
+            .sort({ name: 1 });
         res.json(doctors);
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -122,7 +131,7 @@ const getDoctors = async (req, res) => {
 // @access  Private (Admin only)
 const updateUser = async (req, res) => {
     try {
-        const { name, email, role, isActive, assignedPharmacy, labSpecialization } = req.body;
+        const { name, email, role, isActive, assignedPharmacy, labSpecialization, assignedSpecialityClinic } = req.body;
 
         const user = await User.findById(req.params.id);
 
@@ -148,12 +157,18 @@ const updateUser = async (req, res) => {
             user.assignedPharmacy = assignedPharmacy || null;
         }
 
+        // Handle speciality clinic assignment
+        if (assignedSpecialityClinic !== undefined) {
+            user.assignedSpecialityClinic = assignedSpecialityClinic || null;
+        }
+
         if (labSpecialization !== undefined) {
             user.labSpecialization = labSpecialization;
         }
 
         const updatedUser = await user.save();
         await updatedUser.populate('assignedPharmacy', 'name isMainPharmacy');
+        await updatedUser.populate('assignedSpecialityClinic', 'name department');
 
         res.json({
             _id: updatedUser._id,
@@ -162,6 +177,7 @@ const updateUser = async (req, res) => {
             role: updatedUser.role,
             isActive: updatedUser.isActive,
             assignedPharmacy: updatedUser.assignedPharmacy,
+            assignedSpecialityClinic: updatedUser.assignedSpecialityClinic,
             labSpecialization: updatedUser.labSpecialization
         });
     } catch (error) {

@@ -9,7 +9,7 @@ import { checkRange, getRangeColorClass } from '../utils/labUtils';
 import Layout from '../components/Layout';
 import LoadingOverlay from '../components/loadingOverlay';
 import AppointmentModal from '../components/AppointmentModal';
-import { FaTimes, FaFileMedical, FaPills, FaChevronDown, FaChevronUp, FaHeartbeat, FaNotesMedical, FaProcedures, FaXRay, FaVial, FaUserMd, FaCalendarPlus, FaPlus, FaTrash, FaEdit, FaSearch, FaClock, FaChevronRight, FaFileAlt, FaCheckCircle, FaInfoCircle } from 'react-icons/fa';
+import { FaTimes, FaFileMedical, FaPills, FaChevronDown, FaChevronUp, FaHeartbeat, FaNotesMedical, FaProcedures, FaXRay, FaVial, FaUserMd, FaCalendarPlus, FaPlus, FaTrash, FaEdit, FaSearch, FaClock, FaChevronRight, FaFileAlt, FaCheckCircle, FaInfoCircle, FaDollarSign } from 'react-icons/fa';
 import icd11Data from '../data/icd11.json';
 
 const PatientDetails = () => {
@@ -352,9 +352,28 @@ const PatientDetails = () => {
     const [currentLabOrders, setCurrentLabOrders] = useState([]);
     const [currentRadOrders, setCurrentRadOrders] = useState([]);
     const [currentPrescriptions, setCurrentPrescriptions] = useState([]);
-    const [clinicalNotes, setClinicalNotes] = useState([]); // New state for clinical notes
-    const [newNote, setNewNote] = useState(''); // State for new note input
-    const [showNoteModal, setShowNoteModal] = useState(false); // Modal for adding note
+    const [clinicalNotes, setClinicalNotes] = useState([]); // Other Notes (general)
+    const [newNote, setNewNote] = useState('');
+    const [showNoteModal, setShowNoteModal] = useState(false);
+    // Ward Round Notes
+    const [wardRoundNotes, setWardRoundNotes] = useState([]);
+    const [newWardRoundNote, setNewWardRoundNote] = useState('');
+    const [showWardRoundModal, setShowWardRoundModal] = useState(false);
+    // Theatre Operation Notes
+    const [theatreNotes, setTheatreNotes] = useState([]);
+    const [showTheatreModal, setShowTheatreModal] = useState(false);
+    const [editingTheatreNote, setEditingTheatreNote] = useState(null);
+    const emptyTheatreNote = {
+        dateOfSurgery: '', startTime: '', endTime: '', theatreName: '',
+        surgeryType: 'Elective', procedurePerformed: '', preOperativeDiagnosis: '',
+        postOperativeDiagnosis: '', operativeFindings: '', operativeNotes: '',
+        estimatedBloodLoss: '', bloodTransfusion: '', complications: '', drains: '',
+        specimens: '', implants: '', woundClosure: '', postOperativeCondition: '',
+        postOperativeInstructions: '', leadSurgeon: '', assistantSurgeons: '',
+        anaesthetist: '', scrubNurse: '', circulatingNurse: '', anaesthesiaType: '',
+        anaesthesiaNote: '', digitalSignature: '', status: 'Draft'
+    };
+    const [theatreNoteForm, setTheatreNoteForm] = useState({ ...emptyTheatreNote });
     const [dispensedPrescriptions, setDispensedPrescriptions] = useState([]);
     const [administrationHistory, setAdministrationHistory] = useState([]);
 
@@ -645,8 +664,12 @@ const PatientDetails = () => {
             // Prescriptions
             setCurrentPrescriptions(rxRes.data);
 
-            // Clinical Notes
+            // Clinical Notes (Other Notes)
             setClinicalNotes(visitRes.data.notes || []);
+            // Ward Round Notes
+            setWardRoundNotes(visitRes.data.wardRoundNotes || []);
+            // Theatre Notes
+            setTheatreNotes(visitRes.data.theatreNotes || []);
 
             // Update encounter with fully-populated data (so consultingPhysician.name is available)
             setEncounter(visitRes.data);
@@ -1592,6 +1615,15 @@ const PatientDetails = () => {
                             <p className="text-sm text-blue-600">
                                 {viewingPastEncounter ? 'Viewing Past Encounter' : 'Active Encounter'}: {encounter.type} - {new Date(encounter.createdAt).toLocaleDateString()}
                             </p>
+                            {encounter.waiveConsultationFee ? (
+                                <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-0.5 rounded shadow-sm">
+                                    Consultation Fee Waived by {encounter.waivedBy?.name || encounter.doctor?.name || 'Staff'}
+                                </span>
+                            ) : (
+                                <span className={`text-xs font-semibold px-2 py-0.5 rounded shadow-sm ${encounter.isANC || encounter.paymentValidated ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                    {encounter.isANC ? 'ANC' : (encounter.paymentValidated ? 'Paid' : 'Unpaid')}
+                                </span>
+                            )}
                             {viewingPastEncounter && (
                                 <button onClick={handleBackToActive} className="text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded">
                                     Back to Active
@@ -1626,66 +1658,79 @@ const PatientDetails = () => {
                 </div>
             </div>
             {
-                (user.role === 'doctor' || user.role === 'receptionist') && (
-                    <div className="flex justify-end mb-4">
+                ['doctor', 'nurse', 'receptionist', 'admin'].includes(user.role) && (
+                    <div className="flex justify-end mb-4 font-sans">
                         {user.role === 'doctor' && (
                             <button
                                 onClick={() => setShowAppointmentModal(true)}
-                                className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-700"
+                                className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-700 transition shadow-sm font-semibold text-sm"
                             >
                                 <FaCalendarPlus /> Schedule Follow-up
                             </button>
                         )}
-                        <button
-                            onClick={() => {
-                                if (user.role === 'receptionist') {
-                                    setActiveTab('referrals');
-                                    document.getElementById('visit-sections')?.scrollIntoView({ behavior: 'smooth' });
-                                    return;
-                                }
-                                if (encounter) {
-                                    const diagStr = (encounter.diagnosis || []).map(d => `${d.code}: ${d.description}`).join(', ');
+                        {['doctor', 'receptionist'].includes(user.role) && (
+                            <button
+                                onClick={() => {
+                                    if (user.role === 'receptionist') {
+                                        setActiveTab('referrals');
+                                        document.getElementById('visit-sections')?.scrollIntoView({ behavior: 'smooth' });
+                                        return;
+                                    }
+                                    if (encounter) {
+                                        const diagStr = (encounter.diagnosis || []).map(d => `${d.code}: ${d.description}`).join(', ');
 
-                                    const historyParts = [];
+                                        const historyParts = [];
 
-                                    // Encounter (SOAP) Details
-                                    if (encounter.presentingComplaints) historyParts.push(`Presenting Complaints: ${encounter.presentingComplaints}`);
-                                    if (encounter.historyOfPresentingComplaint) historyParts.push(`HPC: ${encounter.historyOfPresentingComplaint}`);
-                                    if (encounter.pastMedicalSurgicalHistory) historyParts.push(`PMH: ${encounter.pastMedicalSurgicalHistory}`);
-                                    if (encounter.socialFamilyHistory) historyParts.push(`Social/Family: ${encounter.socialFamilyHistory}`);
-                                    if (encounter.drugsHistory) historyParts.push(`Drug History: ${encounter.drugsHistory}`);
+                                        // Encounter (SOAP) Details
+                                        if (encounter.presentingComplaints) historyParts.push(`Presenting Complaints: ${encounter.presentingComplaints}`);
+                                        if (encounter.historyOfPresentingComplaint) historyParts.push(`HPC: ${encounter.historyOfPresentingComplaint}`);
+                                        if (encounter.pastMedicalSurgicalHistory) historyParts.push(`PMH: ${encounter.pastMedicalSurgicalHistory}`);
+                                        if (encounter.socialFamilyHistory) historyParts.push(`Social/Family: ${encounter.socialFamilyHistory}`);
+                                        if (encounter.drugsHistory) historyParts.push(`Drug History: ${encounter.drugsHistory}`);
 
-                                    // Add all clinical notes
-                                    if (clinicalNotes && clinicalNotes.length > 0) {
-                                        historyParts.push('\n--- Clinical Notes ---');
-                                        clinicalNotes.forEach(note => {
-                                            historyParts.push(`- ${note.text}`);
+                                        // Add all clinical notes
+                                        if (clinicalNotes && clinicalNotes.length > 0) {
+                                            historyParts.push('\n--- Clinical Notes ---');
+                                            clinicalNotes.forEach(note => {
+                                                historyParts.push(`- ${note.text}`);
+                                            });
+                                        }
+
+                                        // Add Vitals
+                                        if (vitals) {
+                                            historyParts.push('\n--- Recent Vitals ---');
+                                            if (vitals.bloodPressure) historyParts.push(`BP: ${vitals.bloodPressure}`);
+                                            if (vitals.heartRate) historyParts.push(`HR: ${vitals.heartRate} bpm`);
+                                            if (vitals.temperature) historyParts.push(`Temp: ${vitals.temperature} °C`);
+                                            if (vitals.weight) historyParts.push(`Weight: ${vitals.weight} kg`);
+                                            if (vitals.respiratoryRate) historyParts.push(`RR: ${vitals.respiratoryRate} resp/min`);
+                                            if (vitals.spo2) historyParts.push(`SpO2: ${vitals.spo2}%`);
+                                        }
+
+                                        setReferralData({
+                                            ...referralData,
+                                            diagnosis: diagStr || '',
+                                            medicalHistory: historyParts.join('\n')
                                         });
                                     }
-
-                                    // Add Vitals
-                                    if (vitals) {
-                                        historyParts.push('\n--- Recent Vitals ---');
-                                        if (vitals.bloodPressure) historyParts.push(`BP: ${vitals.bloodPressure}`);
-                                        if (vitals.heartRate) historyParts.push(`HR: ${vitals.heartRate} bpm`);
-                                        if (vitals.temperature) historyParts.push(`Temp: ${vitals.temperature} °C`);
-                                        if (vitals.weight) historyParts.push(`Weight: ${vitals.weight} kg`);
-                                        if (vitals.respiratoryRate) historyParts.push(`RR: ${vitals.respiratoryRate} resp/min`);
-                                        if (vitals.spo2) historyParts.push(`SpO2: ${vitals.spo2}%`);
-                                    }
-
-                                    setReferralData({
-                                        ...referralData,
-                                        diagnosis: diagStr || '',
-                                        medicalHistory: historyParts.join('\n')
-                                    });
-                                }
-                                setShowReferralModal(true);
-                            }}
-                            className="bg-purple-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-purple-700 ml-2"
-                        >
-                            <FaFileMedical /> {user.role === 'receptionist' ? 'View Referrals' : 'Referral'}
-                        </button>
+                                    setShowReferralModal(true);
+                                }}
+                                className="bg-purple-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-purple-700 ml-2 transition shadow-sm font-semibold text-sm"
+                            >
+                                <FaFileMedical /> {user.role === 'receptionist' ? 'View Referrals' : 'Referral'}
+                            </button>
+                        )}
+                        {['doctor', 'nurse', 'receptionist', 'admin'].includes(user.role) && 
+                         ['Outpatient', 'Emergency'].includes(encounter?.type) && 
+                         isEncounterActive() && 
+                         !viewingPastEncounter && (
+                            <button
+                                onClick={() => setShowConvertModal(true)}
+                                className="bg-emerald-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-emerald-700 ml-2 transition shadow-sm font-semibold text-sm"
+                            >
+                                <FaProcedures /> Admit Patient
+                            </button>
+                        )}
                     </div>
                 )
             }
@@ -1705,8 +1750,37 @@ const PatientDetails = () => {
 
                     {encounter && (
                         <div className="bg-white rounded shadow">
-                            {/* Tab Navigation */}
-                            <div className="border-b flex">
+                            {encounter.hasUnpaidConsultation && user.role === 'doctor' ? (
+                                <div className="p-8 text-center max-w-2xl mx-auto my-12 animate-fade-in">
+                                    <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm border border-red-100">
+                                        <FaDollarSign size={40} className="animate-pulse" />
+                                    </div>
+                                    <h3 className="text-2xl font-bold text-gray-800 mb-3">Encounter Access Locked</h3>
+                                    <p className="text-gray-600 mb-6 leading-relaxed">
+                                        This patient has unpaid consultation charges for the current encounter. 
+                                        Clinical access is restricted until payment is processed at the cashier.
+                                    </p>
+                                    <div className="bg-red-50 border border-red-100 rounded-lg p-4 mb-6 inline-block text-left">
+                                        <p className="text-sm font-semibold text-red-800 flex items-center gap-2">
+                                            <FaInfoCircle /> Required Action:
+                                        </p>
+                                        <p className="text-xs text-red-700 mt-1">
+                                            Please direct the patient to the cashier to validate and pay their consultation fee. Once paid, this page will automatically unlock.
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <button 
+                                            onClick={fetchPatient} 
+                                            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 rounded-lg transition shadow-sm flex items-center gap-2 mx-auto"
+                                        >
+                                            <FaClock /> Check Payment Status
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Tab Navigation */}
+                                    <div className="border-b flex">
                                 {/* Vitals & SOAP - Hidden for lab_technician, radiologist, and pharmacist */}
                                 {!['lab_technician', 'lab_scientist', 'radiologist', 'pharmacist'].includes(user.role) && (
                                     <>
@@ -1763,13 +1837,13 @@ const PatientDetails = () => {
                                     <FaFileMedical /> Referrals ({referrals.length})
                                 </button>
 
-                                {/* Clinical Notes - Show for doctors, nurses, and receptionists (read-only), ONLY for Inpatient */}
+                                {/* Inpatient Notes Tab - formerly Other Notes, Ward Round, Theatre */}
                                 {['doctor', 'nurse', 'receptionist'].includes(user.role) && encounter?.type === 'Inpatient' && (
                                     <button
                                         onClick={() => setActiveTab('notes')}
                                         className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'notes' ? 'border-b-2 border-yellow-600 text-yellow-600' : 'text-gray-600 hover:text-gray-800'}`}
                                     >
-                                        <FaFileMedical /> Ward Round Notes ({clinicalNotes.length})
+                                        <FaFileMedical /> Inpatient Notes ({clinicalNotes.length + wardRoundNotes.length + theatreNotes.length})
                                     </button>
                                 )}
                             </div>
@@ -2760,49 +2834,61 @@ const PatientDetails = () => {
                                     </div>
                                 )}
 
-                                {/* Clinical Notes Tab */}
+                                {/* Inpatient Notes Tab - unified tab for ward round notes & theatre operation notes */}
                                 {activeTab === 'notes' && (
                                     <div>
-                                        <div className="flex justify-between items-center mb-4">
-                                            <h3 className="text-xl font-bold">Ward Round Notes</h3>
-                                            <div className="flex gap-2">
-                                                {/* Show Discharge button only if not already discharged */}
+                                        {/* Header: title + action buttons */}
+                                        <div className="flex flex-wrap justify-between items-center mb-5 gap-3">
+                                            <h3 className="text-xl font-bold text-gray-800">Inpatient Notes</h3>
+                                            <div className="flex flex-wrap gap-2">
+                                                {/* Discharge button */}
                                                 {encounter.encounterStatus !== 'discharged' && (
                                                     <button
                                                         onClick={handleDischarge}
                                                         disabled={!canEdit}
-                                                        className={`px-4 py-2 rounded flex items-center gap-2 ${!canEdit
-                                                            ? 'bg-gray-300 cursor-not-allowed text-gray-500'
-                                                            : 'bg-red-600 text-white hover:bg-red-700'
-                                                            }`}
+                                                        className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${
+                                                            !canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-red-600 text-white hover:bg-red-700'
+                                                        }`}
                                                     >
                                                         <FaTimes />
                                                         {encounter.encounterStatus === 'admitted' ? 'Discharge Patient' : 'Mark as Discharged'}
                                                     </button>
                                                 )}
-
-                                                {/* Show discharged status if already discharged */}
                                                 {encounter.encounterStatus === 'discharged' && (
-                                                    <div className="px-4 py-2 bg-green-600 text-white rounded flex items-center gap-2">
+                                                    <div className="px-4 py-2 bg-green-600 text-white rounded flex items-center gap-2 text-sm">
                                                         <FaTimes /> Discharged
                                                     </div>
                                                 )}
-
-                                                <button
-                                                    onClick={() => setShowNoteModal(true)}
-                                                    disabled={!canEdit}
-                                                    className={`px-4 py-2 rounded flex items-center gap-2 ${!canEdit
-                                                        ? 'bg-gray-300 cursor-not-allowed text-gray-500'
-                                                        : 'bg-yellow-600 text-white hover:bg-yellow-700'
+                                                {/* Add Ward Round Note button — doctors & nurses */}
+                                                {['doctor', 'nurse'].includes(user.role) && (
+                                                    <button
+                                                        onClick={() => setShowWardRoundModal(true)}
+                                                        disabled={!canEdit}
+                                                        className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${
+                                                            !canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-teal-600 text-white hover:bg-teal-700'
                                                         }`}
-                                                >
-                                                    <FaPlus /> Add Ward Round Note
-                                                </button>
+                                                    >
+                                                        <FaPlus /> Add Ward Round Note
+                                                    </button>
+                                                )}
+                                                {/* Add Theatre Note button — doctors only */}
+                                                {user.role === 'doctor' && (
+                                                    <button
+                                                        onClick={() => { setTheatreNoteForm({ ...emptyTheatreNote }); setEditingTheatreNote(null); setShowTheatreModal(true); }}
+                                                        disabled={!canEdit}
+                                                        className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${
+                                                            !canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-red-700 text-white hover:bg-red-800'
+                                                        }`}
+                                                    >
+                                                        <FaPlus /> Add Theatre Note
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
 
+                                        {/* Admission Info Banner */}
                                         {encounter.ward && (
-                                            <div className="bg-blue-50 p-4 rounded mb-4 border border-blue-200">
+                                            <div className="bg-blue-50 p-4 rounded mb-5 border border-blue-200">
                                                 <p className="font-semibold text-blue-800">
                                                     <FaProcedures className="inline mr-2" />
                                                     Admitted In:
@@ -2812,8 +2898,6 @@ const PatientDetails = () => {
                                                     Bed: {encounter.bed || 'N/A'} |
                                                     Admitted On: {encounter.admissionDate ? new Date(encounter.admissionDate).toLocaleString() : 'N/A'}
                                                 </p>
-
-                                                {/* Discharge information - only show when discharged */}
                                                 {encounter.encounterStatus === 'discharged' && (
                                                     <div className="mt-3 pt-3 border-t border-blue-200">
                                                         <p className="font-semibold text-green-800">
@@ -2830,18 +2914,7 @@ const PatientDetails = () => {
                                             </div>
                                         )}
 
-
-                                        {/* Convert to Inpatient Button - Nurse/Receptionist Only */}
-                                        {['receptionist', 'admin'].includes(user.role) && (encounter?.type === 'Outpatient' || encounter?.type === 'Emergency') && isEncounterActive() && !viewingPastEncounter && (
-                                            <button
-                                                onClick={() => setShowConvertModal(true)}
-                                                className="bg-purple-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-purple-700 transition"
-                                            >
-                                                <FaProcedures /> Convert to Inpatient
-                                            </button>
-                                        )}
-
-                                        {/* End Visit Button - Admins only */}
+                                        {/* Edit Encounter Status Modal */}
                                         {showEditEncounterModal && (
                                             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                                                 <div className="bg-white p-6 rounded shadow-lg w-96">
@@ -2862,41 +2935,162 @@ const PatientDetails = () => {
                                                         <option value="discharged">Discharged</option>
                                                     </select>
                                                     <div className="flex justify-end space-x-2">
-                                                        <button
-                                                            className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
-                                                            onClick={() => setShowEditEncounterModal(false)}
-                                                        >
-                                                            Cancel
-                                                        </button>
-                                                        <button
-                                                            className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-                                                            onClick={handleEditEncounterSave}
-                                                        >
-                                                            Save
-                                                        </button>
+                                                        <button className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400" onClick={() => setShowEditEncounterModal(false)}>Cancel</button>
+                                                        <button className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700" onClick={handleEditEncounterSave}>Save</button>
                                                     </div>
                                                 </div>
                                             </div>
                                         )}
 
-                                        {clinicalNotes.length > 0 ? (
-                                            <div className="space-y-4">
-                                                {clinicalNotes.map((note, index) => (
-                                                    <div key={index} className="bg-yellow-50 p-4 rounded border border-yellow-200">
-                                                        <p className="whitespace-pre-wrap text-gray-800">{note.text}</p>
-                                                        <div className="mt-2 text-xs text-gray-500 flex justify-between border-t border-yellow-200 pt-2">
-                                                            <span>By: {note.author} ({note.role})</span>
-                                                            <span>{new Date(note.createdAt).toLocaleString()}</span>
-                                                        </div>
-                                                    </div>
-                                                ))}
+                                        {/* ── SECTION 1: Ward Round Notes ── */}
+                                        <div className="mb-8">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <FaNotesMedical className="text-teal-600" />
+                                                <h4 className="text-base font-bold text-teal-700">Ward Round Notes</h4>
+                                                <span className="text-xs bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-semibold">{wardRoundNotes.length}</span>
                                             </div>
-                                        ) : (
-                                            <p className="text-gray-500">No ward round notes yet.</p>
+                                            {wardRoundNotes.length > 0 ? (
+                                                <div className="space-y-3">
+                                                    {[...wardRoundNotes].reverse().map((note, idx) => (
+                                                        <div key={idx} className="bg-teal-50 p-4 rounded-lg border border-teal-200">
+                                                            <p className="whitespace-pre-wrap text-gray-800 text-sm">{note.text}</p>
+                                                            <div className="mt-2 text-xs text-gray-500 flex justify-between border-t border-teal-200 pt-2">
+                                                                <span>By: {note.author} ({note.role})</span>
+                                                                <span>{new Date(note.createdAt).toLocaleString()}</span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p className="text-sm text-gray-400 italic">No ward round notes recorded yet.</p>
+                                            )}
+                                        </div>
+
+                                        {/* ── SECTION 2: Theatre Operation Notes ── */}
+                                        <div className="mb-8">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <FaProcedures className="text-red-600" />
+                                                <h4 className="text-base font-bold text-red-700">Theatre Operation Notes</h4>
+                                                <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-semibold">{theatreNotes.length}</span>
+                                            </div>
+                                            {theatreNotes.length > 0 ? (
+                                                <div className="space-y-5">
+                                                    {[...theatreNotes].reverse().map((note, idx) => (
+                                                        <div key={idx} className="border border-red-200 rounded-lg overflow-hidden">
+                                                            <div className="bg-red-700 text-white px-5 py-3 flex justify-between items-center">
+                                                                <div>
+                                                                    <p className="font-bold">{note.procedurePerformed || 'Operation Note'}</p>
+                                                                    <p className="text-xs opacity-80">
+                                                                        {note.dateOfSurgery ? new Date(note.dateOfSurgery).toLocaleDateString() : 'Date N/A'}
+                                                                        {note.surgeryType && ` • ${note.surgeryType}`}
+                                                                    </p>
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className={`text-xs px-3 py-1 rounded-full font-bold ${
+                                                                        note.status === 'Reviewed' ? 'bg-green-400 text-green-900' :
+                                                                        note.status === 'Completed' ? 'bg-blue-300 text-blue-900' :
+                                                                        'bg-yellow-300 text-yellow-900'
+                                                                    }`}>{note.status}</span>
+                                                                    {canEdit && (
+                                                                        <button
+                                                                            onClick={() => { setTheatreNoteForm({ ...note }); setEditingTheatreNote(note._id); setShowTheatreModal(true); }}
+                                                                            className="text-white hover:text-yellow-300 transition" title="Edit"
+                                                                        >
+                                                                            <FaEdit />
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-gray-200">
+                                                                {[
+                                                                    ['Pre-operative Diagnosis', note.preOperativeDiagnosis],
+                                                                    ['Post-operative Diagnosis', note.postOperativeDiagnosis],
+                                                                    ['Procedure Performed', note.procedurePerformed],
+                                                                    ['Operative Findings', note.operativeFindings],
+                                                                    ['Estimated Blood Loss', note.estimatedBloodLoss],
+                                                                    ['Blood Transfusion', note.bloodTransfusion],
+                                                                    ['Complications', note.complications],
+                                                                    ['Drains', note.drains],
+                                                                    ['Specimens', note.specimens],
+                                                                    ['Implants', note.implants],
+                                                                    ['Wound Closure', note.woundClosure],
+                                                                    ['Post-op Condition', note.postOperativeCondition],
+                                                                    ['Lead Surgeon', note.leadSurgeon],
+                                                                    ['Assistant Surgeons', note.assistantSurgeons],
+                                                                    ['Anaesthetist', note.anaesthetist],
+                                                                    ['Scrub Nurse', note.scrubNurse],
+                                                                    ['Circulating Nurse', note.circulatingNurse],
+                                                                    ['Anaesthesia Type', note.anaesthesiaType],
+                                                                    ['Theatre', note.theatreName],
+                                                                    ['Start / End Time', note.startTime && note.endTime ? `${note.startTime} - ${note.endTime}` : (note.startTime || note.endTime || '')],
+                                                                ].filter(([, v]) => v).map(([label, value]) => (
+                                                                    <div key={label} className="bg-white p-3">
+                                                                        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">{label}</p>
+                                                                        <p className="text-sm text-gray-800">{value}</p>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                            {note.operativeNotes && (
+                                                                <div className="bg-white p-4 border-t">
+                                                                    <p className="text-xs font-bold text-gray-500 uppercase mb-1">Operative Notes</p>
+                                                                    <p className="whitespace-pre-wrap text-sm text-gray-700">{note.operativeNotes}</p>
+                                                                </div>
+                                                            )}
+                                                            {note.postOperativeInstructions && (
+                                                                <div className="bg-blue-50 p-4 border-t border-blue-100">
+                                                                    <p className="text-xs font-bold text-blue-700 uppercase mb-1">Post-operative Instructions</p>
+                                                                    <p className="whitespace-pre-wrap text-sm text-gray-700">{note.postOperativeInstructions}</p>
+                                                                </div>
+                                                            )}
+                                                            {note.anaesthesiaNote && (
+                                                                <div className="bg-purple-50 p-4 border-t border-purple-100">
+                                                                    <p className="text-xs font-bold text-purple-700 uppercase mb-1">Anaesthesia Notes</p>
+                                                                    <p className="whitespace-pre-wrap text-sm text-gray-700">{note.anaesthesiaNote}</p>
+                                                                </div>
+                                                            )}
+                                                            <div className="bg-gray-50 px-4 py-2 text-xs text-gray-400 flex justify-between border-t">
+                                                                <span>Created by: {note.createdBy} — {note.createdAt ? new Date(note.createdAt).toLocaleString() : ''}</span>
+                                                                {note.updatedBy && <span>Updated by: {note.updatedBy} — {note.updatedAt ? new Date(note.updatedAt).toLocaleString() : ''}</span>}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p className="text-sm text-gray-400 italic">No theatre operation notes recorded yet.</p>
+                                            )}
+                                        </div>
+
+                                        {/* ── SECTION 3: General Inpatient Notes (legacy) ── */}
+                                        {clinicalNotes.length > 0 && (
+                                            <div className="mb-4">
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    <FaFileMedical className="text-yellow-600" />
+                                                    <h4 className="text-base font-bold text-yellow-700">General Notes</h4>
+                                                    <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-semibold">{clinicalNotes.length}</span>
+                                                </div>
+                                                <div className="space-y-3">
+                                                    {clinicalNotes.map((note, index) => (
+                                                        <div key={index} className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                                                            <p className="whitespace-pre-wrap text-gray-800 text-sm">{note.text}</p>
+                                                            <div className="mt-2 text-xs text-gray-500 flex justify-between border-t border-yellow-200 pt-2">
+                                                                <span>By: {note.author} ({note.role})</span>
+                                                                <span>{new Date(note.createdAt).toLocaleString()}</span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Empty state */}
+                                        {wardRoundNotes.length === 0 && theatreNotes.length === 0 && clinicalNotes.length === 0 && (
+                                            <p className="text-gray-400 italic text-sm">No inpatient notes recorded yet. Use the buttons above to add ward round or theatre operation notes.</p>
                                         )}
                                     </div>
                                 )}
                             </div>
+                                </>
+                            )}
                         </div>
                     )}
                 </div>
@@ -2938,6 +3132,274 @@ const PatientDetails = () => {
                     </div>
                 )
             }
+
+            {/* Add Ward Round Note Modal */}
+            {showWardRoundModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-lg">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-bold text-teal-700">Add Ward Round Note</h3>
+                            <button onClick={() => { setShowWardRoundModal(false); setNewWardRoundNote(''); }} className="text-gray-500 hover:text-gray-700">
+                                <FaTimes size={24} />
+                            </button>
+                        </div>
+                        <textarea
+                            className="w-full border p-3 rounded mb-4 focus:ring-2 focus:ring-teal-400"
+                            rows="6"
+                            placeholder="Enter ward round note..."
+                            value={newWardRoundNote}
+                            onChange={(e) => setNewWardRoundNote(e.target.value)}
+                        />
+                        <div className="flex justify-end gap-2">
+                            <button
+                                onClick={() => { setShowWardRoundModal(false); setNewWardRoundNote(''); }}
+                                className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    if (!newWardRoundNote.trim() || !encounter) return;
+                                    try {
+                                        setLoading(true);
+                                        const config = { headers: { Authorization: `Bearer ${user.token}` } };
+                                        const { data } = await axios.post(
+                                            `${backendUrl}/api/visits/${encounter._id}/ward-round-notes`,
+                                            { text: newWardRoundNote },
+                                            config
+                                        );
+                                        setWardRoundNotes(data);
+                                        setNewWardRoundNote('');
+                                        setShowWardRoundModal(false);
+                                        toast.success('Ward round note added');
+                                    } catch (error) {
+                                        toast.error(error.response?.data?.message || 'Error adding ward round note');
+                                    } finally {
+                                        setLoading(false);
+                                    }
+                                }}
+                                className="bg-teal-600 text-white px-4 py-2 rounded hover:bg-teal-700"
+                            >
+                                Save Note
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Theatre Operation Note Modal */}
+            {showTheatreModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-y-auto">
+                        {/* Modal Header */}
+                        <div className="bg-red-700 text-white px-6 py-4 flex justify-between items-center rounded-t-xl sticky top-0 z-10">
+                            <h3 className="text-xl font-bold">
+                                {editingTheatreNote ? 'Edit Operation Note' : 'New Theatre Operation Note'}
+                            </h3>
+                            <button onClick={() => { setShowTheatreModal(false); setEditingTheatreNote(null); }} className="hover:text-red-200">
+                                <FaTimes size={24} />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            {/* Section: Operation Details */}
+                            <div>
+                                <h4 className="text-sm font-bold uppercase text-red-700 mb-3 border-b border-red-200 pb-1">Operation Details</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Date of Surgery</label>
+                                        <input type="date" className="w-full border rounded p-2 text-sm"
+                                            value={theatreNoteForm.dateOfSurgery ? theatreNoteForm.dateOfSurgery.toString().slice(0,10) : ''}
+                                            onChange={e => setTheatreNoteForm(p => ({...p, dateOfSurgery: e.target.value}))} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Start Time</label>
+                                        <input type="time" className="w-full border rounded p-2 text-sm"
+                                            value={theatreNoteForm.startTime || ''}
+                                            onChange={e => setTheatreNoteForm(p => ({...p, startTime: e.target.value}))} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1">End Time</label>
+                                        <input type="time" className="w-full border rounded p-2 text-sm"
+                                            value={theatreNoteForm.endTime || ''}
+                                            onChange={e => setTheatreNoteForm(p => ({...p, endTime: e.target.value}))} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Theatre Name</label>
+                                        <input type="text" className="w-full border rounded p-2 text-sm" placeholder="e.g. Main Theatre 1"
+                                            value={theatreNoteForm.theatreName || ''}
+                                            onChange={e => setTheatreNoteForm(p => ({...p, theatreName: e.target.value}))} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Surgery Type</label>
+                                        <select className="w-full border rounded p-2 text-sm"
+                                            value={theatreNoteForm.surgeryType || 'Elective'}
+                                            onChange={e => setTheatreNoteForm(p => ({...p, surgeryType: e.target.value}))}>
+                                            <option value="Elective">Elective</option>
+                                            <option value="Emergency">Emergency</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Status</label>
+                                        <select className="w-full border rounded p-2 text-sm"
+                                            value={theatreNoteForm.status || 'Draft'}
+                                            onChange={e => setTheatreNoteForm(p => ({...p, status: e.target.value}))}>
+                                            <option value="Draft">Draft</option>
+                                            <option value="Completed">Completed</option>
+                                            <option value="Reviewed">Reviewed</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Procedure Performed</label>
+                                        <textarea rows="2" className="w-full border rounded p-2 text-sm" placeholder="Describe the procedure..."
+                                            value={theatreNoteForm.procedurePerformed || ''}
+                                            onChange={e => setTheatreNoteForm(p => ({...p, procedurePerformed: e.target.value}))} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Pre-operative Diagnosis</label>
+                                        <textarea rows="2" className="w-full border rounded p-2 text-sm"
+                                            value={theatreNoteForm.preOperativeDiagnosis || ''}
+                                            onChange={e => setTheatreNoteForm(p => ({...p, preOperativeDiagnosis: e.target.value}))} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Post-operative Diagnosis</label>
+                                        <textarea rows="2" className="w-full border rounded p-2 text-sm"
+                                            value={theatreNoteForm.postOperativeDiagnosis || ''}
+                                            onChange={e => setTheatreNoteForm(p => ({...p, postOperativeDiagnosis: e.target.value}))} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Operative Findings</label>
+                                        <textarea rows="2" className="w-full border rounded p-2 text-sm"
+                                            value={theatreNoteForm.operativeFindings || ''}
+                                            onChange={e => setTheatreNoteForm(p => ({...p, operativeFindings: e.target.value}))} />
+                                    </div>
+                                </div>
+                                <div className="mt-4">
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Operative Notes</label>
+                                    <textarea rows="4" className="w-full border rounded p-2 text-sm" placeholder="Detailed operative notes..."
+                                        value={theatreNoteForm.operativeNotes || ''}
+                                        onChange={e => setTheatreNoteForm(p => ({...p, operativeNotes: e.target.value}))} />
+                                </div>
+                            </div>
+
+                            {/* Section: Peri-operative Data */}
+                            <div>
+                                <h4 className="text-sm font-bold uppercase text-red-700 mb-3 border-b border-red-200 pb-1">Peri-operative Data</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {[
+                                        ['estimatedBloodLoss', 'Estimated Blood Loss (ml)'],
+                                        ['bloodTransfusion', 'Blood Transfusion'],
+                                        ['complications', 'Complications'],
+                                        ['drains', 'Drains'],
+                                        ['specimens', 'Specimens Sent'],
+                                        ['implants', 'Implants Used'],
+                                        ['woundClosure', 'Wound Closure'],
+                                        ['postOperativeCondition', 'Post-operative Condition'],
+                                    ].map(([field, label]) => (
+                                        <div key={field}>
+                                            <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
+                                            <input type="text" className="w-full border rounded p-2 text-sm"
+                                                value={theatreNoteForm[field] || ''}
+                                                onChange={e => setTheatreNoteForm(p => ({...p, [field]: e.target.value}))} />
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="mt-4">
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Post-operative Instructions</label>
+                                    <textarea rows="3" className="w-full border rounded p-2 text-sm"
+                                        value={theatreNoteForm.postOperativeInstructions || ''}
+                                        onChange={e => setTheatreNoteForm(p => ({...p, postOperativeInstructions: e.target.value}))} />
+                                </div>
+                            </div>
+
+                            {/* Section: Surgical Team */}
+                            <div>
+                                <h4 className="text-sm font-bold uppercase text-red-700 mb-3 border-b border-red-200 pb-1">Surgical Team</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {[
+                                        ['leadSurgeon', 'Lead Surgeon'],
+                                        ['assistantSurgeons', 'Assistant Surgeon(s)'],
+                                        ['anaesthetist', 'Anaesthetist'],
+                                        ['scrubNurse', 'Scrub Nurse'],
+                                        ['circulatingNurse', 'Circulating Nurse'],
+                                    ].map(([field, label]) => (
+                                        <div key={field}>
+                                            <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
+                                            <input type="text" className="w-full border rounded p-2 text-sm"
+                                                value={theatreNoteForm[field] || ''}
+                                                onChange={e => setTheatreNoteForm(p => ({...p, [field]: e.target.value}))} />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Section: Anaesthesia */}
+                            <div>
+                                <h4 className="text-sm font-bold uppercase text-red-700 mb-3 border-b border-red-200 pb-1">Anaesthesia</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Anaesthesia Type</label>
+                                        <input type="text" className="w-full border rounded p-2 text-sm" placeholder="e.g. General, Spinal, Local"
+                                            value={theatreNoteForm.anaesthesiaType || ''}
+                                            onChange={e => setTheatreNoteForm(p => ({...p, anaesthesiaType: e.target.value}))} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Digital Signature</label>
+                                        <input type="text" className="w-full border rounded p-2 text-sm" placeholder="Surgeon's name as signature"
+                                            value={theatreNoteForm.digitalSignature || ''}
+                                            onChange={e => setTheatreNoteForm(p => ({...p, digitalSignature: e.target.value}))} />
+                                    </div>
+                                </div>
+                                <div className="mt-4">
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Anaesthesia Notes</label>
+                                    <textarea rows="3" className="w-full border rounded p-2 text-sm"
+                                        value={theatreNoteForm.anaesthesiaNote || ''}
+                                        onChange={e => setTheatreNoteForm(p => ({...p, anaesthesiaNote: e.target.value}))} />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer Actions */}
+                        <div className="sticky bottom-0 bg-white border-t px-6 py-4 flex justify-end gap-3 rounded-b-xl">
+                            <button
+                                onClick={() => { setShowTheatreModal(false); setEditingTheatreNote(null); }}
+                                className="bg-gray-200 text-gray-700 px-5 py-2 rounded hover:bg-gray-300"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    if (!encounter) return;
+                                    try {
+                                        setLoading(true);
+                                        const config = { headers: { Authorization: `Bearer ${user.token}` } };
+                                        const payload = { ...theatreNoteForm };
+                                        if (editingTheatreNote) payload._id = editingTheatreNote;
+                                        const { data } = await axios.post(
+                                            `${backendUrl}/api/visits/${encounter._id}/theatre-notes`,
+                                            payload,
+                                            config
+                                        );
+                                        setTheatreNotes(data);
+                                        setShowTheatreModal(false);
+                                        setEditingTheatreNote(null);
+                                        toast.success('Theatre note saved successfully');
+                                    } catch (error) {
+                                        toast.error(error.response?.data?.message || 'Error saving theatre note');
+                                    } finally {
+                                        setLoading(false);
+                                    }
+                                }}
+                                className="bg-red-600 text-white px-5 py-2 rounded hover:bg-red-700"
+                            >
+                                Save Operation Note
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* SOAP Modal */}
             {
@@ -3791,76 +4253,114 @@ const PatientDetails = () => {
                 doctorId={user._id} // Pre-fill current doctor
                 user={user}
             />
+
             {/* Convert to Inpatient Modal */}
             {showConvertModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white p-6 rounded-lg shadow-lg w-96">
-                        <h3 className="text-xl font-bold mb-4">Convert to Inpatient</h3>
-
-                        <div className="mb-4">
-                            <label className="block text-gray-700 font-bold mb-2">Select Ward</label>
-                            <select
-                                className="w-full border p-2 rounded"
-                                value={selectedWard}
-                                onChange={(e) => setSelectedWard(e.target.value)}
+                    <div className="bg-white rounded-lg shadow-xl w-96 overflow-hidden border border-gray-100 font-sans">
+                        <div className="bg-purple-700 text-white px-6 py-4 flex justify-between items-center">
+                            <h3 className="text-lg font-bold flex items-center gap-2">
+                                <FaProcedures /> Admit Patient (Inpatient)
+                            </h3>
+                            <button 
+                                onClick={() => setShowConvertModal(false)} 
+                                className="text-white hover:text-gray-200 transition font-bold"
                             >
-                                <option value="">-- Select Ward --</option>
-                                {wards.map(ward => (
-                                    <option key={ward._id} value={ward._id}>
-                                        {ward.name} ({ward.type})
-                                    </option>
-                                ))}
-                            </select>
+                                ✕
+                            </button>
                         </div>
-
-                        <div className="mb-4">
-                            <label className="block text-gray-700 font-bold mb-2">Select Bed</label>
-                            <select
-                                className="w-full border p-2 rounded"
-                                value={selectedBed}
-                                onChange={(e) => setSelectedBed(e.target.value)}
-                                disabled={!selectedWard}
-                            >
-                                <option value="">-- Select Bed --</option>
-                                {availableBeds.map(bed => (
-                                    <option key={bed._id} value={bed.number}>
-                                        {bed.number}
-                                    </option>
-                                ))}
-                            </select>
-                            {selectedWard && availableBeds.length === 0 && (
-                                <p className="text-red-500 text-sm mt-1">No beds available in this ward.</p>
-                            )}
-                        </div>
-
-                        {selectedWard && patient?.provider && (
-                            <div className="mb-4 p-3 bg-blue-50 rounded text-sm text-blue-800">
-                                <p className="font-bold">Provider: {patient.provider}</p>
-                                <p>
-                                    Rate: ₦{wards.find(w => w._id === selectedWard)?.rates?.[patient.provider] ||
-                                        wards.find(w => w._id === selectedWard)?.rates?.Standard ||
-                                        wards.find(w => w._id === selectedWard)?.dailyRate || 0}
-                                </p>
+                        
+                        <div className="p-6">
+                            <div className="mb-4 bg-purple-50 p-3 rounded border border-purple-100 text-sm">
+                                <p className="font-bold text-purple-900">{patient?.name}</p>
+                                <p className="text-gray-600">Converting outpatient encounter to Inpatient admission.</p>
                             </div>
-                        )}
 
-                        <div className="flex justify-end gap-2">
-                            <button
-                                onClick={() => setShowConvertModal(false)}
-                                className="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleConvertToInpatient}
-                                disabled={!selectedWard || !selectedBed}
-                                className={`px-4 py-2 rounded text-white ${!selectedWard || !selectedBed
-                                    ? 'bg-blue-300 cursor-not-allowed'
-                                    : 'bg-blue-600 hover:bg-blue-700'
+                            {/* Deposit Balance status */}
+                            <div className="mb-4">
+                                <label className="block text-gray-700 font-bold text-sm mb-1">Financial Deposit Balance</label>
+                                <div className={`p-3 rounded border text-sm font-semibold flex justify-between items-center ${
+                                    (patient?.depositBalance || 0) <= 0 
+                                        ? 'bg-red-50 text-red-800 border-red-200' 
+                                        : 'bg-green-50 text-green-800 border-green-200'
+                                }`}>
+                                    <span>Current Deposit:</span>
+                                    <span className="text-base font-bold">₦{patient?.depositBalance?.toLocaleString() || '0'}</span>
+                                </div>
+                                {(patient?.depositBalance || 0) <= 0 && (
+                                    <p className="text-xs text-red-600 mt-1 font-semibold">
+                                        ⚠️ Patient has no deposit balance. Admission is blocked until a deposit is paid.
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="mb-4">
+                                <label className="block text-gray-700 font-bold text-sm mb-2">Select Ward</label>
+                                <select
+                                    className="w-full border p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                                    value={selectedWard}
+                                    onChange={(e) => setSelectedWard(e.target.value)}
+                                    disabled={(patient?.depositBalance || 0) <= 0}
+                                >
+                                    <option value="">-- Select Ward --</option>
+                                    {wards.map(ward => (
+                                        <option key={ward._id} value={ward._id}>
+                                            {ward.name} ({ward.type})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="mb-4">
+                                <label className="block text-gray-700 font-bold text-sm mb-2">Select Bed</label>
+                                <select
+                                    className="w-full border p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                                    value={selectedBed}
+                                    onChange={(e) => setSelectedBed(e.target.value)}
+                                    disabled={!selectedWard || (patient?.depositBalance || 0) <= 0}
+                                >
+                                    <option value="">-- Select Bed --</option>
+                                    {availableBeds.map(bed => (
+                                        <option key={bed._id} value={bed.number}>
+                                            {bed.number}
+                                        </option>
+                                    ))}
+                                </select>
+                                {selectedWard && availableBeds.length === 0 && (
+                                    <p className="text-red-500 text-sm mt-1">No beds available in this ward.</p>
+                                )}
+                            </div>
+
+                            {selectedWard && patient?.provider && (
+                                <div className="mb-4 p-3 bg-blue-50 rounded text-xs text-blue-800 border border-blue-100">
+                                    <p className="font-bold">Provider: {patient.provider}</p>
+                                    <p>
+                                        Rate: ₦{wards.find(w => w._id === selectedWard)?.rates?.[patient.provider] ||
+                                            wards.find(w => w._id === selectedWard)?.rates?.Standard ||
+                                            wards.find(w => w._id === selectedWard)?.dailyRate || 0}
+                                    </p>
+                                </div>
+                            )}
+
+                            <div className="flex justify-end gap-2 mt-6">
+                                <button
+                                    onClick={() => setShowConvertModal(false)}
+                                    className="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400 text-sm font-semibold transition"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleConvertToInpatient}
+                                    disabled={!selectedWard || !selectedBed || (patient?.depositBalance || 0) <= 0}
+                                    className={`px-4 py-2 rounded text-white text-sm font-semibold transition ${
+                                        !selectedWard || !selectedBed || (patient?.depositBalance || 0) <= 0
+                                            ? 'bg-purple-300 cursor-not-allowed'
+                                            : 'bg-purple-600 hover:bg-purple-700 shadow-sm'
                                     }`}
-                            >
-                                Convert
-                            </button>
+                                >
+                                    Confirm Admission
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
