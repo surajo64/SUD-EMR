@@ -585,7 +585,20 @@ const convertToInpatient = async (req, res) => {
 // @route   PUT /api/visits/:id/change-type
 // @access  Private (Receptionist/Admin)
 const changeEncounterType = async (req, res) => {
-    const { type, encounterType, clinic, ward, bed, reasonForVisit } = req.body;
+    const { 
+        type, 
+        encounterType, 
+        clinic, 
+        ward, 
+        bed, 
+        reasonForVisit,
+        isANC,
+        waiveConsultationFee,
+        needSpeciality,
+        specialityClinic,
+        needSpecificDoctor,
+        specificDoctor
+    } = req.body;
 
     try {
         const visit = await Visit.findById(req.params.id);
@@ -662,11 +675,111 @@ const changeEncounterType = async (req, res) => {
             }
         }
 
-        // 2. Update Basic Fields
+        // 2. Update Basic & Form Fields
         visit.type = type;
         visit.encounterType = encounterType || type;
         if (clinic) visit.clinic = clinic;
         if (reasonForVisit) visit.reasonForVisit = reasonForVisit;
+
+        if (isANC !== undefined) visit.isANC = !!isANC;
+        if (waiveConsultationFee !== undefined) {
+            visit.waiveConsultationFee = !!waiveConsultationFee;
+            if (waiveConsultationFee) {
+                visit.waivedBy = req.user._id;
+            } else {
+                visit.waivedBy = undefined;
+            }
+
+            // Automatically update existing consultation charges
+            const EncounterCharge = require('../models/encounterChargeModel');
+            const Patient = require('../models/patientModel');
+            
+            const encounterCharges = await EncounterCharge.find({ encounter: visit._id }).populate('charge');
+            const patientObj = await Patient.findById(visit.patient);
+
+            for (const ec of encounterCharges) {
+                if (ec.charge && ec.charge.type === 'consultation') {
+                    if (waiveConsultationFee) {
+                        ec.unitPrice = 0;
+                        ec.totalAmount = 0;
+                        ec.patientPortion = 0;
+                        ec.hmoPortion = 0;
+                        ec.status = 'paid';
+                        await ec.save();
+                    } else {
+                        // Recalculate fee based on patient provider
+                        let fee = 0;
+                        let isCovered = true;
+                        switch (patientObj.provider) {
+                            case 'Retainership':
+                            case 'Corporate Retainership':
+                                fee = ec.charge.retainershipFee;
+                                break;
+                            case 'Family Retainership':
+                                fee = ec.charge.familyRetainershipFee || 0;
+                                break;
+                            case 'NHIA':
+                                fee = ec.charge.nhiaFee;
+                                break;
+                            case 'KSCHMA':
+                                fee = ec.charge.kschmaFee;
+                                break;
+                            case 'Standard':
+                            default:
+                                fee = ec.charge.standardFee;
+                                break;
+                        }
+
+                        if (fee === 0 && patientObj.provider !== 'Standard') {
+                            isCovered = false;
+                            fee = ec.charge.standardFee || ec.charge.basePrice;
+                        }
+
+                        if (fee === 0 && ec.charge.basePrice) {
+                            fee = ec.charge.basePrice;
+                        }
+
+                        const totalAmount = fee * ec.quantity;
+                        let patientPortion = totalAmount;
+                        let hmoPortion = 0;
+
+                        if (!isCovered) {
+                            patientPortion = totalAmount;
+                            hmoPortion = 0;
+                        } else if (patientObj.provider === 'Retainership' || patientObj.provider === 'Corporate Retainership' || patientObj.provider === 'Family Retainership') {
+                            patientPortion = 0;
+                            hmoPortion = totalAmount;
+                        } else if (patientObj.provider === 'NHIA' || patientObj.provider === 'KSCHMA') {
+                            patientPortion = 0;
+                            hmoPortion = totalAmount;
+                        }
+
+                        ec.unitPrice = fee;
+                        ec.totalAmount = totalAmount;
+                        ec.patientPortion = patientPortion;
+                        ec.hmoPortion = hmoPortion;
+                        ec.status = 'pending';
+                        await ec.save();
+                    }
+                }
+            }
+        }
+        if (needSpeciality !== undefined) {
+            visit.needSpeciality = !!needSpeciality;
+            if (needSpeciality) {
+                visit.specialityClinic = specialityClinic || undefined;
+                visit.needSpecificDoctor = !!needSpecificDoctor;
+                if (needSpecificDoctor) {
+                    visit.specificDoctor = specificDoctor || undefined;
+                } else {
+                    visit.specificDoctor = undefined;
+                }
+            } else {
+                visit.specialityClinic = undefined;
+                visit.needSpecificDoctor = false;
+                visit.specificDoctor = undefined;
+            }
+        }
 
         // 3. Update Status Logic
         // If moving from External to Standard, reset payment and transition status
@@ -680,6 +793,31 @@ const changeEncounterType = async (req, res) => {
         } else if (type === 'Inpatient' && oldType !== 'Inpatient') {
              visit.encounterStatus = 'admitted';
              visit.status = 'Admitted';
+        } else if (!['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(type)) {
+            // Update workflow status dynamically
+            if (visit.waiveConsultationFee || visit.isANC) {
+                visit.paymentValidated = true;
+                if (['registered', 'payment_pending'].includes(visit.encounterStatus)) {
+                    visit.encounterStatus = 'in_nursing';
+                }
+            } else {
+                // Check if there are unpaid charges
+                const EncounterCharge = require('../models/encounterChargeModel');
+                const chargesCount = await EncounterCharge.countDocuments({ encounter: visit._id });
+                const unpaidChargesCount = await EncounterCharge.countDocuments({ encounter: visit._id, status: 'pending' });
+                
+                if (unpaidChargesCount > 0) {
+                    visit.paymentValidated = false;
+                    if (['registered', 'in_nursing'].includes(visit.encounterStatus)) {
+                        visit.encounterStatus = 'payment_pending';
+                    }
+                } else if (chargesCount > 0) {
+                    visit.paymentValidated = true;
+                    if (['registered', 'payment_pending'].includes(visit.encounterStatus)) {
+                        visit.encounterStatus = 'in_nursing';
+                    }
+                }
+            }
         }
 
         const updatedVisit = await visit.save();

@@ -44,8 +44,10 @@ const FrontDeskDashboard = () => {
     const [availableBeds, setAvailableBeds] = useState([]);
 
     // Convert/Edit Modal State
-    const [showConvertModal, setShowConvertModal] = useState(false);
+
     const [selectedEncounterId, setSelectedEncounterId] = useState(null);
+    const [isEditing, setIsEditing] = useState(false);
+    const [originalEncounterCharges, setOriginalEncounterCharges] = useState([]);
 
     // Add Charges Modal State
     const [showAddChargesModal, setShowAddChargesModal] = useState(false);
@@ -356,6 +358,9 @@ const FrontDeskDashboard = () => {
         setSelectedSpecialityClinic('');
         setNeedSpecificDoctor(false);
         setSelectedSpecificDoctor('');
+        setIsEditing(false);
+        setOriginalEncounterCharges([]);
+        setSelectedEncounterId(null);
     };
 
     const handleChargeToggle = (chargeId) => {
@@ -438,6 +443,88 @@ const FrontDeskDashboard = () => {
         } catch (error) {
             console.error(error);
             const message = error.response?.data?.message || 'Error creating encounter';
+            toast.error(message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleUpdateEncounter = async () => {
+        if (!selectedPatient || !selectedEncounterId) {
+            toast.error('No patient or encounter selected');
+            return;
+        }
+
+        if (!isANC && !waiveConsultationFee && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && selectedCharges.length === 0) {
+            toast.error('Please select at least one charge, or check the ANC checkbox to skip charges');
+            return;
+        }
+
+        if (encounterType === 'Inpatient' && (!selectedWard || !selectedBed)) {
+            toast.error('Ward and Bed are required for Inpatient encounters');
+            return;
+        }
+
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+
+            // 1. Update the visit details
+            const visitUpdateData = {
+                type: encounterType,
+                encounterType: encounterType,
+                clinic: selectedClinic || undefined,
+                reasonForVisit: reasonForVisit,
+                ward: encounterType === 'Inpatient' ? selectedWard : undefined,
+                bed: encounterType === 'Inpatient' ? selectedBed : undefined,
+                isANC: isANC,
+                waiveConsultationFee: waiveConsultationFee,
+                needSpeciality: needSpeciality,
+                specialityClinic: needSpeciality ? (selectedSpecialityClinic || undefined) : undefined,
+                needSpecificDoctor: needSpeciality && needSpecificDoctor,
+                specificDoctor: (needSpeciality && needSpecificDoctor) ? (selectedSpecificDoctor || undefined) : undefined
+            };
+
+            await axios.put(`${backendUrl}/api/visits/${selectedEncounterId}/change-type`, visitUpdateData, config);
+
+            // 2. Synchronize charges:
+            // Find charges to add
+            const chargesToAdd = selectedCharges.filter(
+                chargeId => !originalEncounterCharges.some(ec => (ec.charge?._id || ec.charge) === chargeId)
+            );
+
+            // Find charges to delete (only delete if they were pending)
+            const chargesToDelete = originalEncounterCharges.filter(
+                ec => !selectedCharges.includes(ec.charge?._id || ec.charge)
+            );
+
+            // Create new charges
+            for (const chargeId of chargesToAdd) {
+                const chargeData = {
+                    encounterId: selectedEncounterId,
+                    patientId: selectedPatient._id,
+                    chargeId: chargeId,
+                    quantity: 1,
+                    notes: 'Added during edit'
+                };
+                await axios.post(`${backendUrl}/api/encounter-charges`, chargeData, config);
+            }
+
+            // Delete removed charges
+            for (const ec of chargesToDelete) {
+                if (ec.status === 'pending') {
+                    await axios.delete(`${backendUrl}/api/encounter-charges/${ec._id}`, config);
+                } else {
+                    toast.warning(`Cannot remove processed charge: ${ec.charge?.name || 'Service'}`);
+                }
+            }
+
+            toast.success('Encounter updated successfully!');
+            closeEncounterModal();
+            fetchRecentPatients();
+        } catch (error) {
+            console.error(error);
+            const message = error.response?.data?.message || 'Error updating encounter';
             toast.error(message);
         } finally {
             setLoading(false);
@@ -542,18 +629,18 @@ const FrontDeskDashboard = () => {
     }, {});
 
 
-    const handleEditClick = (patient) => {
+    const handleEditClick = async (patient) => {
         const encounters = patientEncounters[patient._id];
         if (!encounters || encounters.length === 0) {
             toast.error('No checks found for this patient');
             return;
         }
 
-        // Find active encounter (should be one created today or active outpatient)
+        // Find active encounter (should be one created today or active outpatient/inpatient)
         const today = new Date().toDateString();
         const activeEncounter = encounters.find(e => {
             const eDate = new Date(e.createdAt).toDateString();
-            return eDate === today || ((e.type === 'Outpatient' || e.type === 'Emergency') && e.encounterStatus !== 'completed');
+            return eDate === today || ((e.type === 'Outpatient' || e.type === 'Emergency' || e.type === 'Inpatient') && e.encounterStatus !== 'completed' && e.encounterStatus !== 'discharged');
         });
 
         if (!activeEncounter) {
@@ -561,16 +648,39 @@ const FrontDeskDashboard = () => {
             return;
         }
 
-        if (activeEncounter.type === 'Inpatient') {
-            toast.info('This encounter is already Inpatient (Admitted).');
-            return;
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            // Fetch charges for this encounter
+            const { data: encCharges } = await axios.get(`${backendUrl}/api/encounter-charges/encounter/${activeEncounter._id}`, config);
+            
+            // Set all form states to populate
+            setSelectedPatient(patient);
+            setSelectedEncounterId(activeEncounter._id);
+            setEncounterType(activeEncounter.type || 'Outpatient');
+            setSelectedClinic(activeEncounter.clinic?._id || activeEncounter.clinic || '');
+            setReasonForVisit(activeEncounter.reasonForVisit || '');
+            setIsANC(activeEncounter.isANC || false);
+            setWaiveConsultationFee(activeEncounter.waiveConsultationFee || false);
+            setNeedSpeciality(activeEncounter.needSpeciality || false);
+            setSelectedSpecialityClinic(activeEncounter.specialityClinic?._id || activeEncounter.specialityClinic || '');
+            setNeedSpecificDoctor(activeEncounter.needSpecificDoctor || false);
+            setSelectedSpecificDoctor(activeEncounter.specificDoctor?._id || activeEncounter.specificDoctor || '');
+            setSelectedWard(activeEncounter.ward?._id || activeEncounter.ward || '');
+            setSelectedBed(activeEncounter.bed || '');
+            
+            // Set original and selected charges
+            setOriginalEncounterCharges(encCharges);
+            setSelectedCharges(encCharges.map(ec => ec.charge?._id || ec.charge).filter(Boolean));
+            
+            setIsEditing(true);
+            setShowEncounterModal(true);
+        } catch (error) {
+            console.error('Error loading encounter details:', error);
+            toast.error('Failed to load encounter details');
+        } finally {
+            setLoading(false);
         }
-
-        setSelectedPatient(patient);
-        setSelectedEncounterId(activeEncounter._id);
-        setSelectedWard('');
-        setSelectedBed('');
-        setShowConvertModal(true);
     };
 
     const getActiveExternalEncounter = (patientId) => {
@@ -648,33 +758,7 @@ const FrontDeskDashboard = () => {
         }
     };
 
-    const handleConvertFromFrontDesk = async () => {
-        if (!selectedWard || !selectedBed) {
-            toast.error('Please select Ward and Bed');
-            return;
-        }
 
-        try {
-            setLoading(true);
-            const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            await axios.put(
-                `${backendUrl}/api/visits/${selectedEncounterId}/convert-to-inpatient`,
-                { ward: selectedWard, bed: selectedBed },
-                config
-            );
-
-            toast.success('Encounter converted to Inpatient!');
-            setShowConvertModal(false);
-            setSelectedEncounterId(null);
-            setSelectedPatient(null);
-            fetchRecentPatients(); // Refresh lists
-        } catch (error) {
-            console.error(error);
-            toast.error(error.response?.data?.message || 'Error converting encounter');
-        } finally {
-            setLoading(false);
-        }
-    };
 
     return (
         <Layout>
@@ -1014,7 +1098,7 @@ const FrontDeskDashboard = () => {
                         {/* Modal Header */}
                         <div className="bg-blue-600 text-white p-4 rounded-t-lg flex justify-between items-center sticky top-0">
                             <h3 className="text-xl font-bold flex items-center gap-2">
-                                <FaCalendarCheck /> Create Encounter
+                                <FaCalendarCheck /> {isEditing ? 'Edit Encounter / Admission' : 'Create Encounter'}
                             </h3>
                             <button
                                 onClick={closeEncounterModal}
@@ -1394,7 +1478,7 @@ const FrontDeskDashboard = () => {
                                 Cancel
                             </button>
                             <button
-                                onClick={handleCreateEncounter}
+                                onClick={isEditing ? handleUpdateEncounter : handleCreateEncounter}
                                 className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                 disabled={loading || (!isANC && !waiveConsultationFee && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && selectedCharges.length === 0)}
                             >
@@ -1404,11 +1488,11 @@ const FrontDeskDashboard = () => {
                                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                         </svg>
-                                        Creating...
+                                        {isEditing ? 'Saving...' : 'Creating...'}
                                     </>
                                 ) : (
                                     <>
-                                        <FaPlus /> {isANC ? '🤰 Create ANC Encounter' : 'Create Encounter'}
+                                        <FaPlus /> {isEditing ? 'Save Changes' : (isANC ? '🤰 Create ANC Encounter' : 'Create Encounter')}
                                     </>
                                 )}
                             </button>
@@ -1417,110 +1501,7 @@ const FrontDeskDashboard = () => {
                 </div>
             )}
 
-            {/* Inpatient Conversion Modal (Front Desk) */}
-            {showConvertModal && selectedPatient && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-                        <div className="bg-purple-700 text-white p-4 rounded-t-lg flex justify-between items-center">
-                            <h3 className="text-xl font-bold flex items-center gap-2">
-                                <FaBed /> Convert to Inpatient
-                            </h3>
-                            <button onClick={() => setShowConvertModal(false)} className="text-white hover:text-gray-200">
-                                <FaTimes />
-                            </button>
-                        </div>
 
-                        <div className="p-6">
-                            <div className="mb-4 bg-purple-50 p-3 rounded">
-                                <p className="font-bold">{selectedPatient.name}</p>
-                                <p className="text-sm">Converting active encounter to Inpatient admission.</p>
-                            </div>
-
-                            {/* Deposit Balance status */}
-                            <div className="mb-4">
-                                <label className="block text-gray-700 font-bold mb-1">Financial Deposit Balance</label>
-                                <div className={`p-3 rounded border text-sm font-semibold flex justify-between items-center ${
-                                    (selectedPatient?.depositBalance || 0) <= 0 
-                                        ? 'bg-red-50 text-red-800 border-red-200' 
-                                        : 'bg-green-50 text-green-800 border-green-200'
-                                }`}>
-                                    <span>Current Deposit:</span>
-                                    <span className="text-base font-bold">₦{selectedPatient?.depositBalance?.toLocaleString() || '0'}</span>
-                                </div>
-                                {(selectedPatient?.depositBalance || 0) <= 0 && (
-                                    <p className="text-xs text-red-600 mt-1 font-semibold">
-                                        ⚠️ Patient has no deposit balance. Admission is blocked until a deposit is paid.
-                                    </p>
-                                )}
-                            </div>
-
-                            <div className="mb-4">
-                                <label className="block text-gray-700 font-bold mb-2">Select Ward</label>
-                                <select
-                                    className="w-full border p-2 rounded"
-                                    value={selectedWard}
-                                    onChange={(e) => setSelectedWard(e.target.value)}
-                                    disabled={(selectedPatient?.depositBalance || 0) <= 0}
-                                >
-                                    <option value="">-- Select Ward --</option>
-                                    {wards.map(ward => (
-                                        <option key={ward._id} value={ward._id}>
-                                            {ward.name} ({ward.type})
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="mb-6">
-                                <label className="block text-gray-700 font-bold mb-2">Select Bed</label>
-                                <select
-                                    className="w-full border p-2 rounded"
-                                    value={selectedBed}
-                                    onChange={(e) => setSelectedBed(e.target.value)}
-                                    disabled={!selectedWard}
-                                >
-                                    <option value="">-- Select Bed --</option>
-                                    {availableBeds.map(bed => (
-                                        <option key={bed._id} value={bed.number}>
-                                            {bed.number}
-                                        </option>
-                                    ))}
-                                </select>
-                                {selectedWard && availableBeds.length === 0 && (
-                                    <p className="text-red-500 text-sm mt-1">No beds available in this ward.</p>
-                                )}
-                            </div>
-
-                            {selectedWard && selectedPatient?.provider && (
-                                <div className="mb-6 p-3 bg-blue-50 rounded text-sm text-blue-800 border border-blue-100">
-                                    <p className="font-bold">Provider Scheme: {selectedPatient.provider}</p>
-                                    <p>
-                                        Daily Rate: ₦{wards.find(w => w._id === selectedWard)?.rates?.[selectedPatient.provider] ||
-                                            wards.find(w => w._id === selectedWard)?.rates?.Standard ||
-                                            wards.find(w => w._id === selectedWard)?.dailyRate || 0}
-                                    </p>
-                                </div>
-                            )}
-
-                            <div className="flex justify-end gap-3">
-                                <button
-                                    onClick={() => setShowConvertModal(false)}
-                                    className="bg-gray-300 text-gray-800 px-4 py-2 rounded hover:bg-gray-400"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleConvertFromFrontDesk}
-                                    disabled={!selectedWard || !selectedBed || (selectedPatient?.depositBalance || 0) <= 0}
-                                    className={`px-4 py-2 rounded text-white ${(!selectedWard || !selectedBed || (selectedPatient?.depositBalance || 0) <= 0) ? 'bg-purple-300 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}
-                                >
-                                    Convert & Admit
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* ===================== ADD CHARGES MODAL ===================== */}
             {showAddChargesModal && addChargesPatient && (
