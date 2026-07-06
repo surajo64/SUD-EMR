@@ -39,7 +39,7 @@ import ClinicalReports from './pages/ClinicalReports';
 import VisitReport from './pages/VisitReport';
 import PatientManagement from './pages/PatientManagement';
 import PatientFinancialStatement from './pages/PatientFinancialStatement';
-import ClinicManagement from './pages/ClinicManagement';
+import DepartmentManagement from './pages/DepartmentManagement';
 import SpecialityClinicManagement from './pages/SpecialityClinicManagement';
 import FrontDeskChargeManagement from './pages/FrontDeskChargeManagement';
 import WardManagement from './pages/WardManagement';
@@ -97,7 +97,7 @@ function App() {
             <Route path="/admin/clinical-reports" element={<ClinicalReports />} />
             <Route path="/admin/visit-report" element={<VisitReport />} />
             <Route path="/admin/patients" element={<PatientManagement />} />
-            <Route path="/admin/clinics" element={<ClinicManagement />} />
+            <Route path="/admin/departments" element={<DepartmentManagement />} />
             <Route path="/admin/speciality-clinics" element={<SpecialityClinicManagement />} />
             <Route path="/admin/patient-financial-statement" element={<PatientFinancialStatement />} />
             <Route path="/admin/family-files" element={<FamilyFileManagement />} />

@@ -258,6 +258,32 @@ const Dashboard = () => {
                                 <p className="text-gray-500 text-sm">View & update radiology orders.</p>
                             </div>
                         )}
+
+                        {(user.role === 'admin' || user.role === 'super_admin' || user.role === 'readonly_admin') && (
+                            <>
+                                <div onClick={() => navigate('/admin')} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 cursor-pointer hover:shadow-lg hover:border-green-400 transition group">
+                                    <div className="w-12 h-12 bg-green-50 text-green-600 rounded-lg flex items-center justify-center mb-4 group-hover:bg-green-600 group-hover:text-white transition">
+                                        <FaChartBar size={20} />
+                                    </div>
+                                    <h3 className="text-lg font-bold mb-2 text-green-700">Admin Dashboard</h3>
+                                    <p className="text-gray-500 text-sm">System Overview & Analytics.</p>
+                                </div>
+                                <div onClick={() => navigate('/nurse/triage')} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 cursor-pointer hover:shadow-lg hover:border-pink-400 transition group">
+                                    <div className="w-12 h-12 bg-pink-50 text-pink-600 rounded-lg flex items-center justify-center mb-4 group-hover:bg-pink-600 group-hover:text-white transition">
+                                        <FaUserNurse size={20} />
+                                    </div>
+                                    <h3 className="text-lg font-bold mb-2 text-pink-700">Triage Station</h3>
+                                    <p className="text-gray-500 text-sm">Record patient vitals.</p>
+                                </div>
+                                <div onClick={() => navigate('/pharmacy/prescriptions')} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 cursor-pointer hover:shadow-lg hover:border-green-400 transition group">
+                                    <div className="w-12 h-12 bg-green-50 text-green-600 rounded-lg flex items-center justify-center mb-4 group-hover:bg-green-600 group-hover:text-white transition">
+                                        <FaPrescription size={20} />
+                                    </div>
+                                    <h3 className="text-lg font-bold mb-2 text-green-700">Pending Prescriptions</h3>
+                                    <p className="text-gray-500 text-sm">Dispense medicines.</p>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>

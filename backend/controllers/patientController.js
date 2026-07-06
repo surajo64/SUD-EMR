@@ -244,7 +244,7 @@ const deletePatient = async (req, res) => {
 // @access  Private
 const addDeposit = async (req, res) => {
     try {
-        const { amount } = req.body;
+        const { amount, paymentMethod } = req.body;
         const patient = await Patient.findById(req.params.id);
 
         if (!patient) {
@@ -258,6 +258,18 @@ const addDeposit = async (req, res) => {
 
         patient.depositBalance = (patient.depositBalance || 0) + Number(amount);
         const updatedPatient = await patient.save();
+
+        // Create a deposit receipt to appear in statements
+        const Receipt = require('../models/receiptModel');
+        const receiptNumber = `DEP-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
+        await Receipt.create({
+            patient: patient._id,
+            amountPaid: Number(amount),
+            paymentMethod: paymentMethod || 'cash',
+            cashier: req.user._id,
+            receiptNumber,
+            paymentDate: Date.now()
+        });
 
         res.json({
             message: 'Deposit added successfully',

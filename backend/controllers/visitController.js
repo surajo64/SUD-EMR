@@ -49,6 +49,34 @@ const createVisit = async (req, res) => {
             return res.status(404).json({ message: 'Ward not found' });
         }
 
+        const Patient = require('../models/patientModel');
+        const patient = await Patient.findById(patientId);
+        if (!patient) {
+            return res.status(404).json({ message: 'Patient not found' });
+        }
+
+        const isRetainership = ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider);
+        let hasValidDeposit = (patient.depositBalance || 0) > 0;
+
+        if (isRetainership) {
+            const HMO = require('../models/hmoModel');
+            const HMOTransaction = require('../models/hmoTransactionModel');
+            const hmo = await HMO.findOne({ name: patient.hmo, category: 'Retainership' });
+            if (hmo) {
+                const depositCount = await HMOTransaction.countDocuments({
+                    hmo: hmo._id,
+                    type: 'deposit'
+                });
+                if (depositCount > 0) {
+                    hasValidDeposit = true;
+                }
+            }
+        }
+
+        if (!hasValidDeposit) {
+            return res.status(400).json({ message: 'Admission denied: Patient must make a deposit at the cashier before admission.' });
+        }
+
         const bedIndex = wardDoc.beds.findIndex(b => b.number === bed);
         if (bedIndex === -1) {
             return res.status(404).json({ message: 'Bed not found in ward' });
@@ -105,6 +133,13 @@ const createVisit = async (req, res) => {
 
         if (dailyFee > 0) {
             const EncounterCharge = require('../models/encounterChargeModel');
+            let patientPortion = dailyFee;
+            let hmoPortion = 0;
+            if (patient && ['Retainership', 'Corporate Retainership', 'Family Retainership', 'NHIA', 'KSCHMA'].includes(patient.provider)) {
+                patientPortion = 0;
+                hmoPortion = dailyFee;
+            }
+
             await EncounterCharge.create({
                 encounter: visit._id,
                 patient: patientId,
@@ -113,6 +148,8 @@ const createVisit = async (req, res) => {
                 cost: dailyFee,
                 quantity: 1,
                 totalAmount: dailyFee,
+                patientPortion,
+                hmoPortion,
                 status: 'pending',
                 addedBy: req.user._id
             });
@@ -499,7 +536,25 @@ const convertToInpatient = async (req, res) => {
             return res.status(404).json({ message: 'Patient not found' });
         }
 
-        if ((patient.depositBalance || 0) <= 0) {
+        const isRetainership = ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider);
+        let hasValidDeposit = (patient.depositBalance || 0) > 0;
+
+        if (isRetainership) {
+            const HMO = require('../models/hmoModel');
+            const HMOTransaction = require('../models/hmoTransactionModel');
+            const hmo = await HMO.findOne({ name: patient.hmo, category: 'Retainership' });
+            if (hmo) {
+                const depositCount = await HMOTransaction.countDocuments({
+                    hmo: hmo._id,
+                    type: 'deposit'
+                });
+                if (depositCount > 0) {
+                    hasValidDeposit = true;
+                }
+            }
+        }
+
+        if (!hasValidDeposit) {
             return res.status(400).json({ message: 'Admission denied: Patient must make a deposit at the cashier before admission.' });
         }
 
@@ -562,6 +617,13 @@ const convertToInpatient = async (req, res) => {
 
         if (dailyFee > 0) {
             const EncounterCharge = require('../models/encounterChargeModel');
+            let patientPortion = dailyFee;
+            let hmoPortion = 0;
+            if (patient && ['Retainership', 'Corporate Retainership', 'Family Retainership', 'NHIA', 'KSCHMA'].includes(patient.provider)) {
+                patientPortion = 0;
+                hmoPortion = dailyFee;
+            }
+
             await EncounterCharge.create({
                 encounter: visit._id,
                 patient: visit.patient,
@@ -570,6 +632,8 @@ const convertToInpatient = async (req, res) => {
                 cost: dailyFee,
                 quantity: 1,
                 totalAmount: dailyFee,
+                patientPortion,
+                hmoPortion,
                 status: 'pending',
                 addedBy: req.user._id
             });
@@ -624,6 +688,34 @@ const changeEncounterType = async (req, res) => {
                 return res.status(400).json({ message: 'Ward and Bed are required for Inpatient admission' });
             }
 
+            const Patient = require('../models/patientModel');
+            const patient = await Patient.findById(visit.patient);
+            if (!patient) {
+                return res.status(404).json({ message: 'Patient not found' });
+            }
+
+            const isRetainership = ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider);
+            let hasValidDeposit = (patient.depositBalance || 0) > 0;
+
+            if (isRetainership) {
+                const HMO = require('../models/hmoModel');
+                const HMOTransaction = require('../models/hmoTransactionModel');
+                const hmo = await HMO.findOne({ name: patient.hmo, category: 'Retainership' });
+                if (hmo) {
+                    const depositCount = await HMOTransaction.countDocuments({
+                        hmo: hmo._id,
+                        type: 'deposit'
+                    });
+                    if (depositCount > 0) {
+                        hasValidDeposit = true;
+                    }
+                }
+            }
+
+            if (!hasValidDeposit) {
+                return res.status(400).json({ message: 'Admission denied: Patient must make a deposit at the cashier before admission.' });
+            }
+
             const Ward = require('../models/wardModel');
             const wardDoc = await Ward.findById(ward);
 
@@ -650,8 +742,6 @@ const changeEncounterType = async (req, res) => {
             visit.admissionDate = new Date();
             
             // Generate Initial Bed Charge
-            const Patient = require('../models/patientModel');
-            const patient = await Patient.findById(visit.patient);
             let dailyFee = wardDoc.dailyRate;
             if (patient && patient.provider && wardDoc.rates && wardDoc.rates[patient.provider]) {
                 dailyFee = wardDoc.rates[patient.provider];
@@ -661,6 +751,13 @@ const changeEncounterType = async (req, res) => {
 
             if (dailyFee > 0) {
                 const EncounterCharge = require('../models/encounterChargeModel');
+                let patientPortion = dailyFee;
+                let hmoPortion = 0;
+                if (patient && ['Retainership', 'Corporate Retainership', 'Family Retainership', 'NHIA', 'KSCHMA'].includes(patient.provider)) {
+                    patientPortion = 0;
+                    hmoPortion = dailyFee;
+                }
+
                 await EncounterCharge.create({
                     encounter: visit._id,
                     patient: visit.patient,
@@ -669,6 +766,8 @@ const changeEncounterType = async (req, res) => {
                     cost: dailyFee,
                     quantity: 1,
                     totalAmount: dailyFee,
+                    patientPortion,
+                    hmoPortion,
                     status: 'pending',
                     addedBy: req.user._id
                 });
@@ -699,6 +798,7 @@ const changeEncounterType = async (req, res) => {
 
             for (const ec of encounterCharges) {
                 if (ec.charge && ec.charge.type === 'consultation') {
+                    if (ec.status === 'paid') continue; // Skip if already paid
                     if (waiveConsultationFee) {
                         ec.unitPrice = 0;
                         ec.totalAmount = 0;

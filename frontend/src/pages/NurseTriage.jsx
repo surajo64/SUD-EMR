@@ -78,6 +78,7 @@ const NurseTriage = () => {
     const [selectedWard, setSelectedWard] = useState('');
     const [selectedBed, setSelectedBed] = useState('');
     const [availableBeds, setAvailableBeds] = useState([]);
+    const [retainershipDepositStatus, setRetainershipDepositStatus] = useState([]);
     const [encounterToConvert, setEncounterToConvert] = useState(null);
 
     // Drug Administration State
@@ -176,6 +177,16 @@ const NurseTriage = () => {
         }
     };
 
+    const fetchRetainershipDepositStatus = async () => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get(`${backendUrl}/api/hmo-transactions/retainership-deposit-status`, config);
+            setRetainershipDepositStatus(data);
+        } catch (error) {
+            console.error('Error fetching retainership deposit status:', error);
+        }
+    };
+
     const fetchWards = async () => {
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
@@ -189,6 +200,7 @@ const NurseTriage = () => {
     useEffect(() => {
         if (showConvertModal) {
             fetchWards();
+            fetchRetainershipDepositStatus();
         }
     }, [showConvertModal]);
 
@@ -868,6 +880,12 @@ const NurseTriage = () => {
             setLoading(false);
         }
     };
+
+    const isRetainership = ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(selectedPatient?.provider);
+    const hasPatientDeposit = (selectedPatient?.depositBalance || 0) > 0;
+    const hmoDepositInfo = isRetainership && retainershipDepositStatus.find(s => s.name === selectedPatient?.hmo);
+    const hasHmoDeposit = hmoDepositInfo ? hmoDepositInfo.hasDeposit : false;
+    const isBlocked = isRetainership ? (!hasPatientDeposit && !hasHmoDeposit) : !hasPatientDeposit;
 
     return (
         <Layout>
@@ -1822,15 +1840,23 @@ const NurseTriage = () => {
                             {/* Deposit Balance status */}
                             <div className="mb-4">
                                 <label className="block text-gray-700 font-bold mb-1">Financial Deposit Balance</label>
-                                <div className={`p-3 rounded border text-sm font-semibold flex justify-between items-center ${
-                                    (selectedPatient?.depositBalance || 0) <= 0 
+                                <div className={`p-3 rounded border text-sm font-semibold flex flex-col gap-1 ${
+                                    isBlocked 
                                         ? 'bg-red-50 text-red-800 border-red-200' 
                                         : 'bg-green-50 text-green-800 border-green-200'
                                 }`}>
-                                    <span>Current Deposit:</span>
-                                    <span className="text-base font-bold">₦{selectedPatient?.depositBalance?.toLocaleString() || '0'}</span>
+                                    <div className="flex justify-between items-center">
+                                        <span>Patient Deposit:</span>
+                                        <span className="font-bold">₦{selectedPatient?.depositBalance?.toLocaleString() || '0'}</span>
+                                    </div>
+                                    {isRetainership && (
+                                        <div className="flex justify-between items-center border-t border-dashed border-gray-300 pt-1 mt-1">
+                                            <span>Retainership ({selectedPatient?.hmo}):</span>
+                                            <span className="font-bold">{hasHmoDeposit ? '✅ Active Deposit' : '❌ No Deposit'}</span>
+                                        </div>
+                                    )}
                                 </div>
-                                {(selectedPatient?.depositBalance || 0) <= 0 && (
+                                {isBlocked && (
                                     <p className="text-xs text-red-600 mt-1 font-semibold">
                                         ⚠️ Patient has no deposit balance. Admission is blocked until a deposit is paid.
                                     </p>
@@ -1843,7 +1869,7 @@ const NurseTriage = () => {
                                     className="w-full border p-2 rounded"
                                     value={selectedWard}
                                     onChange={(e) => setSelectedWard(e.target.value)}
-                                    disabled={(selectedPatient?.depositBalance || 0) <= 0}
+                                    disabled={isBlocked}
                                 >
                                     <option value="">-- Select Ward --</option>
                                     {wards.map(ward => (
@@ -1878,7 +1904,7 @@ const NurseTriage = () => {
                                 <div className="mb-6 p-3 bg-blue-50 rounded text-sm text-blue-800 border border-blue-100">
                                     <p className="font-bold">Provider Scheme: {selectedPatient.provider}</p>
                                     <p>
-                                        Daily Rate: Ã¢â€šÂ¦{wards.find(w => w._id === selectedWard)?.rates?.[selectedPatient.provider] ||
+                                        Daily Rate: ₦{wards.find(w => w._id === selectedWard)?.rates?.[selectedPatient.provider] ||
                                             wards.find(w => w._id === selectedWard)?.rates?.Standard ||
                                             wards.find(w => w._id === selectedWard)?.dailyRate || 0}
                                     </p>
@@ -1894,8 +1920,8 @@ const NurseTriage = () => {
                                 </button>
                                 <button
                                     onClick={handleConvertFromNurse}
-                                    disabled={!selectedWard || !selectedBed || (selectedPatient?.depositBalance || 0) <= 0}
-                                    className={`px-4 py-2 rounded text-white ${(!selectedWard || !selectedBed || (selectedPatient?.depositBalance || 0) <= 0) ? 'bg-purple-300 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}
+                                    disabled={!selectedWard || !selectedBed || isBlocked}
+                                    className={`px-4 py-2 rounded text-white ${(!selectedWard || !selectedBed || isBlocked) ? 'bg-purple-300 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}
                                 >
                                     Admit Patient
                                 </button>

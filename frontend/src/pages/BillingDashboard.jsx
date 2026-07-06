@@ -18,6 +18,7 @@ const BillingDashboard = () => {
     const [showDepositModal, setShowDepositModal] = useState(false);
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [depositAmount, setDepositAmount] = useState('');
+    const [depositPaymentMethod, setDepositPaymentMethod] = useState('cash');
     const [activeTab, setActiveTab] = useState('invoices');
     const [selectedInsuranceInvoices, setSelectedInsuranceInvoices] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
@@ -280,10 +281,14 @@ const BillingDashboard = () => {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             await axios.post(`${backendUrl}/api/patients/${selectedPatient}/deposit`,
-                { amount: parseFloat(depositAmount) }, config);
+                { 
+                    amount: parseFloat(depositAmount),
+                    paymentMethod: depositPaymentMethod
+                }, config);
             toast.success('Deposit added successfully!');
             setShowDepositModal(false);
             setDepositAmount('');
+            setDepositPaymentMethod('cash');
             setSelectedPatient(null);
             fetchPatients();
         } catch (error) {
@@ -356,17 +361,31 @@ const BillingDashboard = () => {
 
         // Apply date filter if selected
         if (patientStatementStartDate) {
-            patientReceipts = patientReceipts.filter(r =>
-                new Date(r.createdAt).toISOString().split('T')[0] >= patientStatementStartDate
-            );
+            patientReceipts = patientReceipts.filter(r => {
+                const dateVal = r.createdAt || r.paymentDate;
+                if (!dateVal) return false;
+                try {
+                    return new Date(dateVal).toISOString().split('T')[0] >= patientStatementStartDate;
+                } catch (e) {
+                    return false;
+                }
+            });
         }
         if (patientStatementEndDate) {
-            patientReceipts = patientReceipts.filter(r =>
-                new Date(r.createdAt).toISOString().split('T')[0] <= patientStatementEndDate
-            );
+            patientReceipts = patientReceipts.filter(r => {
+                const dateVal = r.createdAt || r.paymentDate;
+                if (!dateVal) return false;
+                try {
+                    return new Date(dateVal).toISOString().split('T')[0] <= patientStatementEndDate;
+                } catch (e) {
+                    return false;
+                }
+            });
         }
 
-        const totalSpent = patientReceipts.reduce((sum, r) => sum + r.amountPaid, 0);
+        const totalSpent = patientReceipts
+            .filter(r => r.paymentMethod !== 'deposit')
+            .reduce((sum, r) => sum + r.amountPaid, 0);
 
         const printWindow = window.open('', '', 'width=900,height=800');
         printWindow.document.write(`
@@ -676,7 +695,7 @@ const BillingDashboard = () => {
                                     <td>${new Date(r.createdAt).toLocaleDateString()}</td>
                                     <td><span style="font-family: monospace; background: #eee; padding: 2px 5px; border-radius: 3px;">${r.receiptNumber}</span></td>
                                     <td>
-                                        ${r.paymentMethod === 'refund' ? '<span style="color: #e53e3e; font-weight: bold;">Deposit Refund</span>' : (r.charges?.map(c => c.charge?.name || 'Service').join(', ') || 'Payment on Account')}
+                                        ${r.receiptNumber?.startsWith('DEP-') ? 'Patient Deposit' : (r.receiptNumber?.startsWith('RFD-') ? '<span style="color: #e53e3e; font-weight: bold;">Deposit Refund</span>' : (r.charges?.map(c => c.itemName || c.charge?.name || 'Service').join(', ') || 'Payment on Account'))}
                                     </td>
                                     <td style="text-transform: capitalize;">${r.paymentMethod}</td>
                                     <td class="text-right font-bold ${r.amountPaid < 0 ? 'text-red-600' : ''}">
@@ -830,12 +849,19 @@ const BillingDashboard = () => {
                             ` : (receipt.charges?.map(c => `
                                 <tr>
                                     <td>
-                                        ${c.charge?.name || 'Service'} 
+                                        ${c.itemName || c.charge?.name || 'Service'} 
                                         ${c.quantity > 1 ? `(x${c.quantity})` : ''}
                                     </td>
                                     <td style="text-align: right;">₦${c.totalAmount.toFixed(2)}</td>
                                 </tr>
-                            `).join('') || '<tr><td colspan="2">No items</td></tr>')}
+                            `).join('') || `
+                                <tr>
+                                    <td>${receipt.receiptNumber?.startsWith('DEP-') ? 'Patient Deposit' : (receipt.receiptNumber?.startsWith('RFD-') ? 'Deposit Refund' : 'Payment on Account')}</td>
+                                    <td style="text-align: right;">
+                                        ${receipt.amountPaid < 0 ? `-₦${Math.abs(receipt.amountPaid).toFixed(2)}` : `₦${receipt.amountPaid.toFixed(2)}`}
+                                    </td>
+                                </tr>
+                            `)}
                         </tbody>
                     </table>
 
@@ -1003,17 +1029,26 @@ const BillingDashboard = () => {
                                         </div>
 
                                         <div className="mb-4">
-                                            <label className="block text-gray-700 mb-2">Amount (₦)</label>
-                                            <input
-                                                type="number"
-                                                className="w-full border p-2 rounded"
-                                                value={depositAmount}
-                                                onChange={(e) => setDepositAmount(e.target.value)}
-                                                required
-                                                min="0"
-                                                autoFocus
-                                            />
-                                        </div>
+                                             <label className="block text-gray-700 mb-2">Amount (₦)</label>
+                                             <input
+                                                 type="number"
+                                                 className="w-full border p-2 rounded mb-4"
+                                                 value={depositAmount}
+                                                 onChange={(e) => setDepositAmount(e.target.value)}
+                                                 required
+                                                 min="0"
+                                                 autoFocus
+                                             />
+                                             <label className="block text-gray-700 mb-2">Payment Method</label>
+                                             <select
+                                                 className="w-full border p-2 rounded bg-white"
+                                                 value={depositPaymentMethod}
+                                                 onChange={(e) => setDepositPaymentMethod(e.target.value)}
+                                             >
+                                                 <option value="cash">Cash</option>
+                                                 <option value="card">Card</option>
+                                             </select>
+                                         </div>
                                         <div className="flex justify-end gap-2">
                                             <button
                                                 type="button"
@@ -1510,8 +1545,14 @@ const BillingDashboard = () => {
                                 <tbody>
                                     {receipts
                                         .filter(r => {
-                                            const receiptDate = new Date(r.createdAt).toISOString().split('T')[0];
-                                            return receiptDate >= startDate && receiptDate <= endDate;
+                                            const dateVal = r.createdAt || r.paymentDate;
+                                            if (!dateVal) return false;
+                                            try {
+                                                const receiptDate = new Date(dateVal).toISOString().split('T')[0];
+                                                return receiptDate >= startDate && receiptDate <= endDate;
+                                            } catch (e) {
+                                                return false;
+                                            }
                                         })
                                         .slice(0, 20)
                                         .map((receipt) => (
@@ -1521,7 +1562,7 @@ const BillingDashboard = () => {
                                                     {receipt.patient?.name || receipt.familyFile?.familyName || 'N/A'}
                                                 </td>
                                                 <td className="p-3 border-b text-sm">
-                                                    {receipt.familyFile ? 'Family Registration' : (receipt.charges?.map(c => c.itemName || c.charge?.name || 'Service').join(', ') || 'N/A')}
+                                                    {receipt.familyFile ? 'Family Registration' : (receipt.receiptNumber?.startsWith('DEP-') ? 'Patient Deposit' : (receipt.receiptNumber?.startsWith('RFD-') ? 'Deposit Refund' : (receipt.charges?.map(c => c.itemName || c.charge?.name || 'Service').join(', ') || 'N/A')))}
                                                 </td>
                                                 <td className="p-3 border-b text-green-600 font-bold">₦{receipt.amountPaid.toFixed(2)}</td>
                                                 <td className="p-3 border-b capitalize">
@@ -1557,8 +1598,14 @@ const BillingDashboard = () => {
                                             </tr>
                                         ))}
                                     {receipts.filter(r => {
-                                        const receiptDate = new Date(r.createdAt).toISOString().split('T')[0];
-                                        return receiptDate >= startDate && receiptDate <= endDate;
+                                        const dateVal = r.createdAt || r.paymentDate;
+                                        if (!dateVal) return false;
+                                        try {
+                                            const receiptDate = new Date(dateVal).toISOString().split('T')[0];
+                                            return receiptDate >= startDate && receiptDate <= endDate;
+                                        } catch (e) {
+                                            return false;
+                                        }
                                     }).length === 0 && (
                                             <tr>
                                                 <td colSpan="7" className="p-4 text-center text-gray-500">

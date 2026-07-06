@@ -312,6 +312,7 @@ const PatientDetails = () => {
     const [wards, setWards] = useState([]);
     const [selectedWard, setSelectedWard] = useState('');
     const [selectedBed, setSelectedBed] = useState('');
+    const [retainershipDepositStatus, setRetainershipDepositStatus] = useState([]);
     const [availableBeds, setAvailableBeds] = useState([]);
 
     // Orders
@@ -796,6 +797,16 @@ const PatientDetails = () => {
         }
     };
 
+    const fetchRetainershipDepositStatus = async () => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get(`${backendUrl}/api/hmo-transactions/retainership-deposit-status`, config);
+            setRetainershipDepositStatus(data);
+        } catch (error) {
+            console.error('Error fetching retainership deposit status:', error);
+        }
+    };
+
     const fetchWards = async () => {
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
@@ -810,6 +821,7 @@ const PatientDetails = () => {
     useEffect(() => {
         if (showConvertModal) {
             fetchWards();
+            fetchRetainershipDepositStatus();
         }
     }, [showConvertModal]);
 
@@ -1600,6 +1612,12 @@ const PatientDetails = () => {
                 return '';
         }
     };
+
+    const isRetainership = ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient?.provider);
+    const hasPatientDeposit = (patient?.depositBalance || 0) > 0;
+    const hmoDepositInfo = isRetainership && retainershipDepositStatus.find(s => s.name === patient?.hmo);
+    const hasHmoDeposit = hmoDepositInfo ? hmoDepositInfo.hasDeposit : false;
+    const isBlocked = isRetainership ? (!hasPatientDeposit && !hasHmoDeposit) : !hasPatientDeposit;
 
     if (!patient) return <LoadingOverlay />;
 
@@ -4279,15 +4297,23 @@ const PatientDetails = () => {
                             {/* Deposit Balance status */}
                             <div className="mb-4">
                                 <label className="block text-gray-700 font-bold text-sm mb-1">Financial Deposit Balance</label>
-                                <div className={`p-3 rounded border text-sm font-semibold flex justify-between items-center ${
-                                    (patient?.depositBalance || 0) <= 0 
+                                <div className={`p-3 rounded border text-sm font-semibold flex flex-col gap-1 ${
+                                    isBlocked 
                                         ? 'bg-red-50 text-red-800 border-red-200' 
                                         : 'bg-green-50 text-green-800 border-green-200'
                                 }`}>
-                                    <span>Current Deposit:</span>
-                                    <span className="text-base font-bold">₦{patient?.depositBalance?.toLocaleString() || '0'}</span>
+                                    <div className="flex justify-between items-center">
+                                        <span>Patient Deposit:</span>
+                                        <span className="font-bold">₦{patient?.depositBalance?.toLocaleString() || '0'}</span>
+                                    </div>
+                                    {isRetainership && (
+                                        <div className="flex justify-between items-center border-t border-dashed border-gray-300 pt-1 mt-1">
+                                            <span>Retainership ({patient?.hmo}):</span>
+                                            <span className="font-bold">{hasHmoDeposit ? '✅ Active Deposit' : '❌ No Deposit'}</span>
+                                        </div>
+                                    )}
                                 </div>
-                                {(patient?.depositBalance || 0) <= 0 && (
+                                {isBlocked && (
                                     <p className="text-xs text-red-600 mt-1 font-semibold">
                                         ⚠️ Patient has no deposit balance. Admission is blocked until a deposit is paid.
                                     </p>
@@ -4300,7 +4326,7 @@ const PatientDetails = () => {
                                     className="w-full border p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                                     value={selectedWard}
                                     onChange={(e) => setSelectedWard(e.target.value)}
-                                    disabled={(patient?.depositBalance || 0) <= 0}
+                                    disabled={isBlocked}
                                 >
                                     <option value="">-- Select Ward --</option>
                                     {wards.map(ward => (
@@ -4317,7 +4343,7 @@ const PatientDetails = () => {
                                     className="w-full border p-2 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
                                     value={selectedBed}
                                     onChange={(e) => setSelectedBed(e.target.value)}
-                                    disabled={!selectedWard || (patient?.depositBalance || 0) <= 0}
+                                    disabled={!selectedWard || isBlocked}
                                 >
                                     <option value="">-- Select Bed --</option>
                                     {availableBeds.map(bed => (
@@ -4351,9 +4377,9 @@ const PatientDetails = () => {
                                 </button>
                                 <button
                                     onClick={handleConvertToInpatient}
-                                    disabled={!selectedWard || !selectedBed || (patient?.depositBalance || 0) <= 0}
+                                    disabled={!selectedWard || !selectedBed || isBlocked}
                                     className={`px-4 py-2 rounded text-white text-sm font-semibold transition ${
-                                        !selectedWard || !selectedBed || (patient?.depositBalance || 0) <= 0
+                                        !selectedWard || !selectedBed || isBlocked
                                             ? 'bg-purple-300 cursor-not-allowed'
                                             : 'bg-purple-600 hover:bg-purple-700 shadow-sm'
                                     }`}

@@ -357,6 +357,13 @@ const triggerDailyWardCharges = async (req, res) => {
                     });
 
                     if (!existingCharge) {
+                        let patientPortion = visit.ward.dailyRate;
+                        let hmoPortion = 0;
+                        if (visit.patient && ['Retainership', 'Corporate Retainership', 'Family Retainership', 'NHIA', 'KSCHMA'].includes(visit.patient.provider)) {
+                            patientPortion = 0;
+                            hmoPortion = visit.ward.dailyRate;
+                        }
+
                         // Create a charge for the day
                         await EncounterCharge.create({
                             encounter: visit._id,
@@ -366,6 +373,8 @@ const triggerDailyWardCharges = async (req, res) => {
                             cost: visit.ward.dailyRate,
                             quantity: 1,
                             totalAmount: visit.ward.dailyRate,
+                            patientPortion,
+                            hmoPortion,
                             status: 'pending'
                         });
 

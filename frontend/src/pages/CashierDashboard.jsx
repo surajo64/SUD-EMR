@@ -33,6 +33,20 @@ const CashierDashboard = () => {
         totalReceiptsToday: 0
     });
 
+    const getPatientPortion = (charge) => {
+        if (!charge) return 0;
+        if (charge.patientPortion > 0) return charge.patientPortion;
+        const provider = charge.patient?.provider || selectedPatient?.provider || 'Standard';
+        const isInsurance = ['Retainership', 'Corporate Retainership', 'Family Retainership', 'NHIA', 'KSCHMA'].includes(provider);
+        if (isInsurance) {
+            if ((provider === 'NHIA' || provider === 'KSCHMA') && charge.itemType === 'Drug') {
+                return charge.totalAmount * 0.1;
+            }
+            return charge.patientPortion || 0;
+        }
+        return charge.totalAmount;
+    };
+
     // Family File State
     const [familySearchTerm, setFamilySearchTerm] = useState('');
     const [familyFiles, setFamilyFiles] = useState([]);
@@ -165,7 +179,7 @@ const CashierDashboard = () => {
                     );
                     const pending = chargesResponse.data.filter(c => c.status === 'pending');
                     if (pending.length > 0) {
-                        const totalPending = pending.reduce((sum, c) => sum + (c.patientPortion !== undefined ? c.patientPortion : c.totalAmount), 0);
+                        const totalPending = pending.reduce((sum, c) => sum + getPatientPortion(c), 0);
                         pendingChargesMap[encounter._id] = {
                             count: pending.length,
                             total: totalPending
@@ -350,7 +364,14 @@ const CashierDashboard = () => {
                                     </td>
                                     <td style="text-align: right;">₦${c.totalAmount.toFixed(2)}</td>
                                 </tr>
-                            `).join('') || '<tr><td colspan="2">No items</td></tr>')}
+                            `).join('') || `
+                                <tr>
+                                    <td>${receipt.receiptNumber?.startsWith('DEP-') ? 'Patient Deposit' : (receipt.receiptNumber?.startsWith('RFD-') ? 'Deposit Refund' : 'Payment on Account')}</td>
+                                    <td style="text-align: right;">
+                                        ${receipt.amountPaid < 0 ? `-₦${Math.abs(receipt.amountPaid).toFixed(2)}` : `₦${receipt.amountPaid.toFixed(2)}`}
+                                    </td>
+                                </tr>
+                            `)}
                         </tbody>
                     </table>
 
@@ -483,7 +504,7 @@ const CashierDashboard = () => {
 
     const totalSelectedAmount = encounterCharges
         .filter(charge => selectedCharges.includes(charge._id))
-        .reduce((sum, charge) => sum + (charge.patientPortion !== undefined ? charge.patientPortion : charge.totalAmount), 0);
+        .reduce((sum, charge) => sum + getPatientPortion(charge), 0);
 
     return (
         <Layout>
@@ -689,7 +710,7 @@ const CashierDashboard = () => {
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-3">
-                                                    <p className="font-bold text-green-600">₦{(charge.patientPortion !== undefined ? charge.patientPortion : charge.totalAmount).toFixed(2)}</p>
+                                                    <p className="font-bold text-green-600">₦{getPatientPortion(charge).toFixed(2)}</p>
                                                 </div>
                                             </div>
                                         ))}
@@ -935,10 +956,16 @@ const CashierDashboard = () => {
                         </thead>
                         <tbody>
                             {receipts
-                                .filter(r => {
-                                    const receiptDate = new Date(r.createdAt).toISOString().split('T')[0];
-                                    return receiptDate >= startDate && receiptDate <= endDate;
-                                })
+                                 .filter(r => {
+                                     const dateVal = r.createdAt || r.paymentDate;
+                                     if (!dateVal) return false;
+                                     try {
+                                         const receiptDate = new Date(dateVal).toISOString().split('T')[0];
+                                         return receiptDate >= startDate && receiptDate <= endDate;
+                                     } catch (e) {
+                                         return false;
+                                     }
+                                 })
                                 .slice(0, 20)
                                 .map((receipt) => (
                                     <tr key={receipt._id} className="hover:bg-gray-50">

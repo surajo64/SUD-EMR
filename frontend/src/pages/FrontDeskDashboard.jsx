@@ -1441,8 +1441,7 @@ const FrontDeskDashboard = () => {
                                 </div>
                             )}
 
-                            {/* Total */}
-                            {selectedCharges.length > 0 && (
+                             {selectedCharges.length > 0 && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && (
                                 <div className="bg-blue-50 p-4 rounded mb-6">
                                     <div className="flex justify-between items-center">
                                         <span className="font-semibold text-lg">Total Charges:</span>

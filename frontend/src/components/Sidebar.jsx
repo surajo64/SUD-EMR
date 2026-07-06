@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { FaUserMd, FaPills, FaFlask, FaXRay, FaUserInjured, FaCalendarAlt, FaNotesMedical, FaSignOutAlt, FaTachometerAlt, FaDollarSign, FaFileInvoiceDollar, FaHeart, FaHospital, FaBed, FaChevronDown, FaChevronRight, FaCogs, FaMoneyBillWave, FaExchangeAlt, FaTrash, FaUniversity, FaChartLine, FaFileMedicalAlt, FaLock, FaUserFriends, FaHospitalUser, FaHistory, FaCashRegister } from 'react-icons/fa';
+import { FaUserMd, FaPills, FaFlask, FaXRay, FaUserInjured, FaCalendarAlt, FaNotesMedical, FaSignOutAlt, FaTachometerAlt, FaDollarSign, FaFileInvoiceDollar, FaHeart, FaHospital, FaBed, FaChevronDown, FaChevronRight, FaCogs, FaMoneyBillWave, FaExchangeAlt, FaTrash, FaUniversity, FaChartLine, FaFileMedicalAlt, FaLock, FaUserFriends, FaHospitalUser, FaHistory, FaCashRegister, FaBuilding } from 'react-icons/fa';
 
 import { useContext, useState, useEffect } from 'react';
 import axios from 'axios';
@@ -243,11 +243,14 @@ const Sidebar = () => {
                             <Link to="/admin/patients" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/patients')}`}>
                                 <FaUserInjured size={14} /> Patients
                             </Link>
+                            <Link to="/nurse/triage" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/nurse/triage')}`}>
+                                <FaUserMd size={14} /> Nursing Triage
+                            </Link>
                             <Link to="/admin/family-files" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/family-files')}`}>
                                 <FaUserFriends size={14} /> Family Files
                             </Link>
-                            <Link to="/admin/clinics" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/clinics')}`}>
-                                <FaHospital size={14} /> Clinics
+                            <Link to="/admin/departments" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/departments')}`}>
+                                <FaBuilding size={14} /> Departments
                             </Link>
                             <Link to="/admin/speciality-clinics" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/speciality-clinics')}`}>
                                 <FaHospital size={14} /> Speciality Clinics
@@ -298,6 +301,9 @@ const Sidebar = () => {
                         <SidebarDropdown title="Manage Pharmacy" icon={<FaPills />} name="pharmacy">
                             <Link to="/pharmacy/inventory" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/pharmacy/inventory')}`}>
                                 <FaPills size={14} /> Inventory
+                            </Link>
+                            <Link to="/pharmacy/prescriptions" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/pharmacy/prescriptions')}`}>
+                                <FaPills size={14} /> Pending Prescriptions
                             </Link>
                             <Link to="/admin/pharmacies" className={`flex items-center gap-3 p-2 rounded hover:bg-green-600 transition ${isActive('/admin/pharmacies')}`}>
                                 <FaHospital size={14} /> Pharmacy Locations
