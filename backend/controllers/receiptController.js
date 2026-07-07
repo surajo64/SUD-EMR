@@ -250,7 +250,7 @@ const createReceiptForCharges = async (req, res) => {
                 return res.status(404).json({ message: 'Patient not found' });
             }
 
-            if (patient.provider !== 'Retainership') {
+            if (!['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider)) {
                 return res.status(400).json({ message: 'Patient is not a Retainership patient' });
             }
 

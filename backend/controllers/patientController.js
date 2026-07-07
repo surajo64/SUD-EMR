@@ -66,12 +66,46 @@ const registerPatient = async (req, res) => {
     }
 };
 
+const getHMOWalletBalance = async (hmoName) => {
+    const HMO = require('../models/hmoModel');
+    const HMOTransaction = require('../models/hmoTransactionModel');
+    const EncounterCharge = require('../models/encounterChargeModel');
+    const Patient = require('../models/patientModel');
+
+    const hmo = await HMO.findOne({ name: hmoName });
+    if (!hmo) return 0;
+
+    const transactions = await HMOTransaction.find({ hmo: hmo._id });
+    const totalDeposits = transactions
+        .filter(t => t.type === 'deposit')
+        .reduce((sum, d) => sum + d.amount, 0);
+
+    const manualCharges = transactions
+        .filter(t => t.type === 'charge')
+        .reduce((sum, c) => sum + c.amount, 0);
+
+    const refunds = transactions
+        .filter(t => t.type === 'refund')
+        .reduce((sum, r) => sum + r.amount, 0);
+
+    const hmoPatients = await Patient.find({ hmo: hmo.name }).select('_id');
+    const hmoPatientIds = hmoPatients.map(p => p._id);
+
+    const charges = await EncounterCharge.find({
+        patient: { $in: hmoPatientIds },
+        hmoPortion: { $gt: 0 }
+    });
+    const totalUtilized = charges.reduce((sum, c) => sum + c.hmoPortion, 0);
+
+    return totalDeposits - (totalUtilized + manualCharges + refunds);
+};
+
 // @desc    Get all patients
 // @route   GET /api/patients
 // @access  Private
 const getPatients = async (req, res) => {
     try {
-        const { familyFile } = req.query;
+        const { familyFile, search } = req.query;
         let filter = {};
 
         if (familyFile) {
@@ -83,6 +117,14 @@ const getPatients = async (req, res) => {
                 // If invalid ID provided, return no patients rather than all
                 return res.json([]);
             }
+        }
+
+        if (search) {
+            filter.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { mrn: { $regex: search, $options: 'i' } },
+                { contact: { $regex: search, $options: 'i' } }
+            ];
         }
 
         // Apply encounter restrictions for doctor searches
@@ -112,7 +154,20 @@ const getPatients = async (req, res) => {
         }
 
         const patients = await Patient.find(filter).populate('familyFile');
-        res.json(patients);
+
+        // Dynamically compute and overlay retainership wallet balance
+        const populatedPatients = [];
+        for (let patient of patients) {
+            let walletBalance = patient.depositBalance || 0;
+            if (['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider) && patient.hmo) {
+                walletBalance = await getHMOWalletBalance(patient.hmo);
+            }
+            const pObj = patient.toObject();
+            pObj.depositBalance = walletBalance;
+            populatedPatients.push(pObj);
+        }
+
+        res.json(populatedPatients);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -350,7 +405,13 @@ const getPatientById = async (req, res) => {
                 }
             }
 
-            res.json(patient);
+            let walletBalance = patient.depositBalance || 0;
+            if (['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider) && patient.hmo) {
+                walletBalance = await getHMOWalletBalance(patient.hmo);
+            }
+            const pObj = patient.toObject();
+            pObj.depositBalance = walletBalance;
+            res.json(pObj);
         } else {
             res.status(404).json({ message: 'Patient not found' });
         }

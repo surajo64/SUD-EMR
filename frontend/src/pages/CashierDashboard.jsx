@@ -149,13 +149,13 @@ const CashierDashboard = () => {
         setEncounterCharges([]);
         setSelectedCharges([]);
 
-        // Set default payment method based on deposit balance or provider
-        if (patient.depositBalance > 0) {
-            setPaymentMethod('deposit');
-        } else if (patient.provider === 'Retainership') {
+        // Set default payment method based on provider first, then deposit balance
+        if (['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider)) {
             setPaymentMethod('retainership');
         } else if (['NHIA', 'KSCHMA', 'State Scheme'].includes(patient.provider)) {
             setPaymentMethod('insurance');
+        } else if (patient.depositBalance > 0) {
+            setPaymentMethod('deposit');
         } else {
             setPaymentMethod('cash');
         }

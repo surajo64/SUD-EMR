@@ -28,8 +28,17 @@ const PharmacyPOS = () => {
     const [discount, setDiscount] = useState(0);
     const [taxPct, setTaxPct] = useState(0);
     const [paymentMethod, setPaymentMethod] = useState('cash');
+    const [isManualPaymentMethod, setIsManualPaymentMethod] = useState(false);
     const [prescriptionFile, setPrescriptionFile] = useState(null);
     const [prescriptionPreview, setPrescriptionPreview] = useState(null);
+
+    // Registered Patient state
+    const [isRegisteredPatient, setIsRegisteredPatient] = useState(false);
+    const [selectedPatient, setSelectedPatient] = useState(null);
+    const [patientSearch, setPatientSearch] = useState('');
+    const [patientSearchResults, setPatientSearchResults] = useState([]);
+    const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+    const [searchingPatients, setSearchingPatients] = useState(false);
 
     // Sale state
     const [loading, setLoading] = useState(false);
@@ -142,9 +151,28 @@ const PharmacyPOS = () => {
         }
     }, [drugSearch, inventoryDrugs]);
 
+    // Helper to get drug price based on patient's provider
+    const getDrugPriceForPatient = (drug, patient) => {
+        if (!patient) return drug.standardFee || drug.price || 0;
+        const provider = patient.provider;
+        let fee = 0;
+        if (provider === 'Retainership' || provider === 'Corporate Retainership') fee = drug.retainershipFee || 0;
+        else if (provider === 'Family Retainership') fee = drug.familyRetainershipFee || 0;
+        else if (provider === 'NHIA') fee = drug.nhiaFee || 0;
+        else if (provider === 'KSCHMA') fee = drug.kschmaFee || 0;
+        else fee = drug.standardFee || drug.price || 0;
+
+        if (fee === 0) {
+            fee = drug.standardFee || drug.price || 0;
+        }
+        return fee;
+    };
+
     const handleAddToCart = (drug) => {
         setShowDropdown(false);
         setDrugSearch('');
+
+        const price = getDrugPriceForPatient(drug, selectedPatient);
 
         const existing = cart.find(c => c.name.toLowerCase() === drug.name.toLowerCase());
         if (existing) {
@@ -153,18 +181,26 @@ const PharmacyPOS = () => {
                 return;
             }
             setCart(cart.map(c =>
-                c.name.toLowerCase() === drug.name.toLowerCase() ? { ...c, quantity: c.quantity + 1 } : c
+                c.name.toLowerCase() === drug.name.toLowerCase() ? { ...c, quantity: c.quantity + 1, unitPrice: price } : c
             ));
         } else {
             setCart([...cart, {
                 inventoryId: drug._id,
                 name: drug.name,
-                unitPrice: drug.standardFee || drug.price || 0,
+                unitPrice: price,
                 quantity: 1,
                 maxQty: drug.quantity,
                 form: drug.form || '',
                 dosage: drug.dosage || '',
-                batches: drug.batches
+                batches: drug.batches,
+                fees: {
+                    standardFee: drug.standardFee,
+                    price: drug.price,
+                    retainershipFee: drug.retainershipFee,
+                    familyRetainershipFee: drug.familyRetainershipFee,
+                    nhiaFee: drug.nhiaFee,
+                    kschmaFee: drug.kschmaFee
+                }
             }]);
         }
     };
@@ -198,8 +234,70 @@ const PharmacyPOS = () => {
     const taxAmt = (subtotal - discountAmt) * (parseFloat(taxPct) / 100) || 0;
     const total = subtotal - discountAmt + taxAmt;
 
+    // Debounced search for registered patients
+    useEffect(() => {
+        if (!isRegisteredPatient) return;
+
+        if (patientSearch.trim().length >= 2) {
+            setSearchingPatients(true);
+        } else {
+            setSearchingPatients(false);
+            setPatientSearchResults([]);
+            setShowPatientDropdown(false);
+        }
+
+        const delayDebounceFn = setTimeout(async () => {
+            if (patientSearch.trim().length >= 2) {
+                try {
+                    const config = { headers: { Authorization: `Bearer ${user.token}` } };
+                    const { data } = await axios.get(`${backendUrl}/api/patients?search=${patientSearch}`, config);
+                    setPatientSearchResults(data);
+                    setShowPatientDropdown(true);
+                } catch (error) {
+                    console.error('Error searching patients:', error);
+                } finally {
+                    setSearchingPatients(false);
+                }
+            }
+        }, 300);
+
+        return () => clearTimeout(delayDebounceFn);
+    }, [patientSearch, isRegisteredPatient, backendUrl, user.token]);
+
+    // Update cart item prices when selectedPatient changes
+    useEffect(() => {
+        setCart(prevCart => prevCart.map(item => {
+            const fees = item.fees || {
+                standardFee: item.unitPrice,
+                price: item.unitPrice
+            };
+            const price = getDrugPriceForPatient(fees, selectedPatient);
+            return { ...item, unitPrice: price };
+        }));
+    }, [selectedPatient]);
+
+    // Handle automated payment detection based on patient type and wallet deposit balance
+    useEffect(() => {
+        if (isManualPaymentMethod) return;
+
+        if (selectedPatient) {
+            const isRetainershipPatient = ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(selectedPatient.provider);
+            const hasSufficientBalance = selectedPatient.depositBalance >= total;
+
+            if (isRetainershipPatient && hasSufficientBalance) {
+                setPaymentMethod('retainership');
+            } else if (!isRetainershipPatient && hasSufficientBalance) {
+                setPaymentMethod('deposit');
+            } else {
+                setPaymentMethod('cash');
+            }
+        } else {
+            setPaymentMethod('cash');
+        }
+    }, [selectedPatient, total, isManualPaymentMethod]);
+
     const handleCompleteSale = async () => {
-        if (!customerName.trim()) {
+        if (!selectedPatient && !customerName.trim()) {
             toast.error('Customer name is required');
             return;
         }
@@ -232,7 +330,8 @@ const PharmacyPOS = () => {
             }
 
             const payload = {
-                customerName: customerName.trim(),
+                patientId: selectedPatient ? selectedPatient._id : null,
+                customerName: selectedPatient ? selectedPatient.name : customerName.trim(),
                 items: cart.map(c => ({
                     inventoryId: c.inventoryId,
                     name: c.name,
@@ -261,8 +360,13 @@ const PharmacyPOS = () => {
             setDiscount(0);
             setTaxPct(0);
             setPaymentMethod('cash');
+            setIsManualPaymentMethod(false);
             setPrescriptionFile(null);
             setPrescriptionPreview(null);
+            setSelectedPatient(null);
+            setIsRegisteredPatient(false);
+            setPatientSearch('');
+            setPatientSearchResults([]);
             fetchReceipts();
 
             // Re-fetch inventory to reflect deductions
@@ -364,6 +468,11 @@ const PharmacyPOS = () => {
         setTaxPct(0);
         setPrescriptionFile(null);
         setPrescriptionPreview(null);
+        setSelectedPatient(null);
+        setIsRegisteredPatient(false);
+        setPatientSearch('');
+        setPatientSearchResults([]);
+        setIsManualPaymentMethod(false);
     };
 
     return (
@@ -425,7 +534,7 @@ const PharmacyPOS = () => {
                                                 </p>
                                             </div>
                                             <div className="text-right">
-                                                <p className="font-bold text-green-600 text-base">₦{(drug.standardFee || drug.price || 0).toLocaleString()}</p>
+                                                <p className="font-bold text-green-600 text-base">₦{getDrugPriceForPatient(drug, selectedPatient).toLocaleString()}</p>
                                                 <div className="flex flex-col items-end gap-0.5 mt-0.5">
                                                     <span className="text-[9px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">In Stock</span>
                                                     {drug.retainershipFee > 0 && <span className="text-[9px] text-purple-500 font-medium tracking-tight">Corp: ₦{drug.retainershipFee.toLocaleString()}</span>}
@@ -505,22 +614,197 @@ const PharmacyPOS = () => {
                             <FaReceipt className="text-green-600" /> Checkout
                         </h3>
 
-                        {/* Customer Name - REQUIRED */}
-                        <div className="mb-4">
-                            <label className="block text-sm font-semibold text-gray-700 mb-1">
-                                Customer Name <span className="text-red-500">*</span>
-                            </label>
+                        {/* Checkbox: Is Our Patient? */}
+                        <div className="mb-4 flex items-center gap-2">
                             <input
-                                type="text"
-                                placeholder="Patient's full name"
-                                className={`w-full border rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 ${!customerName && 'border-gray-300'} ${customerName ? 'border-green-400' : ''}`}
-                                value={customerName}
-                                onChange={e => setCustomerName(e.target.value)}
+                                type="checkbox"
+                                id="isRegisteredPatient"
+                                className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-400 cursor-pointer"
+                                checked={isRegisteredPatient}
+                                onChange={e => {
+                                    setIsRegisteredPatient(e.target.checked);
+                                    // Reset selected patient and customer name on toggle
+                                    setSelectedPatient(null);
+                                    setCustomerName('');
+                                    setPatientSearch('');
+                                    setPatientSearchResults([]);
+                                    setShowPatientDropdown(false);
+                                    setIsManualPaymentMethod(false);
+                                }}
                             />
-                            {!customerName && (
-                                <p className="text-xs text-red-400 mt-1">Customer name is required</p>
-                            )}
+                            <label htmlFor="isRegisteredPatient" className="text-sm font-semibold text-gray-700 cursor-pointer select-none">
+                                Registered Patient?
+                            </label>
                         </div>
+
+                        {/* Customer Name or Patient Search */}
+                        {isRegisteredPatient ? (
+                            <div className="mb-4 relative">
+                                {selectedPatient ? (
+                                    <div className="bg-green-50 border border-green-200 rounded-lg p-3.5 relative">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setSelectedPatient(null);
+                                                setCustomerName('');
+                                                setIsManualPaymentMethod(false);
+                                            }}
+                                            className="absolute top-2 right-2 text-gray-400 hover:text-red-500 transition"
+                                        >
+                                            <FaTimes />
+                                        </button>
+                                        <h4 className="font-bold text-gray-800 text-base">{selectedPatient.name}</h4>
+                                        <div className="grid grid-cols-2 gap-2 text-xs mt-2 text-gray-600">
+                                            <div>
+                                                <span className="font-medium text-gray-500 text-[11px] block">MRN</span>
+                                                <span className="font-semibold text-gray-700 text-xs">{selectedPatient.mrn}</span>
+                                            </div>
+                                            <div>
+                                                <span className="font-medium text-gray-500 text-[11px] block">Phone</span>
+                                                <span className="font-semibold text-gray-700 text-xs">{selectedPatient.contact || 'N/A'}</span>
+                                            </div>
+                                            <div>
+                                                <span className="font-medium text-gray-500 text-[11px] block">Provider</span>
+                                                <span className={`font-bold uppercase tracking-wider text-[9px] px-1.5 py-0.5 rounded-full inline-block mt-0.5 ${
+                                                    ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(selectedPatient.provider)
+                                                        ? 'bg-purple-100 text-purple-800'
+                                                        : ['NHIA', 'KSCHMA'].includes(selectedPatient.provider)
+                                                        ? 'bg-blue-100 text-blue-800'
+                                                        : 'bg-gray-100 text-gray-800'
+                                                }`}>
+                                                    {selectedPatient.provider}
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <span className="font-medium text-gray-500 text-[11px] block">Wallet Balance</span>
+                                                <span className={`font-bold text-xs ${selectedPatient.depositBalance > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                                                    ₦{(selectedPatient.depositBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* System Detection Banner */}
+                                        <div className="mt-3 pt-2.5 border-t border-green-200 text-xs font-semibold text-gray-700">
+                                            {['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(selectedPatient.provider) ? (
+                                                selectedPatient.depositBalance >= total ? (
+                                                    <div className="flex items-center gap-1.5 text-purple-700 bg-purple-100/50 p-2 rounded">
+                                                        <span className="inline-block w-2.5 h-2.5 bg-purple-500 rounded-full animate-pulse" />
+                                                        Retainership detected. Balance covers total via Retainership account.
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex flex-col gap-1 text-orange-700 bg-orange-100/40 p-2 rounded">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="inline-block w-2.5 h-2.5 bg-orange-500 rounded-full" />
+                                                            Retainership detected but Retainership wallet balance is insufficient (₦{selectedPatient.depositBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}).
+                                                        </div>
+                                                        <span className="font-normal text-[11px] text-orange-600 pl-4">
+                                                            Customer must pay ₦{total.toLocaleString(undefined, { minimumFractionDigits: 2 })} out of pocket.
+                                                        </span>
+                                                    </div>
+                                                )
+                                            ) : selectedPatient.depositBalance >= total ? (
+                                                <div className="flex items-center gap-1.5 text-green-700 bg-green-100/50 p-2 rounded">
+                                                    <span className="inline-block w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
+                                                    Wallet deposit detected. ₦{total.toLocaleString(undefined, { minimumFractionDigits: 2 })} will be deducted from wallet.
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-col gap-1 text-orange-700 bg-orange-100/40 p-2 rounded">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="inline-block w-2.5 h-2.5 bg-orange-500 rounded-full" />
+                                                        No Retainership / Insufficient Deposit (Wallet: ₦{(selectedPatient.depositBalance || 0).toLocaleString()}).
+                                                    </div>
+                                                    <span className="font-normal text-[11px] text-orange-600 pl-4">
+                                                        Customer must pay ₦{total.toLocaleString(undefined, { minimumFractionDigits: 2 })} out of pocket.
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="relative">
+                                         <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                             Search Patient <span className="text-red-500">*</span>
+                                         </label>
+                                         <div className="relative">
+                                             <input
+                                                 type="text"
+                                                 placeholder="Search by MRN, phone, or name..."
+                                                 className="w-full border rounded-lg p-2.5 pl-10 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 border-gray-300"
+                                                 value={patientSearch}
+                                                 onChange={e => setPatientSearch(e.target.value)}
+                                                 onFocus={() => patientSearch.trim().length >= 2 && setShowPatientDropdown(true)}
+                                             />
+                                             <FaSearch className="absolute left-3 top-3.5 text-gray-400 text-sm" />
+                                             {searchingPatients && (
+                                                 <div className="absolute right-3 top-3.5">
+                                                     <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
+                                                 </div>
+                                             )}
+                                         </div>
+
+                                         {showPatientDropdown && patientSearch.trim().length >= 2 && (
+                                             searchingPatients ? (
+                                                 <div className="absolute z-30 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 p-4 text-center text-gray-500 text-sm flex items-center justify-center gap-2">
+                                                     <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
+                                                     Searching patients...
+                                                 </div>
+                                             ) : (
+                                                 <>
+                                                     {patientSearchResults.length > 0 && (
+                                                         <div className="absolute z-30 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto">
+                                                             {patientSearchResults.map(patient => (
+                                                                 <div
+                                                                     key={patient._id}
+                                                                     className="p-3 hover:bg-green-50 cursor-pointer border-b last:border-b-0 text-sm"
+                                                                     onClick={() => {
+                                                                         setSelectedPatient(patient);
+                                                                         setCustomerName(patient.name);
+                                                                         setShowPatientDropdown(false);
+                                                                         setPatientSearch('');
+                                                                         setIsManualPaymentMethod(false);
+                                                                     }}
+                                                                 >
+                                                                     <p className="font-semibold text-gray-800">{patient.name}</p>
+                                                                     <div className="flex justify-between text-xs text-gray-500 mt-1">
+                                                                         <span>MRN: <span className="font-semibold text-gray-700">{patient.mrn}</span></span>
+                                                                         <span>Phone: <span className="font-semibold text-gray-700">{patient.contact}</span></span>
+                                                                     </div>
+                                                                     <div className="flex justify-between text-xs text-gray-500 mt-0.5 font-medium">
+                                                                         <span>Provider: <span className="text-purple-600">{patient.provider}</span></span>
+                                                                         <span>Wallet: <span className="text-green-600">₦{(patient.depositBalance || 0).toLocaleString()}</span></span>
+                                                                     </div>
+                                                                 </div>
+                                                             ))}
+                                                         </div>
+                                                     )}
+                                                     {patientSearchResults.length === 0 && (
+                                                         <div className="absolute z-30 w-full bg-white border rounded-lg shadow mt-1 p-4 text-center text-gray-500 text-sm">
+                                                             No matching patients found
+                                                         </div>
+                                                     )}
+                                                 </>
+                                             )
+                                         )}
+                                     </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="mb-4">
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                    Customer Name <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="Patient's full name"
+                                    className={`w-full border rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 ${!customerName && 'border-gray-300'} ${customerName ? 'border-green-400' : ''}`}
+                                    value={customerName}
+                                    onChange={e => setCustomerName(e.target.value)}
+                                />
+                                {!customerName && (
+                                    <p className="text-xs text-red-400 mt-1">Customer name is required</p>
+                                )}
+                            </div>
+                        )}
 
                         {/* Prescription Image Upload - OPTIONAL */}
                         <div className="mb-4">
@@ -605,14 +889,20 @@ const PharmacyPOS = () => {
                         <div className="mt-4">
                             <label className="block text-sm font-semibold text-gray-700 mb-1">Payment Method</label>
                             <select
-                                className="w-full border rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                                className="w-full border rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
                                 value={paymentMethod}
-                                onChange={e => setPaymentMethod(e.target.value)}
+                                onChange={e => {
+                                    setPaymentMethod(e.target.value);
+                                    setIsManualPaymentMethod(true);
+                                }}
                             >
                                 <option value="cash">Cash</option>
                                 <option value="card">Card</option>
-                                <option value="deposit">Deposit</option>
+                                {selectedPatient && <option value="deposit">Deposit</option>}
                                 <option value="insurance">Insurance</option>
+                                {selectedPatient && ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(selectedPatient.provider) && (
+                                    <option value="retainership">Retainership Deposit</option>
+                                )}
                             </select>
                         </div>
 
@@ -620,7 +910,7 @@ const PharmacyPOS = () => {
                         <div className="mt-5 space-y-2">
                             <button
                                 onClick={handleCompleteSale}
-                                disabled={loading || cart.length === 0 || !customerName.trim()}
+                                disabled={loading || cart.length === 0 || (!selectedPatient && !customerName.trim())}
                                 className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
                             >
                                 {loading ? (
@@ -716,10 +1006,13 @@ const PharmacyPOS = () => {
                                                 ₦{(receipt.amountPaid || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                             </td>
                                             <td className="p-3">
-                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${receipt.paymentMethod === 'cash' ? 'bg-green-100 text-green-800' :
+                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                                    receipt.paymentMethod === 'cash' ? 'bg-green-100 text-green-800' :
                                                     receipt.paymentMethod === 'card' ? 'bg-blue-100 text-blue-800' :
-                                                        'bg-purple-100 text-purple-800'
-                                                    }`}>
+                                                    receipt.paymentMethod === 'deposit' ? 'bg-yellow-100 text-yellow-800' :
+                                                    receipt.paymentMethod === 'retainership' ? 'bg-purple-100 text-purple-800' :
+                                                    'bg-indigo-100 text-indigo-800'
+                                                }`}>
                                                     {receipt.paymentMethod}
                                                 </span>
                                             </td>

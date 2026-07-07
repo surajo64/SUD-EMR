@@ -21,7 +21,7 @@ const generateClaimFromEncounter = async (req, res) => {
         const patient = await Patient.findById(encounter.patient._id).populate('hmo');
 
         // Only generate claims for Retainership, NHIA and KSCHMA patients
-        if (patient.provider !== 'Retainership' && patient.provider !== 'NHIA' && patient.provider !== 'KSCHMA') {
+        if (!['Retainership', 'Corporate Retainership', 'Family Retainership', 'NHIA', 'KSCHMA'].includes(patient.provider)) {
             return res.status(400).json({ message: 'Claims can only be generated for Retainership, NHIA or KSCHMA patients' });
         }
 
@@ -68,7 +68,7 @@ const generateClaimFromEncounter = async (req, res) => {
                 patientPortion = ec.patientPortion;
             } else {
                 // Fallback calculation for old records
-                if (patient.provider === 'Retainership') {
+                if (['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider)) {
                     // Retainership: HMO covers 100% of ALL charges (including drugs)
                     patientPortion = 0;
                     hmoPortion = totalAmount;

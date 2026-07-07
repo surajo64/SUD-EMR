@@ -588,13 +588,19 @@ const FrontDeskDashboard = () => {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             for (const chargeId of selectedAdditionalCharges) {
-                await axios.post(`${backendUrl}/api/encounter-charges`, {
+                const payload = {
                     encounterId: addChargesEncounterId,
                     patientId: addChargesPatient._id,
-                    chargeId,
                     quantity: 1,
                     notes: 'Added at front desk'
-                }, config);
+                };
+                if (chargeId.startsWith('ward_')) {
+                    payload.wardId = chargeId.replace('ward_', '');
+                } else {
+                    payload.chargeId = chargeId;
+                }
+
+                await axios.post(`${backendUrl}/api/encounter-charges`, payload, config);
             }
             toast.success(`${selectedAdditionalCharges.length} charge(s) added successfully! Patient can now pay at the cashier.`);
             setShowAddChargesModal(false);
@@ -759,6 +765,26 @@ const FrontDeskDashboard = () => {
     };
 
 
+
+    // Prepare wards as searchable charge items for the Add Charges Modal
+    const mappedWards = wards.map(w => ({
+        _id: `ward_${w._id}`,
+        name: `Daily Ward Charge - ${w.name}`,
+        type: 'Daily Bed Fee',
+        isWard: true,
+        standardFee: w.rates?.Standard || w.dailyRate || 0,
+        retainershipFee: w.rates?.Retainership || w.dailyRate || 0,
+        familyRetainershipFee: w.rates?.Retainership || w.dailyRate || 0, // Fallback
+        nhiaFee: w.rates?.NHIA || w.dailyRate || 0,
+        kschmaFee: w.rates?.KSCHMA || w.dailyRate || 0,
+        active: true,
+        description: `Daily rate for ${w.name}`
+    }));
+
+    const searchableAddCharges = [
+        ...charges.filter(c => c.active && !['drugs', 'lab', 'radiology'].includes(c.type)),
+        ...mappedWards
+    ];
 
     return (
         <Layout>
@@ -1559,9 +1585,7 @@ const FrontDeskDashboard = () => {
                                 {/* Autocomplete Search Dropdown */}
                                 {addChargesSearchQuery && (
                                     <>
-                                        {charges.filter(charge => {
-                                            if (!charge.active) return false;
-                                            if (['drugs', 'lab', 'radiology'].includes(charge.type)) return false;
+                                        {searchableAddCharges.filter(charge => {
                                             const query = addChargesSearchQuery.toLowerCase();
                                             const nameMatch = charge.name?.toLowerCase().includes(query);
                                             const descMatch = charge.description?.toLowerCase().includes(query);
@@ -1573,10 +1597,8 @@ const FrontDeskDashboard = () => {
                                             </div>
                                         ) : (
                                             <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto z-50">
-                                                {charges
+                                                {searchableAddCharges
                                                     .filter(charge => {
-                                                        if (!charge.active) return false;
-                                                        if (['drugs', 'lab', 'radiology'].includes(charge.type)) return false;
                                                         const query = addChargesSearchQuery.toLowerCase();
                                                         const nameMatch = charge.name?.toLowerCase().includes(query);
                                                         const descMatch = charge.description?.toLowerCase().includes(query);
@@ -1648,7 +1670,7 @@ const FrontDeskDashboard = () => {
                                     </div>
                                 ) : (
                                     <div className="space-y-2 overflow-y-auto flex-grow pr-1">
-                                        {charges
+                                        {searchableAddCharges
                                             .filter(c => selectedAdditionalCharges.includes(c._id))
                                             .map(charge => {
                                                 // Determine fee

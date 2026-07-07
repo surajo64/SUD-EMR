@@ -7,12 +7,10 @@ const Patient = require('../models/patientModel');
 // @access  Private
 const addChargeToEncounter = async (req, res) => {
     try {
-        const { encounterId, patientId, chargeId, quantity, notes } = req.body;
+        const { encounterId, patientId, chargeId, wardId, quantity, notes } = req.body;
 
-        // Get charge details
-        const charge = await Charge.findById(chargeId);
-        if (!charge) {
-            return res.status(404).json({ message: 'Charge not found' });
+        if (!chargeId && !wardId) {
+            return res.status(400).json({ message: 'Please provide either chargeId or wardId' });
         }
 
         // Get patient details to determine provider
@@ -21,53 +19,88 @@ const addChargeToEncounter = async (req, res) => {
             return res.status(404).json({ message: 'Patient not found' });
         }
 
-        // Check if consultation fee is waived for this encounter
-        const Visit = require('../models/visitModel');
-        const visit = await Visit.findById(encounterId);
-        
         let fee = 0;
         let isCovered = true;
         let isWaived = false;
+        let itemName = '';
+        let itemType = '';
+        let chargeDoc = null;
 
-        if (visit && visit.waiveConsultationFee && charge.type === 'consultation') {
-            fee = 0;
-            isWaived = true;
+        if (wardId) {
+            const Ward = require('../models/wardModel');
+            const ward = await Ward.findById(wardId);
+            if (!ward) {
+                return res.status(404).json({ message: 'Ward not found' });
+            }
+            itemName = `Daily Ward Charge - ${ward.name}`;
+            itemType = 'Daily Bed Fee';
+
+            // Determine fee based on patient provider using ward rates
+            const provider = patient.provider;
+            if (provider === 'Retainership' || provider === 'Corporate Retainership') {
+                fee = ward.rates?.Retainership || ward.dailyRate || 0;
+            } else if (provider === 'Family Retainership') {
+                fee = ward.rates?.Retainership || ward.dailyRate || 0;
+            } else if (provider === 'NHIA') {
+                fee = ward.rates?.NHIA || ward.dailyRate || 0;
+            } else if (provider === 'KSCHMA') {
+                fee = ward.rates?.KSCHMA || ward.dailyRate || 0;
+            } else {
+                fee = ward.rates?.Standard || ward.dailyRate || 0;
+            }
         } else {
-            switch (patient.provider) {
-                case 'Retainership':
-                case 'Corporate Retainership':
-                    fee = charge.retainershipFee;
-                    break;
-                case 'Family Retainership':
-                    fee = charge.familyRetainershipFee || 0;
-                    break;
-                case 'NHIA':
-                    fee = charge.nhiaFee;
-                    break;
-                case 'KSCHMA':
-                    fee = charge.kschmaFee;
-                    break;
-                case 'Standard':
-                default:
-                    fee = charge.standardFee;
-                    break;
+            // Get charge details
+            chargeDoc = await Charge.findById(chargeId);
+            if (!chargeDoc) {
+                return res.status(404).json({ message: 'Charge not found' });
             }
+            itemName = chargeDoc.name;
+            itemType = chargeDoc.type;
 
-            // Check if fee is 0 (not covered) for insurance/retainership patients
-            if (fee === 0 && patient.provider !== 'Standard') {
-                // If it's a drug, we assume it's covered and use the standard fee/base price
-                if (charge.type === 'drugs') {
-                    fee = charge.standardFee || charge.basePrice;
-                    // isCovered remains true
-                } else {
-                    isCovered = false;
-                    fee = charge.standardFee || charge.basePrice; // Fallback to standard fee
+            // Check if consultation fee is waived for this encounter
+            const Visit = require('../models/visitModel');
+            const visit = await Visit.findById(encounterId);
+            
+            if (visit && visit.waiveConsultationFee && chargeDoc.type === 'consultation') {
+                fee = 0;
+                isWaived = true;
+            } else {
+                switch (patient.provider) {
+                    case 'Retainership':
+                    case 'Corporate Retainership':
+                        fee = chargeDoc.retainershipFee;
+                        break;
+                    case 'Family Retainership':
+                        fee = chargeDoc.familyRetainershipFee || 0;
+                        break;
+                    case 'NHIA':
+                        fee = chargeDoc.nhiaFee;
+                        break;
+                    case 'KSCHMA':
+                        fee = chargeDoc.kschmaFee;
+                        break;
+                    case 'Standard':
+                    default:
+                        fee = chargeDoc.standardFee;
+                        break;
                 }
-            }
 
-            // Fallback to basePrice if fee is still 0 (shouldn't happen if standardFee is set)
-            if (fee === 0 && charge.basePrice) {
-                fee = charge.basePrice;
+                // Check if fee is 0 (not covered) for insurance/retainership patients
+                if (fee === 0 && patient.provider !== 'Standard') {
+                    // If it's a drug, we assume it's covered and use the standard fee/base price
+                    if (chargeDoc.type === 'drugs') {
+                        fee = chargeDoc.standardFee || chargeDoc.basePrice;
+                        // isCovered remains true
+                    } else {
+                        isCovered = false;
+                        fee = chargeDoc.standardFee || chargeDoc.basePrice; // Fallback to standard fee
+                    }
+                }
+
+                // Fallback to basePrice if fee is still 0 (shouldn't happen if standardFee is set)
+                if (fee === 0 && chargeDoc.basePrice) {
+                    fee = chargeDoc.basePrice;
+                }
             }
         }
 
@@ -85,13 +118,13 @@ const addChargeToEncounter = async (req, res) => {
             patientPortion = totalAmount;
             hmoPortion = 0;
         } else if (patient.provider === 'Retainership' || patient.provider === 'Corporate Retainership' || patient.provider === 'Family Retainership') {
-            // Retainership: HMO covers 100% of ALL charges (including drugs)
+            // Retainership: HMO covers 100% of ALL charges
             patientPortion = 0;
             hmoPortion = totalAmount;
         } else if (patient.provider === 'NHIA' || patient.provider === 'KSCHMA') {
             // NHIA/KSCHMA: Patient pays 10% for drugs, HMO covers 90% for drugs
             // HMO covers 100% for other services
-            if (charge.type === 'drugs') {
+            if (chargeDoc && chargeDoc.type === 'drugs') {
                 patientPortion = totalAmount * 0.1;
                 hmoPortion = totalAmount * 0.9;
             } else {
@@ -104,7 +137,7 @@ const addChargeToEncounter = async (req, res) => {
         const encounterCharge = await EncounterCharge.create({
             encounter: encounterId,
             patient: patientId,
-            charge: chargeId,
+            charge: chargeId || undefined,
             quantity: quantity || 1,
             unitPrice: fee,
             totalAmount,
@@ -112,6 +145,8 @@ const addChargeToEncounter = async (req, res) => {
             hmoPortion,
             status: isWaived ? 'paid' : 'pending',
             addedBy: req.user._id,
+            itemName,
+            itemType,
             notes
         });
 

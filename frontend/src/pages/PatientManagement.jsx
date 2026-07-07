@@ -1135,14 +1135,15 @@ const PatientManagement = () => {
                                             onChange={handleEditChange}
                                         >
                                             <option value="Standard">Standard</option>
-                                            <option value="Retainership">Retainership</option>
+                                            <option value="Corporate Retainership">Corporate Retainership</option>
+                                            <option value="Family Retainership">Family Retainership</option>
                                             <option value="NHIA">NHIA</option>
                                             <option value="KSCHMA">KSCHMA</option>
                                         </select>
                                     </div>
-
+ 
                                     {/* HMO - Shown for Retainership, NHIA and KSCHMA */}
-                                    {(editPatient.provider === 'Retainership' || editPatient.provider === 'NHIA' || editPatient.provider === 'KSCHMA') && (
+                                    {(['Retainership', 'Corporate Retainership', 'Family Retainership', 'NHIA', 'KSCHMA'].includes(editPatient.provider)) && (
                                         <div>
                                             <label className="block text-sm font-semibold mb-1">
                                                 HMO <span className="text-red-500">*</span>
@@ -1152,14 +1153,23 @@ const PatientManagement = () => {
                                                 name="hmo"
                                                 value={editPatient.hmo || ''}
                                                 onChange={handleEditChange}
-                                                required={editPatient.provider === 'Retainership' || editPatient.provider === 'NHIA' || editPatient.provider === 'KSCHMA'}
+                                                required={['Retainership', 'Corporate Retainership', 'Family Retainership', 'NHIA', 'KSCHMA'].includes(editPatient.provider)}
                                             >
                                                 <option value="">Select HMO *</option>
                                                 {hmos
                                                     .filter(hmo => {
                                                         // Strict filtering based on category for NHIA and Retainership
-                                                        if (editPatient.provider === 'NHIA' || editPatient.provider === 'Retainership') {
-                                                            return hmo.category === editPatient.provider;
+                                                        if (editPatient.provider === 'NHIA') {
+                                                            return hmo.category === 'NHIA';
+                                                        }
+                                                        if (editPatient.provider === 'Corporate Retainership') {
+                                                            return hmo.category === 'Retainership' && (hmo.retainershipType === 'Corporate' || hmo.retainershipType === '');
+                                                        }
+                                                        if (editPatient.provider === 'Family Retainership') {
+                                                            return hmo.category === 'Retainership' && hmo.retainershipType === 'Family';
+                                                        }
+                                                        if (editPatient.provider === 'Retainership') {
+                                                            return hmo.category === 'Retainership';
                                                         }
                                                         // For KSCHMA, show only KSCHMA HMO
                                                         if (editPatient.provider === 'KSCHMA') {

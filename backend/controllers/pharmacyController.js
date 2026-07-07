@@ -5,15 +5,49 @@ const Visit = require('../models/visitModel');
 const EncounterCharge = require('../models/encounterChargeModel');
 const Receipt = require('../models/receiptModel');
 
+const getHMOWalletBalance = async (hmoName) => {
+    const HMO = require('../models/hmoModel');
+    const HMOTransaction = require('../models/hmoTransactionModel');
+    const EncounterCharge = require('../models/encounterChargeModel');
+    const Patient = require('../models/patientModel');
+
+    const hmo = await HMO.findOne({ name: hmoName });
+    if (!hmo) return 0;
+
+    const transactions = await HMOTransaction.find({ hmo: hmo._id });
+    const totalDeposits = transactions
+        .filter(t => t.type === 'deposit')
+        .reduce((sum, d) => sum + d.amount, 0);
+
+    const manualCharges = transactions
+        .filter(t => t.type === 'charge')
+        .reduce((sum, c) => sum + c.amount, 0);
+
+    const refunds = transactions
+        .filter(t => t.type === 'refund')
+        .reduce((sum, r) => sum + r.amount, 0);
+
+    const hmoPatients = await Patient.find({ hmo: hmo.name }).select('_id');
+    const hmoPatientIds = hmoPatients.map(p => p._id);
+
+    const charges = await EncounterCharge.find({
+        patient: { $in: hmoPatientIds },
+        hmoPortion: { $gt: 0 }
+    });
+    const totalUtilized = charges.reduce((sum, c) => sum + c.hmoPortion, 0);
+
+    return totalDeposits - (totalUtilized + manualCharges + refunds);
+};
+
 // @desc    Process a direct/walk-in POS sale at pharmacy
 // @route   POST /api/pharmacies/pos-sale
 // @access  Private (Pharmacist)
 const processDirectSale = async (req, res) => {
     try {
-        const { customerName, items, discount, tax, paymentMethod, prescriptionImageUrl } = req.body;
+        const { patientId, customerName, items, discount, tax, paymentMethod, prescriptionImageUrl } = req.body;
         // items: [{ inventoryId, name, quantity, unitPrice }]
 
-        if (!customerName || !customerName.trim()) {
+        if (!patientId && (!customerName || !customerName.trim())) {
             return res.status(400).json({ message: 'Customer name is required.' });
         }
 
@@ -81,23 +115,65 @@ const processDirectSale = async (req, res) => {
             subtotal += unitPrice * quantity;
         }
 
-        // ── 2. Create or find a walk-in patient record ─────────────────────────
-        // Walk-in patients don't have MRN but we create a Visit under their name
-        // We use a special reserved "Walk-in" patient or create one per unique name
-        const walkInMrn = `WI-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-        const walkInPatient = await Patient.create({
-            mrn: walkInMrn,
-            name: customerName.trim(),
-            age: 0,           // Unknown for walk-ins
-            gender: 'Unknown',
-            contact: 'Walk-in',
-            provider: 'Standard',
-            depositBalance: 0
-        });
+        // Apply discount and tax to get the total amount first
+        const discountAmt = parseFloat(discount) || 0;
+        const taxAmt = parseFloat(tax) || 0;
+        const totalAmount = subtotal - discountAmt + taxAmt;
+
+        // ── 2. Create or find patient record & Handle Wallet / Retainership Detection ──
+        let salePatient;
+        let finalPaymentMethod = paymentMethod || 'cash';
+        let isRetainership = false;
+        let isWalletDeduction = false;
+
+        if (patientId) {
+            salePatient = await Patient.findById(patientId);
+            if (!salePatient) {
+                return res.status(404).json({ message: 'Selected patient not found.' });
+            }
+
+            const isRetainershipProvider = ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(salePatient.provider);
+
+            if (isRetainershipProvider && paymentMethod === 'retainership') {
+                const hmoBalance = salePatient.hmo ? await getHMOWalletBalance(salePatient.hmo) : 0;
+                if (hmoBalance >= totalAmount) {
+                    isRetainership = true;
+                    finalPaymentMethod = 'retainership';
+                } else {
+                    isRetainership = false; // reset to prevent HMO portions logic
+                    finalPaymentMethod = 'cash';
+                }
+            } else if (!isRetainershipProvider && paymentMethod === 'deposit') {
+                if (salePatient.depositBalance >= totalAmount) {
+                    finalPaymentMethod = 'deposit';
+                    isWalletDeduction = true;
+                    salePatient.depositBalance -= totalAmount;
+                    await salePatient.save();
+                    console.log(`Deducted ₦${totalAmount} from patient ${salePatient.name} wallet. New balance: ₦${salePatient.depositBalance}`);
+                } else {
+                    finalPaymentMethod = 'cash';
+                }
+            } else {
+                finalPaymentMethod = paymentMethod || 'cash';
+                isRetainership = false;
+            }
+        } else {
+            // Walk-in patients don't have MRN but we create a Visit under their name
+            const walkInMrn = `WI-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            salePatient = await Patient.create({
+                mrn: walkInMrn,
+                name: customerName.trim(),
+                age: 0,           // Unknown for walk-ins
+                gender: 'Unknown',
+                contact: 'Walk-in',
+                provider: 'Standard',
+                depositBalance: 0
+            });
+        }
 
         // ── 3. Create a Walk-in Visit (encounter) ──────────────────────────────
         const walkInVisit = await Visit.create({
-            patient: walkInPatient._id,
+            patient: salePatient._id,
             doctor: req.user._id,  // Pharmacist acts as the encounter creator
             type: 'External Pharmacy',
             status: 'Discharged',
@@ -128,17 +204,29 @@ const processDirectSale = async (req, res) => {
             }
 
             // Create EncounterCharge for revenue tracking
-            const totalAmount = unitPrice * quantity;
-            subtotal += 0; // already accumulated above
+            const totalAmountItem = unitPrice * quantity;
+
+            let patientPortion = totalAmountItem;
+            let hmoPortion = 0;
+
+            if (patientId) {
+                if (isRetainership) {
+                    patientPortion = 0;
+                    hmoPortion = totalAmountItem;
+                } else if (['NHIA', 'KSCHMA'].includes(salePatient.provider)) {
+                    patientPortion = totalAmountItem * 0.1;
+                    hmoPortion = totalAmountItem * 0.9;
+                }
+            }
 
             const charge = await EncounterCharge.create({
                 encounter: walkInVisit._id,
-                patient: walkInPatient._id,
+                patient: salePatient._id,
                 quantity,
                 unitPrice,
-                totalAmount,
-                patientPortion: totalAmount,
-                hmoPortion: 0,
+                totalAmount: totalAmountItem,
+                patientPortion,
+                hmoPortion,
                 status: 'paid',
                 addedBy: req.user._id,
                 itemType: 'Pharmacy',
@@ -150,20 +238,17 @@ const processDirectSale = async (req, res) => {
             createdChargeIds.push(charge._id);
         }
 
-        // ── 5. Apply discount and tax ──────────────────────────────────────────
-        const discountAmt = parseFloat(discount) || 0;
-        const taxAmt = parseFloat(tax) || 0;
-        const totalAmount = subtotal - discountAmt + taxAmt;
-
-        // ── 6. Create Receipt (marks the sale as paid/revenue) ─────────────────
+        // ── 5. Create Receipt (marks the sale as paid/revenue) ─────────────────
         const receiptNumber = `POS-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
 
+        const amountPaid = (patientId && ['NHIA', 'KSCHMA'].includes(salePatient.provider)) ? totalAmount * 0.1 : totalAmount;
+
         const receipt = await Receipt.create({
-            patient: walkInPatient._id,
+            patient: salePatient._id,
             encounter: walkInVisit._id,
             charges: createdChargeIds,
-            amountPaid: totalAmount < 0 ? 0 : totalAmount,
-            paymentMethod: paymentMethod || 'cash',
+            amountPaid: amountPaid < 0 ? 0 : amountPaid,
+            paymentMethod: finalPaymentMethod,
             cashier: req.user._id,
             receiptNumber,
             validated: true,
@@ -174,11 +259,56 @@ const processDirectSale = async (req, res) => {
             }]
         });
 
-        // ── 7. Link receipt on charges ─────────────────────────────────────────
+        // ── 6. Link receipt on charges ─────────────────────────────────────────
         await EncounterCharge.updateMany(
             { _id: { $in: createdChargeIds } },
             { receipt: receipt._id }
         );
+
+        // ── 7. Auto-generate HMO claim for NHIA/KSCHMA patients ───────────────
+        if (patientId && ['NHIA', 'KSCHMA'].includes(salePatient.provider)) {
+            try {
+                const Claim = require('../models/claimModel');
+                const HMO = require('../models/hmoModel');
+
+                if (salePatient.hmo) {
+                    const hmo = await HMO.findOne({ name: salePatient.hmo });
+                    if (hmo) {
+                        const claimItems = items.map((item, index) => {
+                            const totalAmountItem = item.unitPrice * item.quantity;
+                            return {
+                                charge: createdChargeIds[index],
+                                chargeType: 'Pharmacy',
+                                description: item.name,
+                                quantity: item.quantity,
+                                unitPrice: item.unitPrice,
+                                totalAmount: totalAmountItem,
+                                patientPortion: totalAmountItem * 0.1,
+                                hmoPortion: totalAmountItem * 0.9
+                            };
+                        });
+
+                        const totalClaimAmount = totalAmount * 0.9;
+                        const year = new Date().getFullYear();
+                        const claimCount = await Claim.countDocuments();
+                        const claimNumber = `CLM-${year}-${String(claimCount + 1).padStart(4, '0')}`;
+
+                        await Claim.create({
+                            claimNumber,
+                            patient: salePatient._id,
+                            hmo: hmo._id,
+                            encounter: walkInVisit._id,
+                            claimItems,
+                            totalClaimAmount,
+                            status: 'pending'
+                        });
+                        console.log(`✅ POS Sale: Auto-generated NHIA/KSCHMA claim ${claimNumber} for patient ${salePatient.name}`);
+                    }
+                }
+            } catch (claimError) {
+                console.error('❌ POS Sale claim generation error:', claimError);
+            }
+        }
 
         const populatedReceipt = await Receipt.findById(receipt._id)
             .populate('patient', 'name mrn')
@@ -192,7 +322,7 @@ const processDirectSale = async (req, res) => {
             message: 'Sale completed successfully',
             receipt: populatedReceipt,
             receiptNumber,
-            totalAmount: totalAmount < 0 ? 0 : totalAmount
+            totalAmount: amountPaid < 0 ? 0 : amountPaid
         });
 
     } catch (error) {
