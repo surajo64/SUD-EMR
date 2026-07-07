@@ -118,42 +118,9 @@ const createVisit = async (req, res) => {
     });
 
     // Apply Initial Ward Charge for Inpatient
-    if (type === 'Inpatient' && wardDoc) {
-        // Fetch patient to get provider
-        const Patient = require('../models/patientModel');
-        const patient = await Patient.findById(patientId);
-
-        let dailyFee = wardDoc.dailyRate; // Default fallback
-
-        if (patient && patient.provider && wardDoc.rates && wardDoc.rates[patient.provider]) {
-            dailyFee = wardDoc.rates[patient.provider];
-        } else if (wardDoc.rates && wardDoc.rates.Standard) {
-            dailyFee = wardDoc.rates.Standard;
-        }
-
-        if (dailyFee > 0) {
-            const EncounterCharge = require('../models/encounterChargeModel');
-            let patientPortion = dailyFee;
-            let hmoPortion = 0;
-            if (patient && ['Retainership', 'Corporate Retainership', 'Family Retainership', 'NHIA', 'KSCHMA'].includes(patient.provider)) {
-                patientPortion = 0;
-                hmoPortion = dailyFee;
-            }
-
-            await EncounterCharge.create({
-                encounter: visit._id,
-                patient: patientId,
-                itemType: 'Daily Bed Fee',
-                itemName: `Initial Ward Charge - ${wardDoc.name} (${patient.provider || 'Standard'})`,
-                cost: dailyFee,
-                quantity: 1,
-                totalAmount: dailyFee,
-                patientPortion,
-                hmoPortion,
-                status: 'pending',
-                addedBy: req.user._id
-            });
-        }
+    if (type === 'Inpatient') {
+        const { checkAndGenerateBedFeesForVisit } = require('../utils/bedFeeBilling');
+        await checkAndGenerateBedFeesForVisit(visit._id, new Date(), req.user._id);
     }
 
     res.status(201).json(visit);
@@ -606,38 +573,8 @@ const convertToInpatient = async (req, res) => {
         const updatedVisit = await visit.save();
 
         // 3. Generate Initial Bed Charge
-
-        let dailyFee = wardDoc.dailyRate; // Default fallback
-
-        if (patient && patient.provider && wardDoc.rates && wardDoc.rates[patient.provider]) {
-            dailyFee = wardDoc.rates[patient.provider];
-        } else if (wardDoc.rates && wardDoc.rates.Standard) {
-            dailyFee = wardDoc.rates.Standard;
-        }
-
-        if (dailyFee > 0) {
-            const EncounterCharge = require('../models/encounterChargeModel');
-            let patientPortion = dailyFee;
-            let hmoPortion = 0;
-            if (patient && ['Retainership', 'Corporate Retainership', 'Family Retainership', 'NHIA', 'KSCHMA'].includes(patient.provider)) {
-                patientPortion = 0;
-                hmoPortion = dailyFee;
-            }
-
-            await EncounterCharge.create({
-                encounter: visit._id,
-                patient: visit.patient,
-                itemType: 'Daily Bed Fee',
-                itemName: `Initial Ward Charge - ${wardDoc.name} (${patient.provider || 'Standard'})`,
-                cost: dailyFee,
-                quantity: 1,
-                totalAmount: dailyFee,
-                patientPortion,
-                hmoPortion,
-                status: 'pending',
-                addedBy: req.user._id
-            });
-        }
+        const { checkAndGenerateBedFeesForVisit } = require('../utils/bedFeeBilling');
+        await checkAndGenerateBedFeesForVisit(updatedVisit._id, new Date(), req.user._id);
 
         res.json(updatedVisit);
     } catch (error) {

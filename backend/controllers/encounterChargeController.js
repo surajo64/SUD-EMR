@@ -354,7 +354,7 @@ const deleteEncounterCharge = async (req, res) => {
 const triggerDailyWardCharges = async (req, res) => {
     try {
         const Visit = require('../models/visitModel');
-        const Ward = require('../models/wardModel');
+        const { checkAndGenerateBedFeesForVisit } = require('../utils/bedFeeBilling');
 
         console.log('========================================');
         console.log('Manually triggering daily ward charges at:', new Date().toLocaleString());
@@ -364,103 +364,22 @@ const triggerDailyWardCharges = async (req, res) => {
         const admittedVisits = await Visit.find({
             encounterStatus: { $in: ['admitted', 'in_ward'] },
             ward: { $exists: true, $ne: null }
-        }).populate('ward').populate('patient', 'name mrn');
+        });
 
         console.log(`Found ${admittedVisits.length} admitted/in-ward visits`);
 
-        const results = {
-            totalVisits: admittedVisits.length,
-            chargesCreated: 0,
-            skipped: 0,
-            errors: [],
-            details: []
-        };
-
         for (const visit of admittedVisits) {
-            try {
-                if (visit.ward && visit.ward.dailyRate > 0) {
-                    // Check if a charge was already created today
-                    const startOfDay = new Date();
-                    startOfDay.setHours(0, 0, 0, 0);
-                    const endOfDay = new Date();
-                    endOfDay.setHours(23, 59, 59, 999);
-
-                    const existingCharge = await EncounterCharge.findOne({
-                        encounter: visit._id,
-                        itemName: { $regex: /Ward Charge/i },
-                        createdAt: { $gte: startOfDay, $lte: endOfDay }
-                    });
-
-                    if (!existingCharge) {
-                        let patientPortion = visit.ward.dailyRate;
-                        let hmoPortion = 0;
-                        if (visit.patient && ['Retainership', 'Corporate Retainership', 'Family Retainership', 'NHIA', 'KSCHMA'].includes(visit.patient.provider)) {
-                            patientPortion = 0;
-                            hmoPortion = visit.ward.dailyRate;
-                        }
-
-                        // Create a charge for the day
-                        await EncounterCharge.create({
-                            encounter: visit._id,
-                            patient: visit.patient._id,
-                            itemType: 'Daily Bed Fee',
-                            itemName: `Daily Ward Charge - ${visit.ward.name}`,
-                            cost: visit.ward.dailyRate,
-                            quantity: 1,
-                            totalAmount: visit.ward.dailyRate,
-                            patientPortion,
-                            hmoPortion,
-                            status: 'pending'
-                        });
-
-                        results.chargesCreated++;
-                        results.details.push({
-                            patient: visit.patient?.name,
-                            mrn: visit.patient?.mrn,
-                            ward: visit.ward.name,
-                            amount: visit.ward.dailyRate,
-                            status: 'charged'
-                        });
-
-                        console.log(`✓ Charged ${visit.ward.dailyRate} to patient ${visit.patient?.name} (MRN: ${visit.patient?.mrn}) - Ward: ${visit.ward.name}`);
-                    } else {
-                        results.skipped++;
-                        results.details.push({
-                            patient: visit.patient?.name,
-                            mrn: visit.patient?.mrn,
-                            ward: visit.ward.name,
-                            status: 'already_charged_today'
-                        });
-
-                        console.log(`⊘ Skipping patient ${visit.patient?.name} (MRN: ${visit.patient?.mrn}) - already charged today.`);
-                    }
-                } else {
-                    results.errors.push({
-                        visitId: visit._id,
-                        patient: visit.patient?.name,
-                        error: 'No ward or zero daily rate'
-                    });
-                    console.log(`⚠ Visit ${visit._id} has no ward or zero daily rate`);
-                }
-            } catch (error) {
-                results.errors.push({
-                    visitId: visit._id,
-                    patient: visit.patient?.name,
-                    error: error.message
-                });
-                console.error(`❌ Error processing visit ${visit._id}:`, error);
-            }
+            await checkAndGenerateBedFeesForVisit(visit._id, new Date(), req.user._id);
         }
 
         console.log('========================================');
         console.log('Manual daily ward charges completed.');
-        console.log(`Created: ${results.chargesCreated}, Skipped: ${results.skipped}, Errors: ${results.errors.length}`);
         console.log('========================================');
 
         res.json({
             success: true,
             message: 'Daily ward charges triggered successfully',
-            ...results
+            totalVisits: admittedVisits.length
         });
     } catch (error) {
         console.error('❌ Error in manual trigger:', error);
