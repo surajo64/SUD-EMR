@@ -12,6 +12,18 @@ import AppointmentModal from '../components/AppointmentModal';
 import { FaTimes, FaFileMedical, FaPills, FaChevronDown, FaChevronUp, FaHeartbeat, FaNotesMedical, FaProcedures, FaXRay, FaVial, FaUserMd, FaCalendarPlus, FaPlus, FaTrash, FaEdit, FaSearch, FaClock, FaChevronRight, FaFileAlt, FaCheckCircle, FaInfoCircle, FaDollarSign } from 'react-icons/fa';
 import icd11Data from '../data/icd11.json';
 
+const getNurseFirstName = (fullName) => {
+    if (!fullName) return 'Unknown';
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length === 0) return 'Unknown';
+    const firstPartLower = parts[0].toLowerCase().replace(/[^a-z]/g, '');
+    const titles = ['nurse', 'matron', 'sister', 'sr', 'mr', 'mrs', 'ms', 'dr', 'doc'];
+    if (titles.includes(firstPartLower) && parts.length > 1) {
+        return parts[1];
+    }
+    return parts[0];
+};
+
 const PatientDetails = () => {
     const { id } = useParams();
     const { user } = useContext(AuthContext);
@@ -1795,17 +1807,17 @@ const PatientDetails = () => {
                                 <FaFileMedical /> {user.role === 'receptionist' ? 'View Referrals' : 'Referral'}
                             </button>
                         )}
-                        {['doctor', 'nurse', 'receptionist', 'admin'].includes(user.role) && 
-                         ['Outpatient', 'Emergency'].includes(encounter?.type) && 
-                         isEncounterActive() && 
-                         !viewingPastEncounter && (
-                            <button
-                                onClick={() => setShowConvertModal(true)}
-                                className="bg-emerald-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-emerald-700 ml-2 transition shadow-sm font-semibold text-sm"
-                            >
-                                <FaProcedures /> Admit Patient
-                            </button>
-                        )}
+                        {['doctor', 'nurse', 'receptionist', 'admin'].includes(user.role) &&
+                            ['Outpatient', 'Emergency'].includes(encounter?.type) &&
+                            isEncounterActive() &&
+                            !viewingPastEncounter && (
+                                <button
+                                    onClick={() => setShowConvertModal(true)}
+                                    className="bg-emerald-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-emerald-700 ml-2 transition shadow-sm font-semibold text-sm"
+                                >
+                                    <FaProcedures /> Admit Patient
+                                </button>
+                            )}
                     </div>
                 )
             }
@@ -1832,7 +1844,7 @@ const PatientDetails = () => {
                                     </div>
                                     <h3 className="text-2xl font-bold text-gray-800 mb-3">Encounter Access Locked</h3>
                                     <p className="text-gray-600 mb-6 leading-relaxed">
-                                        This patient has unpaid consultation charges for the current encounter. 
+                                        This patient has unpaid consultation charges for the current encounter.
                                         Clinical access is restricted until payment is processed at the cashier.
                                     </p>
                                     <div className="bg-red-50 border border-red-100 rounded-lg p-4 mb-6 inline-block text-left">
@@ -1844,8 +1856,8 @@ const PatientDetails = () => {
                                         </p>
                                     </div>
                                     <div>
-                                        <button 
-                                            onClick={fetchPatient} 
+                                        <button
+                                            onClick={fetchPatient}
                                             className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2.5 rounded-lg transition shadow-sm flex items-center gap-2 mx-auto"
                                         >
                                             <FaClock /> Check Payment Status
@@ -1856,1298 +1868,1319 @@ const PatientDetails = () => {
                                 <>
                                     {/* Tab Navigation */}
                                     <div className="border-b flex">
-                                {/* Vitals & SOAP - Hidden for lab_technician, radiologist, and pharmacist */}
-                                {!['lab_technician', 'lab_scientist', 'radiologist', 'pharmacist'].includes(user.role) && (
-                                    <>
+                                        {/* Vitals & SOAP - Hidden for lab_technician, radiologist, and pharmacist */}
+                                        {!['lab_technician', 'lab_scientist', 'radiologist', 'pharmacist'].includes(user.role) && (
+                                            <>
+                                                <button
+                                                    onClick={() => setActiveTab('vitals')}
+                                                    className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'vitals' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
+                                                >
+                                                    <FaHeartbeat /> Nursing Triage
+                                                </button>
+                                                <button
+                                                    onClick={() => setActiveTab('soap')}
+                                                    className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'soap' ? 'border-b-2 border-green-600 text-green-600' : 'text-gray-600 hover:text-gray-800'}`}
+                                                >
+                                                    <FaNotesMedical /> Clinical Notes
+                                                </button>
+                                            </>
+                                        )}
+
+                                        {/* Lab Orders - Show for doctors, lab_technician, lab_scientist, and receptionist */}
+                                        {!['radiologist', 'pharmacist'].includes(user.role) && (
+                                            <button
+                                                onClick={() => setActiveTab('lab')}
+                                                className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'lab' ? 'border-b-2 border-purple-600 text-purple-600' : 'text-gray-600 hover:text-gray-800'}`}
+                                            >
+                                                <FaVial /> Lab Orders ({currentLabOrders.length})
+                                            </button>
+                                        )}
+
+                                        {/* Radiology - Show for doctors, radiologist, and receptionist */}
+                                        {!['lab_technician', 'lab_scientist', 'pharmacist'].includes(user.role) && (
+                                            <button
+                                                onClick={() => setActiveTab('radiology')}
+                                                className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'radiology' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-600 hover:text-gray-800'}`}
+                                            >
+                                                <FaXRay /> Radiology ({currentRadOrders.length})
+                                            </button>
+                                        )}
+
+                                        {/* Prescriptions - Show for doctors, pharmacist, and receptionist */}
+                                        {!['lab_technician', 'lab_scientist', 'radiologist'].includes(user.role) && (
+                                            <button
+                                                onClick={() => setActiveTab('prescriptions')}
+                                                className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'prescriptions' ? 'border-b-2 border-pink-600 text-pink-600' : 'text-gray-600 hover:text-gray-800'}`}
+                                            >
+                                                <FaPills /> Prescriptions ({currentPrescriptions.length})
+                                            </button>
+                                        )}
+
+                                        {/* Referrals Tab - Show for all users */}
                                         <button
-                                            onClick={() => setActiveTab('vitals')}
-                                            className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'vitals' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
+                                            onClick={() => setActiveTab('referrals')}
+                                            className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'referrals' ? 'border-b-2 border-orange-600 text-orange-600' : 'text-gray-600 hover:text-gray-800'}`}
                                         >
-                                            <FaHeartbeat /> Nursing Triage
+                                            <FaFileMedical /> Referrals ({referrals.length})
                                         </button>
-                                        <button
-                                            onClick={() => setActiveTab('soap')}
-                                            className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'soap' ? 'border-b-2 border-green-600 text-green-600' : 'text-gray-600 hover:text-gray-800'}`}
-                                        >
-                                            <FaNotesMedical /> Clinical Notes
-                                        </button>
-                                    </>
-                                )}
 
-                                {/* Lab Orders - Show for doctors, lab_technician, lab_scientist, and receptionist */}
-                                {!['radiologist', 'pharmacist'].includes(user.role) && (
-                                    <button
-                                        onClick={() => setActiveTab('lab')}
-                                        className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'lab' ? 'border-b-2 border-purple-600 text-purple-600' : 'text-gray-600 hover:text-gray-800'}`}
-                                    >
-                                        <FaVial /> Lab Orders ({currentLabOrders.length})
-                                    </button>
-                                )}
+                                        {/* Inpatient Notes Tab - formerly Other Notes, Ward Round, Theatre */}
+                                        {['doctor', 'nurse', 'receptionist'].includes(user.role) && encounter?.type === 'Inpatient' && (
+                                            <button
+                                                onClick={() => setActiveTab('notes')}
+                                                className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'notes' ? 'border-b-2 border-yellow-600 text-yellow-600' : 'text-gray-600 hover:text-gray-800'}`}
+                                            >
+                                                <FaFileMedical /> Inpatient Notes ({clinicalNotes.length + wardRoundNotes.length + theatreNotes.length})
+                                            </button>
+                                        )}
+                                    </div>
 
-                                {/* Radiology - Show for doctors, radiologist, and receptionist */}
-                                {!['lab_technician', 'lab_scientist', 'pharmacist'].includes(user.role) && (
-                                    <button
-                                        onClick={() => setActiveTab('radiology')}
-                                        className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'radiology' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-600 hover:text-gray-800'}`}
-                                    >
-                                        <FaXRay /> Radiology ({currentRadOrders.length})
-                                    </button>
-                                )}
-
-                                {/* Prescriptions - Show for doctors, pharmacist, and receptionist */}
-                                {!['lab_technician', 'lab_scientist', 'radiologist'].includes(user.role) && (
-                                    <button
-                                        onClick={() => setActiveTab('prescriptions')}
-                                        className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'prescriptions' ? 'border-b-2 border-pink-600 text-pink-600' : 'text-gray-600 hover:text-gray-800'}`}
-                                    >
-                                        <FaPills /> Prescriptions ({currentPrescriptions.length})
-                                    </button>
-                                )}
-
-                                {/* Referrals Tab - Show for all users */}
-                                <button
-                                    onClick={() => setActiveTab('referrals')}
-                                    className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'referrals' ? 'border-b-2 border-orange-600 text-orange-600' : 'text-gray-600 hover:text-gray-800'}`}
-                                >
-                                    <FaFileMedical /> Referrals ({referrals.length})
-                                </button>
-
-                                {/* Inpatient Notes Tab - formerly Other Notes, Ward Round, Theatre */}
-                                {['doctor', 'nurse', 'receptionist'].includes(user.role) && encounter?.type === 'Inpatient' && (
-                                    <button
-                                        onClick={() => setActiveTab('notes')}
-                                        className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'notes' ? 'border-b-2 border-yellow-600 text-yellow-600' : 'text-gray-600 hover:text-gray-800'}`}
-                                    >
-                                        <FaFileMedical /> Inpatient Notes ({clinicalNotes.length + wardRoundNotes.length + theatreNotes.length})
-                                    </button>
-                                )}
-                            </div>
-
-                            {/* Tab Content */}
-                            <div className="p-6">
-                                {/* Vitals Tab */}
-                                {activeTab === 'vitals' && (
-                                    <div>
-                                        <h3 className="text-xl font-bold mb-4">Vital Signs & Nursing Assessment</h3>
-                                        {vitals ? (
+                                    {/* Tab Content */}
+                                    <div className="p-6">
+                                        {/* Vitals Tab */}
+                                        {activeTab === 'vitals' && (
                                             <div>
-                                                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 mb-4">
-                                                    <div className="bg-blue-50 p-2 rounded text-center">
-                                                        <p className="text-xs text-gray-600">Temp (Â°C)</p>
-                                                        <p className={`font-bold ${getVitalColorClass('temperature', vitals.temperature)}`}>
-                                                            {vitals.temperature || '-'}
-                                                        </p>
-                                                    </div>
-                                                    <div className="bg-blue-50 p-2 rounded text-center">
-                                                        <p className="text-xs text-gray-600">BP (mmHg)</p>
-                                                        <p className={`font-bold ${getVitalColorClass('bloodPressure', vitals.bloodPressure)}`}>
-                                                            {vitals.bloodPressure || '-'}
-                                                        </p>
-                                                    </div>
-                                                    <div className="bg-blue-50 p-2 rounded text-center">
-                                                        <p className="text-xs text-gray-600">HR (bpm)</p>
-                                                        <p className={`font-bold ${getVitalColorClass('heartRate', vitals.heartRate || vitals.pulseRate)}`}>
-                                                            {vitals.heartRate || vitals.pulseRate || '-'}
-                                                        </p>
-                                                    </div>
-                                                    <div className="bg-blue-50 p-2 rounded text-center">
-                                                        <p className="text-xs text-gray-600">RR (/min)</p>
-                                                        <p className={`font-bold ${getVitalColorClass('respiratoryRate', vitals.respiratoryRate)}`}>
-                                                            {vitals.respiratoryRate || '-'}
-                                                        </p>
-                                                    </div>
-                                                    <div className="bg-blue-50 p-2 rounded text-center">
-                                                        <p className="text-xs text-gray-600">SpO2 (%)</p>
-                                                        <p className={`font-bold ${getVitalColorClass('spo2', vitals.spo2)}`}>
-                                                            {vitals.spo2 || '-'}
-                                                        </p>
-                                                    </div>
-                                                    <div className="bg-blue-50 p-2 rounded text-center">
-                                                        <p className="text-xs text-gray-600">Weight (kg)</p>
-                                                        <p className="font-bold">{vitals.weight || '-'}</p>
-                                                    </div>
-                                                    <div className="bg-blue-50 p-2 rounded text-center">
-                                                        <p className="text-xs text-gray-600">Height (cm)</p>
-                                                        <p className="font-bold">{vitals.height || '-'}</p>
-                                                    </div>
-                                                    <div className={`p-2 rounded text-center ${vitals.bmi || (vitals.weight && vitals.height) ? (
-                                                        (() => {
-                                                            const bmiValue = vitals.bmi || (vitals.weight / Math.pow(vitals.height / 100, 2));
-                                                            const b = parseFloat(bmiValue);
-                                                            return b < 18.5 ? 'bg-yellow-100 border border-yellow-300' :
-                                                                b < 25 ? 'bg-green-100 border border-green-300' :
-                                                                    b < 30 ? 'bg-orange-100 border border-orange-300' :
-                                                                        b < 35 ? 'bg-red-100 border border-red-300' :
-                                                                            b < 40 ? 'bg-red-200 border border-red-400' :
-                                                                                b < 50 ? 'bg-red-300 border border-red-500' :
-                                                                                    'bg-purple-200 border border-purple-500';
-                                                        })()
-                                                    ) : 'bg-blue-50'
-                                                        }`}>
-                                                        <p className="text-xs text-gray-600">BMI (kg/m)</p>
-                                                        <p className={`font-bold ${vitals.bmi || (vitals.weight && vitals.height) ? (
-                                                            (() => {
-                                                                const bmiValue = vitals.bmi || (vitals.weight / Math.pow(vitals.height / 100, 2));
-                                                                const b = parseFloat(bmiValue);
-                                                                return b < 18.5 ? 'text-yellow-700' :
-                                                                    b < 25 ? 'text-green-700' :
-                                                                        b < 30 ? 'text-orange-700' :
-                                                                            b < 35 ? 'text-red-700' :
-                                                                                b < 40 ? 'text-red-800' :
-                                                                                    b < 50 ? 'text-red-900' :
-                                                                                        'text-purple-700';
-                                                            })()
-                                                        ) : ''
-                                                            }`}>
-                                                            {vitals.bmi ? vitals.bmi.toFixed(1) :
-                                                                (vitals.weight && vitals.height) ?
-                                                                    (vitals.weight / Math.pow(vitals.height / 100, 2)).toFixed(1) :
-                                                                    '-'}
-                                                        </p>
-                                                        {(vitals.bmi || (vitals.weight && vitals.height)) && (
-                                                            <p className="text-xs font-semibold mt-1">
-                                                                {(() => {
+                                                <h3 className="text-xl font-bold mb-4">Vital Signs & Nursing Assessment</h3>
+                                                {vitals ? (
+                                                    <div>
+                                                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 mb-4">
+                                                            <div className="bg-blue-50 p-2 rounded text-center">
+                                                                <p className="text-xs text-gray-600">Temp (Â°C)</p>
+                                                                <p className={`font-bold ${getVitalColorClass('temperature', vitals.temperature)}`}>
+                                                                    {vitals.temperature || '-'}
+                                                                </p>
+                                                            </div>
+                                                            <div className="bg-blue-50 p-2 rounded text-center">
+                                                                <p className="text-xs text-gray-600">BP (mmHg)</p>
+                                                                <p className={`font-bold ${getVitalColorClass('bloodPressure', vitals.bloodPressure)}`}>
+                                                                    {vitals.bloodPressure || '-'}
+                                                                </p>
+                                                            </div>
+                                                            <div className="bg-blue-50 p-2 rounded text-center">
+                                                                <p className="text-xs text-gray-600">HR (bpm)</p>
+                                                                <p className={`font-bold ${getVitalColorClass('heartRate', vitals.heartRate || vitals.pulseRate)}`}>
+                                                                    {vitals.heartRate || vitals.pulseRate || '-'}
+                                                                </p>
+                                                            </div>
+                                                            <div className="bg-blue-50 p-2 rounded text-center">
+                                                                <p className="text-xs text-gray-600">RR (/min)</p>
+                                                                <p className={`font-bold ${getVitalColorClass('respiratoryRate', vitals.respiratoryRate)}`}>
+                                                                    {vitals.respiratoryRate || '-'}
+                                                                </p>
+                                                            </div>
+                                                            <div className="bg-blue-50 p-2 rounded text-center">
+                                                                <p className="text-xs text-gray-600">SpO2 (%)</p>
+                                                                <p className={`font-bold ${getVitalColorClass('spo2', vitals.spo2)}`}>
+                                                                    {vitals.spo2 || '-'}
+                                                                </p>
+                                                            </div>
+                                                            <div className="bg-blue-50 p-2 rounded text-center">
+                                                                <p className="text-xs text-gray-600">Weight (kg)</p>
+                                                                <p className="font-bold">{vitals.weight || '-'}</p>
+                                                            </div>
+                                                            <div className="bg-blue-50 p-2 rounded text-center">
+                                                                <p className="text-xs text-gray-600">Height (cm)</p>
+                                                                <p className="font-bold">{vitals.height || '-'}</p>
+                                                            </div>
+                                                            <div className={`p-2 rounded text-center ${vitals.bmi || (vitals.weight && vitals.height) ? (
+                                                                (() => {
                                                                     const bmiValue = vitals.bmi || (vitals.weight / Math.pow(vitals.height / 100, 2));
                                                                     const b = parseFloat(bmiValue);
-                                                                    return b < 18.5 ? 'Underweight' :
-                                                                        b < 25 ? 'Normal' :
-                                                                            b < 30 ? 'Overweight' :
-                                                                                b < 35 ? 'Grade I Obese' :
-                                                                                    b < 40 ? 'Grade II Obese' :
-                                                                                        b < 50 ? 'Morbidly Obese' :
-                                                                                            'Super Obese';
-                                                                })()}
+                                                                    return b < 18.5 ? 'bg-yellow-100 border border-yellow-300' :
+                                                                        b < 25 ? 'bg-green-100 border border-green-300' :
+                                                                            b < 30 ? 'bg-orange-100 border border-orange-300' :
+                                                                                b < 35 ? 'bg-red-100 border border-red-300' :
+                                                                                    b < 40 ? 'bg-red-200 border border-red-400' :
+                                                                                        b < 50 ? 'bg-red-300 border border-red-500' :
+                                                                                            'bg-purple-200 border border-purple-500';
+                                                                })()
+                                                            ) : 'bg-blue-50'
+                                                                }`}>
+                                                                <p className="text-xs text-gray-600">BMI (kg/m)</p>
+                                                                <p className={`font-bold ${vitals.bmi || (vitals.weight && vitals.height) ? (
+                                                                    (() => {
+                                                                        const bmiValue = vitals.bmi || (vitals.weight / Math.pow(vitals.height / 100, 2));
+                                                                        const b = parseFloat(bmiValue);
+                                                                        return b < 18.5 ? 'text-yellow-700' :
+                                                                            b < 25 ? 'text-green-700' :
+                                                                                b < 30 ? 'text-orange-700' :
+                                                                                    b < 35 ? 'text-red-700' :
+                                                                                        b < 40 ? 'text-red-800' :
+                                                                                            b < 50 ? 'text-red-900' :
+                                                                                                'text-purple-700';
+                                                                    })()
+                                                                ) : ''
+                                                                    }`}>
+                                                                    {vitals.bmi ? vitals.bmi.toFixed(1) :
+                                                                        (vitals.weight && vitals.height) ?
+                                                                            (vitals.weight / Math.pow(vitals.height / 100, 2)).toFixed(1) :
+                                                                            '-'}
+                                                                </p>
+                                                                {(vitals.bmi || (vitals.weight && vitals.height)) && (
+                                                                    <p className="text-xs font-semibold mt-1">
+                                                                        {(() => {
+                                                                            const bmiValue = vitals.bmi || (vitals.weight / Math.pow(vitals.height / 100, 2));
+                                                                            const b = parseFloat(bmiValue);
+                                                                            return b < 18.5 ? 'Underweight' :
+                                                                                b < 25 ? 'Normal' :
+                                                                                    b < 30 ? 'Overweight' :
+                                                                                        b < 35 ? 'Grade I Obese' :
+                                                                                            b < 40 ? 'Grade II Obese' :
+                                                                                                b < 50 ? 'Morbidly Obese' :
+                                                                                                    'Super Obese';
+                                                                        })()}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        {vitals.nurse && (
+                                                            <p className="text-xs text-gray-500 mt-2 italic">
+                                                                Recorded by: {vitals.nurse.name}
                                                             </p>
                                                         )}
                                                     </div>
-                                                </div>
-                                                {vitals.nurse && (
-                                                    <p className="text-xs text-gray-500 mt-2 italic">
-                                                        Recorded by: {vitals.nurse.name}
-                                                    </p>
+                                                ) : (
+                                                    <p className="text-gray-500">No vital signs recorded yet.</p>
+                                                )}
+                                                {encounter.nursingNotes && (() => {
+                                                    try {
+                                                        const notes = JSON.parse(encounter.nursingNotes);
+                                                        if (Array.isArray(notes) && notes.length > 0) {
+                                                            return (
+                                                                <div className="bg-blue-50 p-4 rounded mt-4 border border-blue-200">
+                                                                    <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                                                                        <FaNotesMedical className="text-blue-600" /> Nursing Notes
+                                                                    </h4>
+                                                                    <div className="overflow-x-auto">
+                                                                        <table className="w-full border-collapse border text-xs bg-white">
+                                                                            <thead className="bg-gray-100">
+                                                                                <tr>
+                                                                                    <th className="p-2 text-left border">Service</th>
+                                                                                    <th className="p-2 text-left border">Comment</th>
+                                                                                    <th className="p-2 text-left border">Nurse</th>
+                                                                                    <th className="p-2 text-left border">Time</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                {notes.map((note, index) => (
+                                                                                    <tr key={note.id || index} className="border-b hover:bg-gray-50">
+                                                                                        <td className="p-2 border font-semibold text-blue-700">{note.service?.name || 'N/A'}</td>
+                                                                                        <td className="p-2 border text-gray-700">{note.comment}</td>
+                                                                                        <td className="p-2 border text-gray-600">{note.nurse?.name || 'Unknown'}</td>
+                                                                                        <td className="p-2 border text-gray-600">
+                                                                                            {new Date(note.createdAt).toLocaleString()}
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                ))}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        }
+                                                    } catch (e) {
+                                                        // If parsing fails or old format, show as plain text
+                                                        return (
+                                                            <div className="bg-gray-50 p-4 rounded mt-4">
+                                                                <p className="text-sm font-semibold text-gray-700 mb-2">Nursing Notes:</p>
+                                                                <p className="text-gray-800">{encounter.nursingNotes}</p>
+                                                            </div>
+                                                        );
+                                                    }
+                                                })()}
+
+                                                {/* Drug Observation Chart (MAR) - For Inpatients */}
+                                                {encounter.type === 'Inpatient' && (
+                                                    <div className="mt-8 border rounded-lg overflow-hidden shadow-sm bg-white">
+                                                        <div className="bg-blue-600 text-white p-3 flex justify-between items-center">
+                                                            <h4 className="font-bold flex items-center gap-2">
+                                                                <FaClock /> Drug Observation Chart
+                                                            </h4>
+                                                        </div>
+
+                                                        <div className="p-4 bg-white">
+                                                            {dispensedPrescriptions.length === 0 ? (
+                                                                <div className="text-center py-6 text-gray-500 italic bg-gray-50 rounded border border-dashed">
+                                                                    No dispensed medications found for this encounter.
+                                                                </div>
+                                                            ) : (
+                                                                <div className="space-y-4">
+                                                                    {(() => {
+                                                                        const admissionDate = new Date(encounter.createdAt);
+                                                                        admissionDate.setHours(0, 0, 0, 0);
+
+                                                                        // Get all unique dates from history, and today
+                                                                        const historyDates = [...new Set(administrationHistory.map(h => {
+                                                                            const d = new Date(h.administeredAt);
+                                                                            d.setHours(0, 0, 0, 0);
+                                                                            return d.getTime();
+                                                                        }))];
+
+                                                                        const today = new Date();
+                                                                        today.setHours(0, 0, 0, 0);
+                                                                        if (!historyDates.includes(today.getTime())) {
+                                                                            historyDates.push(today.getTime());
+                                                                        }
+
+                                                                        return historyDates.sort().reverse().map((dateTimestamp, idx) => {
+                                                                            const currentDate = new Date(dateTimestamp);
+                                                                            const diffTime = dateTimestamp - admissionDate.getTime();
+                                                                            const dayNum = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                                                                            const isExpanded = expandedDays[dateTimestamp] !== false;
+
+                                                                            const dayHistory = administrationHistory.filter(h => {
+                                                                                const d = new Date(h.administeredAt);
+                                                                                d.setHours(0, 0, 0, 0);
+                                                                                return d.getTime() === dateTimestamp;
+                                                                            });
+
+                                                                            const dayTimes = [...new Set(dayHistory.map(h =>
+                                                                                new Date(h.administeredAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+                                                                            ))].sort();
+
+                                                                            return (
+                                                                                <div key={dateTimestamp} className="border rounded mb-3 overflow-hidden">
+                                                                                    <button
+                                                                                        onClick={() => setExpandedDays(prev => ({ ...prev, [dateTimestamp]: !isExpanded }))}
+                                                                                        className="w-full bg-gray-50 px-4 py-2 hover:bg-blue-50 transition-colors flex items-center justify-between text-blue-900"
+                                                                                    >
+                                                                                        <div className="flex items-center gap-3">
+                                                                                            {isExpanded ? <FaChevronDown size={12} /> : <FaChevronRight size={12} />}
+                                                                                            <span className="font-bold text-sm">Day {dayNum} <span className="text-gray-400 font-normal ml-2">({currentDate.toLocaleDateString('en-GB')})</span></span>
+                                                                                            {dayNum === 1 && <span className="text-[9px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-bold">ADMISSION</span>}
+                                                                                            {dateTimestamp === today.getTime() && <span className="text-[9px] bg-green-100 text-green-600 px-1.5 py-0.5 rounded font-bold">TODAY</span>}
+                                                                                        </div>
+                                                                                        <div className="text-[10px] text-gray-500">
+                                                                                            {dayHistory.length} Administrations recorded
+                                                                                        </div>
+                                                                                    </button>
+
+                                                                                    {isExpanded && (
+                                                                                        <div className="overflow-x-auto">
+                                                                                            <table className="w-full text-xs text-left border-collapse">
+                                                                                                <thead className="bg-gray-100 border-b">
+                                                                                                    <tr>
+                                                                                                        <th className="p-2 border-r font-bold text-gray-600 w-64">Medication</th>
+                                                                                                        {dayTimes.length > 0 ? dayTimes.map(timeStr => (
+                                                                                                            <th key={timeStr} className="p-2 border-r font-bold text-gray-600 text-center min-w-[70px]">
+                                                                                                                {timeStr}
+                                                                                                            </th>
+                                                                                                        )) : (
+                                                                                                            <th className="p-2 border-r font-bold text-gray-400 text-center italic">No records for this day</th>
+                                                                                                        )}
+                                                                                                    </tr>
+                                                                                                </thead>
+                                                                                                <tbody>
+                                                                                                    {(() => {
+                                                                                                        let overallRowIdx = 0;
+                                                                                                        return dispensedPrescriptions.flatMap(p => p.medicines.map(m => {
+                                                                                                            const isFirstRow = overallRowIdx === 0;
+                                                                                                            overallRowIdx++;
+                                                                                                            return (
+                                                                                                                <tr key={`${p._id}-${m._id || m.name}`} className="hover:bg-blue-50/10 border-b last:border-0 transition-colors">
+                                                                                                                    <td className="p-2 border-r">
+                                                                                                                        <div className="font-bold text-blue-950 leading-tight">{m.name}</div>
+                                                                                                                        <div className="text-[9px] text-gray-500 flex items-center gap-1 mt-0.5">
+                                                                                                                            <span className="font-medium text-gray-700">{m.dosage}</span>
+                                                                                                                            <span>|</span>
+                                                                                                                            <span className="font-medium text-gray-700">{m.frequency}</span>
+                                                                                                                            {m.route && <><span className="text-orange-500 font-bold px-1 rounded uppercase bg-orange-50 text-[8px] border border-orange-100">{m.route}</span></>}
+                                                                                                                        </div>
+                                                                                                                    </td>
+                                                                                                                    {dayTimes.map(timeStr => {
+                                                                                                                        const admin = dayHistory.find(h =>
+                                                                                                                            new Date(h.administeredAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) === timeStr &&
+                                                                                                                            (h.medicineId === m._id || h.medicineName === m.name)
+                                                                                                                        );
+                                                                                                                        return (
+                                                                                                                            <td key={timeStr} className="p-2 border-r text-center">
+                                                                                                                                {admin ? (
+                                                                                                                                    <div className="inline-flex flex-col items-center justify-center p-1 rounded-md bg-green-50 border border-green-200 shadow-sm group relative cursor-help">
+                                                                                                                                        <span className="font-black text-[8px] text-green-700 uppercase tracking-tighter">Given</span>
+                                                                                                                                        <span className="text-[7px] text-green-600 leading-none">{getNurseFirstName(admin.nurse?.name)}</span>
+                                                                                                                                        {isFirstRow ? (
+                                                                                                                                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 bg-gray-900 border border-gray-700 text-white p-2 rounded-lg text-[9px] hidden group-hover:block z-50 shadow-2xl backdrop-blur-sm text-left">
+                                                                                                                                                <div className="font-bold mb-1" style={{ color: '#ffffff' }}>
+                                                                                                                                                    Administered by: {admin.nurse?.name || 'Unknown'}
+                                                                                                                                                </div>
+                                                                                                                                                {admin.remarks && (
+                                                                                                                                                    <div className="text-gray-300 break-words mt-1 border-t border-gray-700 pt-1">
+                                                                                                                                                        Remarks: {admin.remarks}
+                                                                                                                                                    </div>
+                                                                                                                                                )}
+                                                                                                                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-gray-900"></div>
+                                                                                                                                            </div>
+                                                                                                                                        ) : (
+                                                                                                                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-gray-900 border border-gray-700 text-white p-2 rounded-lg text-[9px] hidden group-hover:block z-50 shadow-2xl backdrop-blur-sm text-left">
+                                                                                                                                                <div className="font-bold mb-1" style={{ color: '#ffffff' }}>
+                                                                                                                                                    Administered by: {admin.nurse?.name || 'Unknown'}
+                                                                                                                                                </div>
+                                                                                                                                                {admin.remarks && (
+                                                                                                                                                    <div className="text-gray-300 break-words mt-1 border-t border-gray-700 pt-1">
+                                                                                                                                                        Remarks: {admin.remarks}
+                                                                                                                                                    </div>
+                                                                                                                                                )}
+                                                                                                                                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                                                                                                                                            </div>
+                                                                                                                                        )}
+                                                                                                                                    </div>
+                                                                                                                                ) : <span className="text-gray-200">-</span>}
+                                                                                                                            </td>
+                                                                                                                        );
+                                                                                                                    })}
+                                                                                                                </tr>
+                                                                                                            );
+                                                                                                        }));
+                                                                                                    })()}
+                                                                                                </tbody>
+                                                                                            </table>
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                            );
+                                                                        });
+                                                                    })()}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="p-3 bg-gray-50 text-[10px] text-gray-500 flex items-center gap-2 border-t italic">
+                                                            <FaClock className="text-blue-400" /> This is a read-only view of the medication administration record.
+                                                        </div>
+                                                    </div>
                                                 )}
                                             </div>
-                                        ) : (
-                                            <p className="text-gray-500">No vital signs recorded yet.</p>
                                         )}
-                                        {encounter.nursingNotes && (() => {
-                                            try {
-                                                const notes = JSON.parse(encounter.nursingNotes);
-                                                if (Array.isArray(notes) && notes.length > 0) {
-                                                    return (
-                                                        <div className="bg-blue-50 p-4 rounded mt-4 border border-blue-200">
-                                                            <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                                                                <FaNotesMedical className="text-blue-600" /> Nursing Notes
-                                                            </h4>
-                                                            <div className="overflow-x-auto">
-                                                                <table className="w-full border-collapse border text-xs bg-white">
-                                                                    <thead className="bg-gray-100">
-                                                                        <tr>
-                                                                            <th className="p-2 text-left border">Service</th>
-                                                                            <th className="p-2 text-left border">Comment</th>
-                                                                            <th className="p-2 text-left border">Nurse</th>
-                                                                            <th className="p-2 text-left border">Time</th>
-                                                                        </tr>
-                                                                    </thead>
-                                                                    <tbody>
-                                                                        {notes.map((note, index) => (
-                                                                            <tr key={note.id || index} className="border-b hover:bg-gray-50">
-                                                                                <td className="p-2 border font-semibold text-blue-700">{note.service?.name || 'N/A'}</td>
-                                                                                <td className="p-2 border text-gray-700">{note.comment}</td>
-                                                                                <td className="p-2 border text-gray-600">{note.nurse?.name || 'Unknown'}</td>
-                                                                                <td className="p-2 border text-gray-600">
-                                                                                    {new Date(note.createdAt).toLocaleString()}
-                                                                                </td>
-                                                                            </tr>
-                                                                        ))}
-                                                                    </tbody>
-                                                                </table>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                }
-                                            } catch (e) {
-                                                // If parsing fails or old format, show as plain text
-                                                return (
-                                                    <div className="bg-gray-50 p-4 rounded mt-4">
-                                                        <p className="text-sm font-semibold text-gray-700 mb-2">Nursing Notes:</p>
-                                                        <p className="text-gray-800">{encounter.nursingNotes}</p>
-                                                    </div>
-                                                );
-                                            }
-                                        })()}
 
-                                        {/* Drug Observation Chart (MAR) - For Inpatients */}
-                                        {encounter.type === 'Inpatient' && (
-                                            <div className="mt-8 border rounded-lg overflow-hidden shadow-sm bg-white">
-                                                <div className="bg-blue-600 text-white p-3 flex justify-between items-center">
-                                                    <h4 className="font-bold flex items-center gap-2">
-                                                        <FaClock /> Drug Observation Chart (MAR)
-                                                    </h4>
+                                        {/* SOAP Notes Tab */}
+                                        {activeTab === 'soap' && (
+                                            <div className="space-y-4">
+                                                <div className="flex justify-between items-center">
+                                                    <h3 className="text-xl font-bold">Clinical Documentation</h3>
+                                                    {canEdit && (
+                                                        <button
+                                                            onClick={() => { setEditingNoteId(null); setShowSoapModal(true); }}
+                                                            className="px-4 py-2 rounded flex items-center gap-2 bg-green-600 text-white hover:bg-green-700"
+                                                        >
+                                                            <FaPlus /> Add Clinical Note
+                                                        </button>
+                                                    )}
                                                 </div>
 
-                                                <div className="p-4 bg-white">
-                                                    {dispensedPrescriptions.length === 0 ? (
-                                                        <div className="text-center py-6 text-gray-500 italic bg-gray-50 rounded border border-dashed">
-                                                            No dispensed medications found for this encounter.
-                                                        </div>
-                                                    ) : (
-                                                        <div className="space-y-4">
-                                                            {(() => {
-                                                                const admissionDate = new Date(encounter.createdAt);
-                                                                admissionDate.setHours(0, 0, 0, 0);
+                                                {/* List of clinical notes */}
+                                                {(() => {
+                                                    const allNotes = encounter.clinicalNotes && encounter.clinicalNotes.length > 0
+                                                        ? encounter.clinicalNotes
+                                                        : [];
+                                                    if (allNotes.length === 0) {
+                                                        return (
+                                                            <p className="text-gray-500">No clinical notes recorded yet. Click "Add Clinical Note" to begin documentation.</p>
+                                                        );
+                                                    }
+                                                    return (
+                                                        <div className="space-y-6">
+                                                            {allNotes.map((note, noteIndex) => {
+                                                                const noteId = note._id?.toString();
+                                                                const noteDoctor = note.doctor;
+                                                                const noteDoctorId = typeof noteDoctor === 'object' ? noteDoctor?._id?.toString() : noteDoctor?.toString();
+                                                                const isNoteAuthor = noteDoctorId === user?._id;
+                                                                const noteDoctorName = typeof noteDoctor === 'object' ? (noteDoctor?.name || 'Unknown') : (encounter.consultingPhysician?.name || 'Unknown');
 
-                                                                // Get all unique dates from history, and today
-                                                                const historyDates = [...new Set(administrationHistory.map(h => {
-                                                                    const d = new Date(h.administeredAt);
-                                                                    d.setHours(0, 0, 0, 0);
-                                                                    return d.getTime();
-                                                                }))];
-
-                                                                const today = new Date();
-                                                                today.setHours(0, 0, 0, 0);
-                                                                if (!historyDates.includes(today.getTime())) {
-                                                                    historyDates.push(today.getTime());
-                                                                }
-
-                                                                return historyDates.sort().reverse().map((dateTimestamp, idx) => {
-                                                                    const currentDate = new Date(dateTimestamp);
-                                                                    const diffTime = dateTimestamp - admissionDate.getTime();
-                                                                    const dayNum = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
-                                                                    const isExpanded = expandedDays[dateTimestamp] !== false;
-
-                                                                    const dayHistory = administrationHistory.filter(h => {
-                                                                        const d = new Date(h.administeredAt);
-                                                                        d.setHours(0, 0, 0, 0);
-                                                                        return d.getTime() === dateTimestamp;
-                                                                    });
-
-                                                                    const dayTimes = [...new Set(dayHistory.map(h =>
-                                                                        new Date(h.administeredAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-                                                                    ))].sort();
-
-                                                                    return (
-                                                                        <div key={dateTimestamp} className="border rounded mb-3 overflow-hidden">
-                                                                            <button
-                                                                                onClick={() => setExpandedDays(prev => ({ ...prev, [dateTimestamp]: !isExpanded }))}
-                                                                                className="w-full bg-gray-50 px-4 py-2 hover:bg-blue-50 transition-colors flex items-center justify-between text-blue-900"
-                                                                            >
-                                                                                <div className="flex items-center gap-3">
-                                                                                    {isExpanded ? <FaChevronDown size={12} /> : <FaChevronRight size={12} />}
-                                                                                    <span className="font-bold text-sm">Day {dayNum} <span className="text-gray-400 font-normal ml-2">({currentDate.toLocaleDateString('en-GB')})</span></span>
-                                                                                    {dayNum === 1 && <span className="text-[9px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-bold">ADMISSION</span>}
-                                                                                    {dateTimestamp === today.getTime() && <span className="text-[9px] bg-green-100 text-green-600 px-1.5 py-0.5 rounded font-bold">TODAY</span>}
+                                                                return (
+                                                                    <div key={noteId || noteIndex} className="border rounded-xl shadow-sm overflow-hidden">
+                                                                        {/* Note Header */}
+                                                                        <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-5 py-3 flex justify-between items-center">
+                                                                            <div className="flex items-center gap-3">
+                                                                                <div className="w-8 h-8 rounded-full bg-white text-blue-700 flex items-center justify-center font-bold text-sm">
+                                                                                    {noteIndex + 1}
                                                                                 </div>
-                                                                                <div className="text-[10px] text-gray-500">
-                                                                                    {dayHistory.length} Administrations recorded
+                                                                                <div>
+                                                                                    <p className="font-semibold text-sm">Dr. {noteDoctorName}</p>
+                                                                                    <p className="text-blue-200 text-xs">
+                                                                                        {note.createdAt ? new Date(note.createdAt).toLocaleString() : 'Date N/A'}
+                                                                                        {note.updatedAt && note.updatedAt !== note.createdAt && (
+                                                                                            <span className="ml-2">(updated {new Date(note.updatedAt).toLocaleString()})</span>
+                                                                                        )}
+                                                                                    </p>
                                                                                 </div>
-                                                                            </button>
+                                                                            </div>
+                                                                            {canEdit && isNoteAuthor && (
+                                                                                <button
+                                                                                    onClick={() => { setEditingNoteId(noteId); setShowSoapModal(true); }}
+                                                                                    className="flex items-center gap-1 bg-white text-blue-700 px-3 py-1 rounded-lg text-sm font-semibold hover:bg-blue-50 transition"
+                                                                                >
+                                                                                    <FaEdit /> Edit
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
 
-                                                                            {isExpanded && (
-                                                                                <div className="overflow-x-auto">
-                                                                                    <table className="w-full text-xs text-left border-collapse">
-                                                                                        <thead className="bg-gray-100 border-b">
-                                                                                            <tr>
-                                                                                                <th className="p-2 border-r font-bold text-gray-600 w-64">Medication</th>
-                                                                                                {dayTimes.length > 0 ? dayTimes.map(timeStr => (
-                                                                                                    <th key={timeStr} className="p-2 border-r font-bold text-gray-600 text-center min-w-[70px]">
-                                                                                                        {timeStr}
-                                                                                                    </th>
-                                                                                                )) : (
-                                                                                                    <th className="p-2 border-r font-bold text-gray-400 text-center italic">No records for this day</th>
+                                                                        <div className="bg-white p-4 space-y-3">
+                                                                            {/* Clinical History - Collapsible */}
+                                                                            {(note.presentingComplaints || note.historyOfPresentingComplaint ||
+                                                                                note.systemReview || note.pastMedicalSurgicalHistory ||
+                                                                                note.socialFamilyHistory || note.drugsHistory ||
+                                                                                note.functionalCognitiveStatus || note.menstruationGynecologicalObstetricsHistory ||
+                                                                                note.pregnancyHistory || note.immunization ||
+                                                                                note.nutritional || note.developmentalMilestones) && (
+                                                                                    <div className="border rounded-lg overflow-hidden">
+                                                                                        <button
+                                                                                            onClick={() => setExpandedSections(prev => ({ ...prev, [`history_${noteId}`]: !prev[`history_${noteId}`] }))}
+                                                                                            className="w-full bg-gradient-to-r from-gray-100 to-gray-50 hover:from-gray-200 hover:to-gray-100 p-3 flex justify-between items-center transition-colors"
+                                                                                        >
+                                                                                            <h4 className="text-base font-bold text-gray-800 flex items-center gap-2">
+                                                                                                <FaNotesMedical className="text-blue-600" /> Clinical History
+                                                                                            </h4>
+                                                                                            {expandedSections[`history_${noteId}`] ? <FaChevronUp className="text-gray-600" /> : <FaChevronDown className="text-gray-600" />}
+                                                                                        </button>
+                                                                                        {expandedSections[`history_${noteId}`] && (
+                                                                                            <div className="p-4 space-y-3 bg-white">
+                                                                                                {note.presentingComplaints && (
+                                                                                                    <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                                        <p className="font-semibold text-gray-700 mb-1 text-sm">01. Presenting Complaints</p>
+                                                                                                        <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.presentingComplaints}</p>
+                                                                                                    </div>
                                                                                                 )}
-                                                                                            </tr>
-                                                                                        </thead>
-                                                                                        <tbody>
-                                                                                            {dispensedPrescriptions.flatMap(p => p.medicines.map(m => (
-                                                                                                <tr key={`${p._id}-${m._id || m.name}`} className="hover:bg-blue-50/10 border-b last:border-0 transition-colors">
-                                                                                                    <td className="p-2 border-r">
-                                                                                                        <div className="font-bold text-blue-950 leading-tight">{m.name}</div>
-                                                                                                        <div className="text-[9px] text-gray-500 flex items-center gap-1 mt-0.5">
-                                                                                                            <span className="font-medium text-gray-700">{m.dosage}</span>
-                                                                                                            <span>|</span>
-                                                                                                            <span className="font-medium text-gray-700">{m.frequency}</span>
-                                                                                                            {m.route && <><span className="text-orange-500 font-bold px-1 rounded uppercase bg-orange-50 text-[8px] border border-orange-100">{m.route}</span></>}
+                                                                                                {note.historyOfPresentingComplaint && (
+                                                                                                    <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                                        <p className="font-semibold text-gray-700 mb-1 text-sm">02. History of Presenting Complaint</p>
+                                                                                                        <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.historyOfPresentingComplaint}</p>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                                {note.systemReview && (
+                                                                                                    <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                                        <p className="font-semibold text-gray-700 mb-1 text-sm">03. System Review</p>
+                                                                                                        <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.systemReview}</p>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                                {note.pastMedicalSurgicalHistory && (
+                                                                                                    <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                                        <p className="font-semibold text-gray-700 mb-1 text-sm">04. Past Medical / Surgical History</p>
+                                                                                                        <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.pastMedicalSurgicalHistory}</p>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                                {note.socialFamilyHistory && (
+                                                                                                    <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                                        <p className="font-semibold text-gray-700 mb-1 text-sm">05. Social and Family History</p>
+                                                                                                        <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.socialFamilyHistory}</p>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                                {note.drugsHistory && (
+                                                                                                    <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                                        <p className="font-semibold text-gray-700 mb-1 text-sm">06. Drugs History</p>
+                                                                                                        <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.drugsHistory}</p>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                                {note.functionalCognitiveStatus && (
+                                                                                                    <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                                        <p className="font-semibold text-gray-700 mb-1 text-sm">07. Functional Cognitive Status</p>
+                                                                                                        <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.functionalCognitiveStatus}</p>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                                {note.menstruationGynecologicalObstetricsHistory && (
+                                                                                                    <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                                        <p className="font-semibold text-gray-700 mb-1 text-sm">08. Menstruation / Gyn / Obstetrics History</p>
+                                                                                                        <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.menstruationGynecologicalObstetricsHistory}</p>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                                {note.pregnancyHistory && (
+                                                                                                    <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                                        <p className="font-semibold text-gray-700 mb-1 text-sm">09. Pregnancy History</p>
+                                                                                                        <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.pregnancyHistory}</p>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                                {note.immunization && (
+                                                                                                    <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                                        <p className="font-semibold text-gray-700 mb-1 text-sm">10. Immunization</p>
+                                                                                                        <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.immunization}</p>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                                {note.nutritional && (
+                                                                                                    <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                                        <p className="font-semibold text-gray-700 mb-1 text-sm">11. Nutritional</p>
+                                                                                                        <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.nutritional}</p>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                                {note.developmentalMilestones && (
+                                                                                                    <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                                        <p className="font-semibold text-gray-700 mb-1 text-sm">12. Developmental Milestones</p>
+                                                                                                        <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.developmentalMilestones}</p>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                )}
+
+                                                                            {/* Physical Examination - Collapsible */}
+                                                                            {(note.generalAppearance || note.heent || note.neck || note.cvs || note.resp || note.abd || note.neuro || note.msk || note.skin) && (
+                                                                                <div className="border rounded-lg overflow-hidden">
+                                                                                    <button
+                                                                                        onClick={() => setExpandedSections(prev => ({ ...prev, [`physEx_${noteId}`]: !prev[`physEx_${noteId}`] }))}
+                                                                                        className="w-full bg-gradient-to-r from-teal-100 to-teal-50 hover:from-teal-200 hover:to-teal-100 p-3 flex justify-between items-center transition-colors"
+                                                                                    >
+                                                                                        <h4 className="text-base font-bold text-gray-800 flex items-center gap-2">
+                                                                                            <FaHeartbeat className="text-teal-600" /> Physical Examination
+                                                                                        </h4>
+                                                                                        {expandedSections[`physEx_${noteId}`] ? <FaChevronUp className="text-gray-600" /> : <FaChevronDown className="text-gray-600" />}
+                                                                                    </button>
+                                                                                    {expandedSections[`physEx_${noteId}`] && (
+                                                                                        <div className="p-4 space-y-3 bg-white">
+                                                                                            {note.generalAppearance && (
+                                                                                                <div className="bg-teal-50 p-3 rounded border-l-4 border-teal-500">
+                                                                                                    <p className="font-semibold text-gray-700 mb-1 text-sm">A. General Appearance</p>
+                                                                                                    <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.generalAppearance}</p>
+                                                                                                </div>
+                                                                                            )}
+                                                                                            {(note.heent || note.neck || note.cvs || note.resp || note.abd || note.neuro || note.msk || note.skin) && (
+                                                                                                <div className="bg-teal-50 p-3 rounded border-l-4 border-teal-400">
+                                                                                                    <p className="font-semibold text-gray-700 mb-2 text-sm">B. Systemic Examination</p>
+                                                                                                    <div className="grid grid-cols-2 gap-2 text-sm">
+                                                                                                        {note.heent && <div><span className="font-semibold text-gray-600">HEENT: </span><span className="text-gray-800">{note.heent}</span></div>}
+                                                                                                        {note.neck && <div><span className="font-semibold text-gray-600">Neck: </span><span className="text-gray-800">{note.neck}</span></div>}
+                                                                                                        {note.cvs && <div><span className="font-semibold text-gray-600">CVS: </span><span className="text-gray-800">{note.cvs}</span></div>}
+                                                                                                        {note.resp && <div><span className="font-semibold text-gray-600">Resp: </span><span className="text-gray-800">{note.resp}</span></div>}
+                                                                                                        {note.abd && <div><span className="font-semibold text-gray-600">Abd: </span><span className="text-gray-800">{note.abd}</span></div>}
+                                                                                                        {note.neuro && <div><span className="font-semibold text-gray-600">Neuro: </span><span className="text-gray-800">{note.neuro}</span></div>}
+                                                                                                        {note.msk && <div><span className="font-semibold text-gray-600">MSK: </span><span className="text-gray-800">{note.msk}</span></div>}
+                                                                                                        {note.skin && <div><span className="font-semibold text-gray-600">Skin: </span><span className="text-gray-800">{note.skin}</span></div>}
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                            )}
+
+                                                                            {/* Assessment & Plan - Collapsible */}
+                                                                            {(note.assessment || (note.diagnosis && note.diagnosis.length > 0) || note.plan) && (
+                                                                                <div className="border rounded-lg overflow-hidden">
+                                                                                    <button
+                                                                                        onClick={() => setExpandedSections(prev => ({ ...prev, [`assess_${noteId}`]: !prev[`assess_${noteId}`] }))}
+                                                                                        className="w-full bg-gradient-to-r from-blue-100 to-blue-50 hover:from-blue-200 hover:to-blue-100 p-3 flex justify-between items-center transition-colors"
+                                                                                    >
+                                                                                        <h4 className="text-base font-bold text-gray-800 flex items-center gap-2">
+                                                                                            <FaFileMedical className="text-green-600" /> Assessment & Plan
+                                                                                        </h4>
+                                                                                        {expandedSections[`assess_${noteId}`] ? <FaChevronUp className="text-gray-600" /> : <FaChevronDown className="text-gray-600" />}
+                                                                                    </button>
+                                                                                    {expandedSections[`assess_${noteId}`] && (
+                                                                                        <div className="p-4 space-y-3 bg-white">
+                                                                                            {(note.assessment || (note.diagnosis && note.diagnosis.length > 0)) && (
+                                                                                                <div className="bg-blue-50 p-3 rounded border-l-4 border-blue-600">
+                                                                                                    <p className="font-semibold text-gray-700 mb-2 text-sm">Assessment (Diagnosis):</p>
+                                                                                                    {note.diagnosis && note.diagnosis.length > 0 && (
+                                                                                                        <div className="mb-2 flex flex-wrap gap-2">
+                                                                                                            {note.diagnosis.map((d, i) => (
+                                                                                                                <span key={i} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-medium border border-blue-300">
+                                                                                                                    {d.code} - {d.description}
+                                                                                                                </span>
+                                                                                                            ))}
                                                                                                         </div>
-                                                                                                    </td>
-                                                                                                    {dayTimes.map(timeStr => {
-                                                                                                        const admin = dayHistory.find(h =>
-                                                                                                            new Date(h.administeredAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) === timeStr &&
-                                                                                                            (h.medicineId === m._id || h.medicineName === m.name)
-                                                                                                        );
-                                                                                                        return (
-                                                                                                            <td key={timeStr} className="p-2 border-r text-center">
-                                                                                                                {admin ? (
-                                                                                                                    <div className="inline-flex flex-col items-center justify-center p-1 rounded-md bg-green-50 border border-green-200 shadow-sm group relative cursor-help">
-                                                                                                                        <span className="font-black text-[8px] text-green-700 uppercase tracking-tighter">Given</span>
-                                                                                                                        <span className="text-[7px] text-green-600 leading-none">{admin.nurse?.name?.split(' ')[0]}</span>
-                                                                                                                        {admin.remarks && (
-                                                                                                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 bg-gray-900 border border-gray-700 text-white p-2 rounded-lg text-[9px] hidden group-hover:block z-50 shadow-2xl backdrop-blur-sm">
-                                                                                                                                <div className="font-bold text-blue-300 mb-1 border-b border-gray-700 pb-1">Remark:</div>
-                                                                                                                                {admin.remarks}
-                                                                                                                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
-                                                                                                                            </div>
-                                                                                                                        )}
-                                                                                                                    </div>
-                                                                                                                ) : <span className="text-gray-200">-</span>}
-                                                                                                            </td>
-                                                                                                        );
-                                                                                                    })}
-                                                                                                </tr>
-                                                                                            )))}
-                                                                                        </tbody>
-                                                                                    </table>
+                                                                                                    )}
+                                                                                                    {note.assessment && <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.assessment}</p>}
+                                                                                                </div>
+                                                                                            )}
+                                                                                            {note.plan && (
+                                                                                                <div className="bg-green-50 p-3 rounded border-l-4 border-green-600">
+                                                                                                    <p className="font-semibold text-gray-700 mb-1 text-sm">Plan:</p>
+                                                                                                    <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.plan}</p>
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    )}
                                                                                 </div>
                                                                             )}
                                                                         </div>
-                                                                    );
-                                                                });
-                                                            })()}
+                                                                    </div>
+                                                                );
+                                                            })}
                                                         </div>
-                                                    )}
-                                                </div>
-                                                <div className="p-3 bg-gray-50 text-[10px] text-gray-500 flex items-center gap-2 border-t italic">
-                                                    <FaClock className="text-blue-400" /> This is a read-only view of the medication administration record.
-                                                </div>
+                                                    );
+                                                })()}
                                             </div>
                                         )}
-                                    </div>
-                                )}
 
-                                {/* SOAP Notes Tab */}
-                                {activeTab === 'soap' && (
-                                    <div className="space-y-4">
-                                        <div className="flex justify-between items-center">
-                                            <h3 className="text-xl font-bold">Clinical Documentation</h3>
-                                            {canEdit && (
-                                                <button
-                                                    onClick={() => { setEditingNoteId(null); setShowSoapModal(true); }}
-                                                    className="px-4 py-2 rounded flex items-center gap-2 bg-green-600 text-white hover:bg-green-700"
-                                                >
-                                                    <FaPlus /> Add Clinical Note
-                                                </button>
-                                            )}
-                                        </div>
 
-                                        {/* List of clinical notes */}
-                                        {(() => {
-                                            const allNotes = encounter.clinicalNotes && encounter.clinicalNotes.length > 0
-                                                ? encounter.clinicalNotes
-                                                : [];
-                                            if (allNotes.length === 0) {
-                                                return (
-                                                    <p className="text-gray-500">No clinical notes recorded yet. Click "Add Clinical Note" to begin documentation.</p>
-                                                );
-                                            }
-                                            return (
-                                                <div className="space-y-6">
-                                                    {allNotes.map((note, noteIndex) => {
-                                                        const noteId = note._id?.toString();
-                                                        const noteDoctor = note.doctor;
-                                                        const noteDoctorId = typeof noteDoctor === 'object' ? noteDoctor?._id?.toString() : noteDoctor?.toString();
-                                                        const isNoteAuthor = noteDoctorId === user?._id;
-                                                        const noteDoctorName = typeof noteDoctor === 'object' ? (noteDoctor?.name || 'Unknown') : (encounter.consultingPhysician?.name || 'Unknown');
-
-                                                        return (
-                                                            <div key={noteId || noteIndex} className="border rounded-xl shadow-sm overflow-hidden">
-                                                                {/* Note Header */}
-                                                                <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-5 py-3 flex justify-between items-center">
-                                                                    <div className="flex items-center gap-3">
-                                                                        <div className="w-8 h-8 rounded-full bg-white text-blue-700 flex items-center justify-center font-bold text-sm">
-                                                                            {noteIndex + 1}
-                                                                        </div>
-                                                                        <div>
-                                                                            <p className="font-semibold text-sm">Dr. {noteDoctorName}</p>
-                                                                            <p className="text-blue-200 text-xs">
-                                                                                {note.createdAt ? new Date(note.createdAt).toLocaleString() : 'Date N/A'}
-                                                                                {note.updatedAt && note.updatedAt !== note.createdAt && (
-                                                                                    <span className="ml-2">(updated {new Date(note.updatedAt).toLocaleString()})</span>
+                                        {/* Lab Orders Tab */}
+                                        {activeTab === 'lab' && (
+                                            <div>
+                                                <div className="flex justify-between items-center mb-4">
+                                                    <h3 className="text-xl font-bold">Lab Orders</h3>
+                                                    {(user.role === 'doctor' || (['lab_technician', 'lab_scientist'].includes(user.role) && encounter?.type === 'External Investigation')) && (
+                                                        <button
+                                                            onClick={() => setShowLabModal(true)}
+                                                            disabled={!canEdit}
+                                                            className={`px-4 py-2 rounded flex items-center gap-2 ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-purple-600 text-white hover:bg-purple-700'}`}
+                                                        >
+                                                            <FaPlus /> Add Lab Order
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                {currentLabOrders.length > 0 ? (
+                                                    <div className="space-y-3">
+                                                        {currentLabOrders.map(order => (
+                                                            <div key={order._id} className="bg-purple-50 p-4 rounded border">
+                                                                <div className="flex justify-between items-start">
+                                                                    <div className="flex-1">
+                                                                        <p className="font-semibold text-lg">{order.testName}</p>
+                                                                        <p className="text-sm text-gray-600">Ordered: {new Date(order.createdAt).toLocaleString()}</p>
+                                                                        {order.clinicalDetails && (
+                                                                            <div className="mt-2 p-2 bg-blue-50 border-l-4 border-blue-400 text-xs italic">
+                                                                                <span className="font-bold text-blue-800 not-italic">Clinical Detail: </span>
+                                                                                {order.clinicalDetails}
+                                                                            </div>
+                                                                        )}
+                                                                        {order.result ? (
+                                                                            <details className="mt-2" open={!order.approvedBy}>
+                                                                                <summary className="cursor-pointer text-blue-600 hover:text-blue-800 text-sm font-semibold flex items-center gap-2">
+                                                                                    {order.approvedBy ? (
+                                                                                        <>View Official Results</>
+                                                                                    ) : (
+                                                                                        <>
+                                                                                            <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full text-[10px] font-bold border border-orange-200">
+                                                                                                PRELIMINARY
+                                                                                            </span>
+                                                                                            View Early Results
+                                                                                        </>
+                                                                                    )}
+                                                                                </summary>
+                                                                                {!order.approvedBy && (
+                                                                                    <div className="mt-2 p-2 bg-orange-50 border-l-4 border-orange-400 text-xs text-orange-800 italic">
+                                                                                        <FaInfoCircle className="inline mr-1" />
+                                                                                        These results have been entered but not yet formally reviewed and approved by a Lab Scientist.
+                                                                                    </div>
                                                                                 )}
-                                                                            </p>
-                                                                        </div>
+                                                                                <div className="mt-2 p-3 bg-white rounded border text-sm">
+                                                                                    {(() => {
+                                                                                        try {
+                                                                                            const parsed = JSON.parse(order.result);
+                                                                                            if (parsed.format === 'table' && Array.isArray(parsed.parameters)) {
+                                                                                                return (
+                                                                                                    <div className="overflow-x-auto">
+                                                                                                        <table className="w-full border-collapse">
+                                                                                                            <thead className="bg-gray-100 text-xs text-gray-700">
+                                                                                                                <tr>
+                                                                                                                    <th className="text-left p-2 font-semibold border">Parameter</th>
+                                                                                                                    <th className="text-left p-2 font-semibold border w-24">Value</th>
+                                                                                                                    <th className="text-left p-2 font-semibold border w-16">Unit</th>
+                                                                                                                    <th className="text-left p-2 font-semibold border w-32">Normal</th>
+                                                                                                                    <th className="text-center p-2 font-semibold border w-20">Status</th>
+                                                                                                                </tr>
+                                                                                                            </thead>
+                                                                                                            <tbody className="text-xs">
+                                                                                                                {parsed.parameters.map((param, index) => {
+                                                                                                                    const rangeStatus = checkRange(param.value, param.normalRange);
+                                                                                                                    const colorClass = getRangeColorClass(rangeStatus);
+
+                                                                                                                    return (
+                                                                                                                        <tr key={index} className={`${param.value ? colorClass : ''} border`}>
+                                                                                                                            <td className="p-2 font-medium border">{param.name}</td>
+                                                                                                                            <td className="p-2 font-semibold border">{param.value || '-'}</td>
+                                                                                                                            <td className="p-2 text-gray-600 border">{param.unit}</td>
+                                                                                                                            <td className="p-2 text-gray-600 border">{param.normalRange}</td>
+                                                                                                                            <td className="p-2 text-center border">
+                                                                                                                                {param.value && (
+                                                                                                                                    <span className={`text-[10px] px-1 py-0.5 rounded font-bold ${rangeStatus === 'low' ? 'bg-orange-200 text-orange-900 border border-orange-300' :
+                                                                                                                                        rangeStatus === 'high' ? 'bg-red-200 text-red-900 border border-red-300' :
+                                                                                                                                            'bg-green-200 text-green-900 border border-green-300'
+                                                                                                                                        }`}>
+                                                                                                                                        {rangeStatus === 'low' ? 'LOW' :
+                                                                                                                                            rangeStatus === 'high' ? 'HIGH' :
+                                                                                                                                                'NORMAL'}
+                                                                                                                                    </span>
+                                                                                                                                )}
+                                                                                                                            </td>
+                                                                                                                        </tr>
+                                                                                                                    );
+                                                                                                                })}
+                                                                                                            </tbody>
+                                                                                                        </table>
+                                                                                                    </div>
+                                                                                                );
+                                                                                            }
+                                                                                        } catch (e) {
+                                                                                            // Fallback to text
+                                                                                        }
+                                                                                        return <pre className="whitespace-pre-wrap font-mono">{order.result}</pre>;
+                                                                                    })()}
+                                                                                </div>
+                                                                            </details>
+                                                                        ) : null}
                                                                     </div>
-                                                                    {canEdit && isNoteAuthor && (
+                                                                    <div className="flex gap-2 ml-4">
+                                                                        <span className={`text-xs px-3 py-1 rounded ${order.charge?.status === 'paid' ? 'bg-green-200 text-green-800' : 'bg-yellow-200 text-yellow-800'}`}>
+                                                                            {order.charge?.status === 'paid' ? 'Paid' : 'Unpaid'}
+                                                                        </span>
+                                                                        <span className={`text-xs px-3 py-1 rounded font-bold uppercase tracking-wider ${order.status === 'completed'
+                                                                            ? (order.approvedBy ? 'bg-green-600 text-white' : 'bg-blue-200 text-blue-800')
+                                                                            : order.status === 'rejected' ? 'bg-red-100 text-red-800' : 'bg-gray-200 text-gray-600'}`}>
+                                                                            {order.status === 'completed' ? (order.approvedBy ? 'Approved' : 'Review Pending') : order.status}
+                                                                        </span>
+                                                                        {canEdit && (user.role === 'admin' || order.doctor === user._id || order.doctor?._id === user._id) && order.status !== 'completed' && order.charge?.status !== 'paid' && (
+                                                                            <button
+                                                                                onClick={() => handleDeleteOrder('lab', order._id)}
+                                                                                className="p-1.5 text-red-600 hover:bg-red-100 rounded-full transition-colors"
+                                                                                title="Delete Order"
+                                                                            >
+                                                                                <FaTrash />
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                                {order.approvedBy && (
+                                                                    <div className="mt-2 pt-2 border-t flex justify-between items-end">
+                                                                        <div className="text-[10px] text-gray-500 italic">
+                                                                            <p>Result by: {order.signedBy?.name}</p>
+                                                                            <p>Approved by: {order.approvedBy.name}</p>
+                                                                        </div>
                                                                         <button
-                                                                            onClick={() => { setEditingNoteId(noteId); setShowSoapModal(true); }}
-                                                                            className="flex items-center gap-1 bg-white text-blue-700 px-3 py-1 rounded-lg text-sm font-semibold hover:bg-blue-50 transition"
+                                                                            type="button"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleUniversalPrint(order);
+                                                                            }}
+                                                                            className="p-1 text-purple-600 hover:bg-purple-100 rounded"
+                                                                            title="Print Report"
+                                                                        >
+                                                                            <FaFileAlt />
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-gray-500">No lab orders yet. Click "Add Lab Order" to order tests.</p>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Radiology Orders Tab */}
+                                        {activeTab === 'radiology' && (
+                                            <div>
+                                                <div className="flex justify-between items-center mb-4">
+                                                    <h3 className="text-xl font-bold">Radiology Orders</h3>
+                                                    <button
+                                                        onClick={() => setShowRadModal(true)}
+                                                        disabled={!canEdit}
+                                                        className={`px-4 py-2 rounded flex items-center gap-2 ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+                                                    >
+                                                        <FaPlus /> Add Radiology Order
+                                                    </button>
+                                                </div>
+                                                {currentRadOrders.length > 0 ? (
+                                                    <div className="space-y-3">
+                                                        {currentRadOrders.map(order => (
+                                                            <div key={order._id} className="bg-indigo-50 p-4 rounded border">
+                                                                <div className="flex justify-between items-start">
+                                                                    <div className="flex-1">
+                                                                        <p className="font-semibold text-lg">{order.scanType}</p>
+                                                                        <p className="text-sm text-gray-600">Ordered: {new Date(order.createdAt).toLocaleString()}</p>
+                                                                        {order.report && (
+                                                                            <details className="mt-2">
+                                                                                <summary className="cursor-pointer text-blue-600 hover:text-blue-800 text-sm font-semibold">
+                                                                                    View Report
+                                                                                </summary>
+                                                                                <div className="mt-2 p-3 bg-white rounded border text-sm whitespace-pre-wrap font-mono">
+                                                                                    {order.report}
+                                                                                </div>
+
+                                                                                {/* Display uploaded images */}
+                                                                                {order.images && order.images.length > 0 && (
+                                                                                    <div className="mt-3">
+                                                                                        <p className="font-semibold text-sm mb-2 text-indigo-700">Attached Images:</p>
+                                                                                        <div className="grid grid-cols-2 gap-3">
+                                                                                            {order.images.map((img, index) => (
+                                                                                                <div key={index} className="border rounded p-2 bg-gray-50">
+                                                                                                    <p className="font-semibold text-xs mb-1 text-blue-600">{img.name}</p>
+                                                                                                    <img
+                                                                                                        src={`${backendUrl}/${img.path}`}
+                                                                                                        alt={img.name}
+                                                                                                        className="w-full h-32 object-contain bg-white rounded cursor-pointer hover:opacity-80 border"
+                                                                                                        onClick={() => window.open(`${backendUrl}/${img.path}`, '_blank')}
+                                                                                                        title="Click to view full size"
+                                                                                                    />
+                                                                                                    <p className="text-xs text-gray-500 mt-1">
+                                                                                                        {new Date(img.uploadedAt).toLocaleString()}
+                                                                                                    </p>
+                                                                                                </div>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                )}
+
+                                                                                {/* Legacy image URL support */}
+                                                                                {order.resultImage && (
+                                                                                    <div className="mt-2">
+                                                                                        <a href={order.resultImage} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm">
+                                                                                            View Image (Legacy)
+                                                                                        </a>
+                                                                                    </div>
+                                                                                )}
+                                                                            </details>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="flex gap-2 ml-4">
+                                                                        <span className={`text-xs px-3 py-1 rounded ${order.charge?.status === 'paid' ? 'bg-green-200 text-green-800' : 'bg-yellow-200 text-yellow-800'}`}>
+                                                                            {order.charge?.status === 'paid' ? 'Paid' : 'Unpaid'}
+                                                                        </span>
+                                                                        <span className={`text-xs px-3 py-1 rounded ${order.status === 'completed' ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'}`}>
+                                                                            {order.status}
+                                                                        </span>
+                                                                        {canEdit && (user.role === 'admin' || order.doctor === user._id || order.doctor?._id === user._id) && order.status !== 'completed' && order.charge?.status !== 'paid' && (
+                                                                            <button
+                                                                                onClick={() => handleDeleteOrder('radiology', order._id)}
+                                                                                className="p-1.5 text-red-600 hover:bg-red-100 rounded-full transition-colors"
+                                                                                title="Delete Order"
+                                                                            >
+                                                                                <FaTrash />
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                                {order.signedBy && (
+                                                                    <p className="text-xs text-gray-500 mt-2 italic border-t pt-2">
+                                                                        Report by: {order.signedBy.name}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-gray-500">No radiology orders yet. Click "Add Radiology Order" to order imaging studies.</p>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Prescriptions Tab */}
+                                        {activeTab === 'prescriptions' && (
+                                            <div>
+                                                <div className="flex justify-between items-center mb-4">
+                                                    <h3 className="text-xl font-bold">Prescriptions</h3>
+                                                    <button
+                                                        onClick={() => setShowRxModal(true)}
+                                                        disabled={!canEdit}
+                                                        className={`px-4 py-2 rounded flex items-center gap-2 ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-pink-600 text-white hover:bg-pink-700'}`}
+                                                    >
+                                                        <FaPlus /> Add Prescription
+                                                    </button>
+                                                </div>
+
+                                                {currentPrescriptions.length > 0 ? (
+                                                    <div className="space-y-3">
+                                                        {/* Group prescriptions by date and sort by latest first */}
+                                                        {Object.entries(
+                                                            currentPrescriptions.reduce((acc, rx) => {
+                                                                const date = new Date(rx.createdAt).toLocaleDateString('en-CA'); // Use ISO-like format YYYY-MM-DD for sorting
+                                                                if (!acc[date]) acc[date] = [];
+                                                                acc[date].push(rx);
+                                                                return acc;
+                                                            }, {})
+                                                        )
+                                                            .sort(([dateA], [dateB]) => new Date(dateB) - new Date(dateA)) // Sort dates descending (newest first)
+                                                            .map(([date, prescriptions]) => (
+                                                                <div key={date} className="border rounded-lg overflow-hidden">
+                                                                    {/* Day Header - Collapsible */}
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            const newExpandedDays = { ...expandedDays };
+                                                                            newExpandedDays[date] = !newExpandedDays[date];
+                                                                            setExpandedDays(newExpandedDays);
+                                                                        }}
+                                                                        className="w-full bg-pink-100 hover:bg-pink-200 p-4 flex justify-between items-center transition-colors"
+                                                                    >
+                                                                        <div className="flex items-center gap-3">
+                                                                            <span className={`transform transition-transform ${expandedDays[date] ? 'rotate-180' : ''}`}>
+                                                                                <FaChevronDown />
+                                                                            </span>
+                                                                            <h4 className="font-semibold text-lg">
+                                                                                {new Date(date).toLocaleDateString('en-US', {
+                                                                                    weekday: 'long',
+                                                                                    year: 'numeric',
+                                                                                    month: 'long',
+                                                                                    day: 'numeric'
+                                                                                })}
+                                                                            </h4>
+                                                                            <span className="bg-pink-600 text-white text-xs px-2 py-1 rounded-full">
+                                                                                {prescriptions.length} prescription{prescriptions.length > 1 ? 's' : ''}
+                                                                            </span>
+                                                                        </div>
+                                                                        <FaChevronDown className={`transform transition-transform ${expandedDays[date] ? 'rotate-180' : ''}`} />
+                                                                    </button>
+
+                                                                    {/* Prescriptions List - Collapsible Content */}
+                                                                    {expandedDays[date] && (
+                                                                        <div className="bg-white divide-y">
+                                                                            {prescriptions
+                                                                                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) // Sort prescriptions within day (newest first)
+                                                                                .map(rx => (
+                                                                                    <div key={rx._id} className="p-4 hover:bg-gray-50 transition-colors">
+                                                                                        <div className="flex justify-between items-start">
+                                                                                            <div className="flex-1">
+                                                                                                {rx.medicines.map((med, idx) => (
+                                                                                                    <div key={idx} className="mb-3 last:mb-0">
+                                                                                                        <p className="font-semibold text-lg text-gray-800 flex items-center gap-2">
+                                                                                                            {med.name}
+                                                                                                            {med.buyOutside && (
+                                                                                                                <span className="text-[10px] bg-orange-100 text-orange-800 px-2 py-0.5 rounded border border-orange-200">
+                                                                                                                    BUY OUTSIDE
+                                                                                                                </span>
+                                                                                                            )}
+                                                                                                        </p>
+                                                                                                        <div className="text-sm text-gray-600 space-y-1 mt-1">
+                                                                                                            <p><span className="font-medium">Dosage:</span> {med.dosage}</p>
+                                                                                                            <p><span className="font-medium">Frequency:</span> {med.frequency}</p>
+                                                                                                            <p><span className="font-medium">Duration:</span> {(med.duration && !isNaN(med.duration)) ? `${med.duration} days` : med.duration}</p>
+                                                                                                            {med.instructions && (
+                                                                                                                <p><span className="font-medium">Instructions:</span> {med.instructions}</p>
+                                                                                                            )}
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                ))}
+                                                                                                <p className="text-xs text-gray-500 mt-2">
+                                                                                                    Prescribed at: {new Date(rx.createdAt).toLocaleString()}
+                                                                                                </p>
+                                                                                            </div>
+                                                                                            <div className="flex flex-col gap-2 ml-4">
+                                                                                                <span className={`text-xs px-3 py-1 rounded text-center ${rx.charge?.status === 'paid' ? 'bg-green-200 text-green-800' : 'bg-yellow-200 text-yellow-800'}`}>
+                                                                                                    {rx.charge?.status === 'paid' ? 'Paid' : 'Unpaid'}
+                                                                                                </span>
+                                                                                                <span className={`text-xs px-3 py-1 rounded text-center ${rx.status === 'dispensed' ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'}`}>
+                                                                                                    {rx.status}
+                                                                                                </span>
+                                                                                                {canEdit && (user.role === 'admin' || rx.doctor === user._id || rx.doctor?._id === user._id) && rx.status !== 'dispensed' && rx.charge?.status !== 'paid' && (
+                                                                                                    <button
+                                                                                                        onClick={() => handleDeleteOrder('prescription', rx._id)}
+                                                                                                        className="p-1.5 text-red-600 hover:bg-red-100 rounded-full transition-colors"
+                                                                                                        title="Delete Prescription"
+                                                                                                    >
+                                                                                                        <FaTrash />
+                                                                                                    </button>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                        {rx.dispensedBy && (
+                                                                                            <p className="text-xs text-gray-500 mt-2 italic border-t pt-2">
+                                                                                                Dispensed by: {rx.dispensedBy.name}
+                                                                                            </p>
+                                                                                        )}
+                                                                                    </div>
+                                                                                ))}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-gray-500">No prescriptions yet. Click "Add Prescription" to prescribe medications.</p>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Referrals Tab */}
+                                        {activeTab === 'referrals' && (
+                                            <div className="p-6">
+                                                <h3 className="text-xl font-bold text-gray-700 mb-4">Referral Letters</h3>
+                                                {referrals.length === 0 ? (
+                                                    <p className="text-gray-500">No referrals created for this visit.</p>
+                                                ) : (
+                                                    <div className="space-y-3">
+                                                        {referrals.map(ref => (
+                                                            <div key={ref._id} className="border p-4 rounded bg-gray-50 flex justify-between items-start">
+                                                                <div className="flex-1">
+                                                                    <p className="font-semibold text-lg">{ref.referredTo}</p>
+                                                                    <p className="text-sm text-gray-600 mt-1"><strong>Diagnosis:</strong> {ref.diagnosis}</p>
+                                                                    <p className="text-sm text-gray-600 mt-1"><strong>Reason:</strong> {ref.reason}</p>
+                                                                    <p className="text-xs text-gray-500 mt-2">Created: {new Date(ref.createdAt).toLocaleDateString()} by Dr. {ref.doctor?.name || 'Unknown'}</p>
+                                                                </div>
+                                                                <div className="flex gap-2 ml-4">
+                                                                    {ref.doctor?._id === user._id && user.role === 'doctor' && (
+                                                                        <button
+                                                                            onClick={() => handleEditClick(ref)}
+                                                                            className="text-green-600 hover:text-green-800 flex items-center gap-1 px-3 py-2 border border-green-600 rounded hover:bg-green-50"
                                                                         >
                                                                             <FaEdit /> Edit
                                                                         </button>
                                                                     )}
-                                                                </div>
-
-                                                                <div className="bg-white p-4 space-y-3">
-                                                                    {/* Clinical History - Collapsible */}
-                                                                    {(note.presentingComplaints || note.historyOfPresentingComplaint ||
-                                                                        note.systemReview || note.pastMedicalSurgicalHistory ||
-                                                                        note.socialFamilyHistory || note.drugsHistory ||
-                                                                        note.functionalCognitiveStatus || note.menstruationGynecologicalObstetricsHistory ||
-                                                                        note.pregnancyHistory || note.immunization ||
-                                                                        note.nutritional || note.developmentalMilestones) && (
-                                                                        <div className="border rounded-lg overflow-hidden">
-                                                                            <button
-                                                                                onClick={() => setExpandedSections(prev => ({ ...prev, [`history_${noteId}`]: !prev[`history_${noteId}`] }))}
-                                                                                className="w-full bg-gradient-to-r from-gray-100 to-gray-50 hover:from-gray-200 hover:to-gray-100 p-3 flex justify-between items-center transition-colors"
-                                                                            >
-                                                                                <h4 className="text-base font-bold text-gray-800 flex items-center gap-2">
-                                                                                    <FaNotesMedical className="text-blue-600" /> Clinical History
-                                                                                </h4>
-                                                                                {expandedSections[`history_${noteId}`] ? <FaChevronUp className="text-gray-600" /> : <FaChevronDown className="text-gray-600" />}
-                                                                            </button>
-                                                                            {expandedSections[`history_${noteId}`] && (
-                                                                                <div className="p-4 space-y-3 bg-white">
-                                                                                    {note.presentingComplaints && (
-                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
-                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">01. Presenting Complaints</p>
-                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.presentingComplaints}</p>
-                                                                                        </div>
-                                                                                    )}
-                                                                                    {note.historyOfPresentingComplaint && (
-                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
-                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">02. History of Presenting Complaint</p>
-                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.historyOfPresentingComplaint}</p>
-                                                                                        </div>
-                                                                                    )}
-                                                                                    {note.systemReview && (
-                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
-                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">03. System Review</p>
-                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.systemReview}</p>
-                                                                                        </div>
-                                                                                    )}
-                                                                                    {note.pastMedicalSurgicalHistory && (
-                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
-                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">04. Past Medical / Surgical History</p>
-                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.pastMedicalSurgicalHistory}</p>
-                                                                                        </div>
-                                                                                    )}
-                                                                                    {note.socialFamilyHistory && (
-                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
-                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">05. Social and Family History</p>
-                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.socialFamilyHistory}</p>
-                                                                                        </div>
-                                                                                    )}
-                                                                                    {note.drugsHistory && (
-                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
-                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">06. Drugs History</p>
-                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.drugsHistory}</p>
-                                                                                        </div>
-                                                                                    )}
-                                                                                    {note.functionalCognitiveStatus && (
-                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
-                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">07. Functional Cognitive Status</p>
-                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.functionalCognitiveStatus}</p>
-                                                                                        </div>
-                                                                                    )}
-                                                                                    {note.menstruationGynecologicalObstetricsHistory && (
-                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
-                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">08. Menstruation / Gyn / Obstetrics History</p>
-                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.menstruationGynecologicalObstetricsHistory}</p>
-                                                                                        </div>
-                                                                                    )}
-                                                                                    {note.pregnancyHistory && (
-                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
-                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">09. Pregnancy History</p>
-                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.pregnancyHistory}</p>
-                                                                                        </div>
-                                                                                    )}
-                                                                                    {note.immunization && (
-                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
-                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">10. Immunization</p>
-                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.immunization}</p>
-                                                                                        </div>
-                                                                                    )}
-                                                                                    {note.nutritional && (
-                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
-                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">11. Nutritional</p>
-                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.nutritional}</p>
-                                                                                        </div>
-                                                                                    )}
-                                                                                    {note.developmentalMilestones && (
-                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
-                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">12. Developmental Milestones</p>
-                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.developmentalMilestones}</p>
-                                                                                        </div>
-                                                                                    )}
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    )}
-
-                                                                    {/* Physical Examination - Collapsible */}
-                                                                    {(note.generalAppearance || note.heent || note.neck || note.cvs || note.resp || note.abd || note.neuro || note.msk || note.skin) && (
-                                                                        <div className="border rounded-lg overflow-hidden">
-                                                                            <button
-                                                                                onClick={() => setExpandedSections(prev => ({ ...prev, [`physEx_${noteId}`]: !prev[`physEx_${noteId}`] }))}
-                                                                                className="w-full bg-gradient-to-r from-teal-100 to-teal-50 hover:from-teal-200 hover:to-teal-100 p-3 flex justify-between items-center transition-colors"
-                                                                            >
-                                                                                <h4 className="text-base font-bold text-gray-800 flex items-center gap-2">
-                                                                                    <FaHeartbeat className="text-teal-600" /> Physical Examination
-                                                                                </h4>
-                                                                                {expandedSections[`physEx_${noteId}`] ? <FaChevronUp className="text-gray-600" /> : <FaChevronDown className="text-gray-600" />}
-                                                                            </button>
-                                                                            {expandedSections[`physEx_${noteId}`] && (
-                                                                                <div className="p-4 space-y-3 bg-white">
-                                                                                    {note.generalAppearance && (
-                                                                                        <div className="bg-teal-50 p-3 rounded border-l-4 border-teal-500">
-                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">A. General Appearance</p>
-                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.generalAppearance}</p>
-                                                                                        </div>
-                                                                                    )}
-                                                                                    {(note.heent || note.neck || note.cvs || note.resp || note.abd || note.neuro || note.msk || note.skin) && (
-                                                                                        <div className="bg-teal-50 p-3 rounded border-l-4 border-teal-400">
-                                                                                            <p className="font-semibold text-gray-700 mb-2 text-sm">B. Systemic Examination</p>
-                                                                                            <div className="grid grid-cols-2 gap-2 text-sm">
-                                                                                                {note.heent && <div><span className="font-semibold text-gray-600">HEENT: </span><span className="text-gray-800">{note.heent}</span></div>}
-                                                                                                {note.neck && <div><span className="font-semibold text-gray-600">Neck: </span><span className="text-gray-800">{note.neck}</span></div>}
-                                                                                                {note.cvs && <div><span className="font-semibold text-gray-600">CVS: </span><span className="text-gray-800">{note.cvs}</span></div>}
-                                                                                                {note.resp && <div><span className="font-semibold text-gray-600">Resp: </span><span className="text-gray-800">{note.resp}</span></div>}
-                                                                                                {note.abd && <div><span className="font-semibold text-gray-600">Abd: </span><span className="text-gray-800">{note.abd}</span></div>}
-                                                                                                {note.neuro && <div><span className="font-semibold text-gray-600">Neuro: </span><span className="text-gray-800">{note.neuro}</span></div>}
-                                                                                                {note.msk && <div><span className="font-semibold text-gray-600">MSK: </span><span className="text-gray-800">{note.msk}</span></div>}
-                                                                                                {note.skin && <div><span className="font-semibold text-gray-600">Skin: </span><span className="text-gray-800">{note.skin}</span></div>}
-                                                                                            </div>
-                                                                                        </div>
-                                                                                    )}
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    )}
-
-                                                                    {/* Assessment & Plan - Collapsible */}
-                                                                    {(note.assessment || (note.diagnosis && note.diagnosis.length > 0) || note.plan) && (
-                                                                        <div className="border rounded-lg overflow-hidden">
-                                                                            <button
-                                                                                onClick={() => setExpandedSections(prev => ({ ...prev, [`assess_${noteId}`]: !prev[`assess_${noteId}`] }))}
-                                                                                className="w-full bg-gradient-to-r from-blue-100 to-blue-50 hover:from-blue-200 hover:to-blue-100 p-3 flex justify-between items-center transition-colors"
-                                                                            >
-                                                                                <h4 className="text-base font-bold text-gray-800 flex items-center gap-2">
-                                                                                    <FaFileMedical className="text-green-600" /> Assessment & Plan
-                                                                                </h4>
-                                                                                {expandedSections[`assess_${noteId}`] ? <FaChevronUp className="text-gray-600" /> : <FaChevronDown className="text-gray-600" />}
-                                                                            </button>
-                                                                            {expandedSections[`assess_${noteId}`] && (
-                                                                                <div className="p-4 space-y-3 bg-white">
-                                                                                    {(note.assessment || (note.diagnosis && note.diagnosis.length > 0)) && (
-                                                                                        <div className="bg-blue-50 p-3 rounded border-l-4 border-blue-600">
-                                                                                            <p className="font-semibold text-gray-700 mb-2 text-sm">Assessment (Diagnosis):</p>
-                                                                                            {note.diagnosis && note.diagnosis.length > 0 && (
-                                                                                                <div className="mb-2 flex flex-wrap gap-2">
-                                                                                                    {note.diagnosis.map((d, i) => (
-                                                                                                        <span key={i} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-medium border border-blue-300">
-                                                                                                            {d.code} - {d.description}
-                                                                                                        </span>
-                                                                                                    ))}
-                                                                                                </div>
-                                                                                            )}
-                                                                                            {note.assessment && <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.assessment}</p>}
-                                                                                        </div>
-                                                                                    )}
-                                                                                    {note.plan && (
-                                                                                        <div className="bg-green-50 p-3 rounded border-l-4 border-green-600">
-                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">Plan:</p>
-                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.plan}</p>
-                                                                                        </div>
-                                                                                    )}
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    )}
+                                                                    <button
+                                                                        onClick={() => printReferral(ref)}
+                                                                        className="text-blue-600 hover:text-blue-800 flex items-center gap-1 px-3 py-2 border border-blue-600 rounded hover:bg-blue-50"
+                                                                    >
+                                                                        <FaFileMedical /> Print
+                                                                    </button>
                                                                 </div>
                                                             </div>
-                                                        );
-                                                    })}
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Inpatient Notes Tab - unified tab for ward round notes & theatre operation notes */}
+                                        {activeTab === 'notes' && (
+                                            <div>
+                                                {/* Header: title + action buttons */}
+                                                <div className="flex flex-wrap justify-between items-center mb-5 gap-3">
+                                                    <h3 className="text-xl font-bold text-gray-800">Inpatient Notes</h3>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {/* Discharge button */}
+                                                        {encounter.encounterStatus !== 'discharged' && (
+                                                            <button
+                                                                onClick={handleDischarge}
+                                                                disabled={!canEdit}
+                                                                className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-red-600 text-white hover:bg-red-700'
+                                                                    }`}
+                                                            >
+                                                                <FaTimes />
+                                                                {encounter.encounterStatus === 'admitted' ? 'Discharge Patient' : 'Mark as Discharged'}
+                                                            </button>
+                                                        )}
+                                                        {encounter.encounterStatus === 'discharged' && (
+                                                            <div className="px-4 py-2 bg-green-600 text-white rounded flex items-center gap-2 text-sm">
+                                                                <FaTimes /> Discharged
+                                                            </div>
+                                                        )}
+                                                        {/* Add Ward Round Note button â€” doctors & nurses */}
+                                                        {['doctor', 'nurse'].includes(user.role) && (
+                                                            <button
+                                                                onClick={() => setShowWardRoundModal(true)}
+                                                                disabled={!canEdit}
+                                                                className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-teal-600 text-white hover:bg-teal-700'
+                                                                    }`}
+                                                            >
+                                                                <FaPlus /> Add Ward Round Note
+                                                            </button>
+                                                        )}
+                                                        {/* Add Theatre Note button â€” doctors only */}
+                                                        {user.role === 'doctor' && (
+                                                            <button
+                                                                onClick={() => { setTheatreNoteForm({ ...emptyTheatreNote }); setEditingTheatreNote(null); setShowTheatreModal(true); }}
+                                                                disabled={!canEdit}
+                                                                className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-red-700 text-white hover:bg-red-800'
+                                                                    }`}
+                                                            >
+                                                                <FaPlus /> Add Theatre Note
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            );
-                                        })()}
-                                    </div>
-                                )}
 
-
-                                {/* Lab Orders Tab */}
-                                {activeTab === 'lab' && (
-                                    <div>
-                                        <div className="flex justify-between items-center mb-4">
-                                            <h3 className="text-xl font-bold">Lab Orders</h3>
-                                            {(user.role === 'doctor' || (['lab_technician', 'lab_scientist'].includes(user.role) && encounter?.type === 'External Investigation')) && (
-                                                <button
-                                                    onClick={() => setShowLabModal(true)}
-                                                    disabled={!canEdit}
-                                                    className={`px-4 py-2 rounded flex items-center gap-2 ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-purple-600 text-white hover:bg-purple-700'}`}
-                                                >
-                                                    <FaPlus /> Add Lab Order
-                                                </button>
-                                            )}
-                                        </div>
-                                        {currentLabOrders.length > 0 ? (
-                                            <div className="space-y-3">
-                                                {currentLabOrders.map(order => (
-                                                    <div key={order._id} className="bg-purple-50 p-4 rounded border">
-                                                        <div className="flex justify-between items-start">
-                                                            <div className="flex-1">
-                                                                <p className="font-semibold text-lg">{order.testName}</p>
-                                                                <p className="text-sm text-gray-600">Ordered: {new Date(order.createdAt).toLocaleString()}</p>
-                                                                {order.clinicalDetails && (
-                                                                    <div className="mt-2 p-2 bg-blue-50 border-l-4 border-blue-400 text-xs italic">
-                                                                        <span className="font-bold text-blue-800 not-italic">Clinical Detail: </span>
-                                                                        {order.clinicalDetails}
+                                                {/* Admission / Discharge Info Banner */}
+                                                {encounter.ward && (
+                                                    <div className={`p-4 rounded mb-5 border ${encounter.encounterStatus === 'discharged' ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
+                                                        <p className={`font-semibold ${encounter.encounterStatus === 'discharged' ? 'text-green-800' : 'text-blue-800'}`}>
+                                                            <FaProcedures className="inline mr-2" />
+                                                            {encounter.encounterStatus === 'discharged' ? 'Discharge Record' : 'Admitted In:'}
+                                                        </p>
+                                                        <p className="text-sm text-gray-700 ml-6 mt-1">
+                                                            Ward: {typeof encounter.ward === 'object' && encounter.ward?.name ? encounter.ward.name : (typeof encounter.ward === 'string' ? `ID: ${encounter.ward}` : 'N/A')} |
+                                                            Bed: {encounter.bed || 'N/A'} |
+                                                            Admitted On: {encounter.admissionDate ? new Date(encounter.admissionDate).toLocaleString() : 'N/A'}
+                                                        </p>
+                                                        {encounter.encounterStatus === 'discharged' && (
+                                                            <div className="mt-3 pt-3 border-t border-green-200 space-y-3">
+                                                                <div className="flex flex-wrap gap-4 text-sm">
+                                                                    <span className="text-green-800 font-semibold">
+                                                                        ✓ Discharged On: {encounter.dischargeDate ? new Date(encounter.dischargeDate).toLocaleString() : (encounter.updatedAt ? new Date(encounter.updatedAt).toLocaleString() : 'N/A')}
+                                                                    </span>
+                                                                    {encounter.dischargedBy?.name && (
+                                                                        <span className="text-gray-600">
+                                                                            By: <span className="font-semibold text-gray-800">{encounter.dischargedBy.name}</span>
+                                                                            {encounter.dischargedBy.role && <span className="ml-1 text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full capitalize">{encounter.dischargedBy.role}</span>}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                {encounter.dischargeNotes ? (
+                                                                    <div className="bg-white rounded-lg border border-green-300 overflow-hidden">
+                                                                        <div className="bg-green-600 text-white px-3 py-2 text-xs font-semibold flex items-center gap-2">
+                                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                                                            DISCHARGE SUMMARY
+                                                                        </div>
+                                                                        <p className="text-sm text-gray-700 p-3 whitespace-pre-wrap">{encounter.dischargeNotes}</p>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                                                                        ⚠ No discharge summary was recorded for this encounter.
                                                                     </div>
                                                                 )}
-                                                                {order.result ? (
-                                                                    <details className="mt-2" open={!order.approvedBy}>
-                                                                        <summary className="cursor-pointer text-blue-600 hover:text-blue-800 text-sm font-semibold flex items-center gap-2">
-                                                                            {order.approvedBy ? (
-                                                                                <>View Official Results</>
-                                                                            ) : (
-                                                                                <>
-                                                                                    <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full text-[10px] font-bold border border-orange-200">
-                                                                                        PRELIMINARY
-                                                                                    </span>
-                                                                                    View Early Results
-                                                                                </>
-                                                                            )}
-                                                                        </summary>
-                                                                        {!order.approvedBy && (
-                                                                            <div className="mt-2 p-2 bg-orange-50 border-l-4 border-orange-400 text-xs text-orange-800 italic">
-                                                                                <FaInfoCircle className="inline mr-1" />
-                                                                                These results have been entered but not yet formally reviewed and approved by a Lab Scientist.
-                                                                            </div>
-                                                                        )}
-                                                                        <div className="mt-2 p-3 bg-white rounded border text-sm">
-                                                                            {(() => {
-                                                                                try {
-                                                                                    const parsed = JSON.parse(order.result);
-                                                                                    if (parsed.format === 'table' && Array.isArray(parsed.parameters)) {
-                                                                                        return (
-                                                                                            <div className="overflow-x-auto">
-                                                                                                <table className="w-full border-collapse">
-                                                                                                    <thead className="bg-gray-100 text-xs text-gray-700">
-                                                                                                        <tr>
-                                                                                                            <th className="text-left p-2 font-semibold border">Parameter</th>
-                                                                                                            <th className="text-left p-2 font-semibold border w-24">Value</th>
-                                                                                                            <th className="text-left p-2 font-semibold border w-16">Unit</th>
-                                                                                                            <th className="text-left p-2 font-semibold border w-32">Normal</th>
-                                                                                                            <th className="text-center p-2 font-semibold border w-20">Status</th>
-                                                                                                        </tr>
-                                                                                                    </thead>
-                                                                                                    <tbody className="text-xs">
-                                                                                                        {parsed.parameters.map((param, index) => {
-                                                                                                            const rangeStatus = checkRange(param.value, param.normalRange);
-                                                                                                            const colorClass = getRangeColorClass(rangeStatus);
-
-                                                                                                            return (
-                                                                                                                <tr key={index} className={`${param.value ? colorClass : ''} border`}>
-                                                                                                                    <td className="p-2 font-medium border">{param.name}</td>
-                                                                                                                    <td className="p-2 font-semibold border">{param.value || '-'}</td>
-                                                                                                                    <td className="p-2 text-gray-600 border">{param.unit}</td>
-                                                                                                                    <td className="p-2 text-gray-600 border">{param.normalRange}</td>
-                                                                                                                    <td className="p-2 text-center border">
-                                                                                                                        {param.value && (
-                                                                                                                            <span className={`text-[10px] px-1 py-0.5 rounded font-bold ${rangeStatus === 'low' ? 'bg-orange-200 text-orange-900 border border-orange-300' :
-                                                                                                                                rangeStatus === 'high' ? 'bg-red-200 text-red-900 border border-red-300' :
-                                                                                                                                    'bg-green-200 text-green-900 border border-green-300'
-                                                                                                                                }`}>
-                                                                                                                                {rangeStatus === 'low' ? 'LOW' :
-                                                                                                                                    rangeStatus === 'high' ? 'HIGH' :
-                                                                                                                                        'NORMAL'}
-                                                                                                                            </span>
-                                                                                                                        )}
-                                                                                                                    </td>
-                                                                                                                </tr>
-                                                                                                            );
-                                                                                                        })}
-                                                                                                    </tbody>
-                                                                                                </table>
-                                                                                            </div>
-                                                                                        );
-                                                                                    }
-                                                                                } catch (e) {
-                                                                                    // Fallback to text
-                                                                                }
-                                                                                return <pre className="whitespace-pre-wrap font-mono">{order.result}</pre>;
-                                                                            })()}
-                                                                        </div>
-                                                                    </details>
-                                                                ) : null}
-                                                            </div>
-                                                            <div className="flex gap-2 ml-4">
-                                                                <span className={`text-xs px-3 py-1 rounded ${order.charge?.status === 'paid' ? 'bg-green-200 text-green-800' : 'bg-yellow-200 text-yellow-800'}`}>
-                                                                    {order.charge?.status === 'paid' ? 'Paid' : 'Unpaid'}
-                                                                </span>
-                                                                <span className={`text-xs px-3 py-1 rounded font-bold uppercase tracking-wider ${order.status === 'completed'
-                                                                    ? (order.approvedBy ? 'bg-green-600 text-white' : 'bg-blue-200 text-blue-800')
-                                                                    : order.status === 'rejected' ? 'bg-red-100 text-red-800' : 'bg-gray-200 text-gray-600'}`}>
-                                                                    {order.status === 'completed' ? (order.approvedBy ? 'Approved' : 'Review Pending') : order.status}
-                                                                </span>
-                                                                {canEdit && (user.role === 'admin' || order.doctor === user._id || order.doctor?._id === user._id) && order.status !== 'completed' && order.charge?.status !== 'paid' && (
-                                                                    <button
-                                                                        onClick={() => handleDeleteOrder('lab', order._id)}
-                                                                        className="p-1.5 text-red-600 hover:bg-red-100 rounded-full transition-colors"
-                                                                        title="Delete Order"
-                                                                    >
-                                                                        <FaTrash />
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        {order.approvedBy && (
-                                                            <div className="mt-2 pt-2 border-t flex justify-between items-end">
-                                                                <div className="text-[10px] text-gray-500 italic">
-                                                                    <p>Result by: {order.signedBy?.name}</p>
-                                                                    <p>Approved by: {order.approvedBy.name}</p>
-                                                                </div>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleUniversalPrint(order);
-                                                                    }}
-                                                                    className="p-1 text-purple-600 hover:bg-purple-100 rounded"
-                                                                    title="Print Report"
-                                                                >
-                                                                    <FaFileAlt />
-                                                                </button>
                                                             </div>
                                                         )}
                                                     </div>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <p className="text-gray-500">No lab orders yet. Click "Add Lab Order" to order tests.</p>
-                                        )}
-                                    </div>
-                                )}
+                                                )}
 
-                                {/* Radiology Orders Tab */}
-                                {activeTab === 'radiology' && (
-                                    <div>
-                                        <div className="flex justify-between items-center mb-4">
-                                            <h3 className="text-xl font-bold">Radiology Orders</h3>
-                                            <button
-                                                onClick={() => setShowRadModal(true)}
-                                                disabled={!canEdit}
-                                                className={`px-4 py-2 rounded flex items-center gap-2 ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
-                                            >
-                                                <FaPlus /> Add Radiology Order
-                                            </button>
-                                        </div>
-                                        {currentRadOrders.length > 0 ? (
-                                            <div className="space-y-3">
-                                                {currentRadOrders.map(order => (
-                                                    <div key={order._id} className="bg-indigo-50 p-4 rounded border">
-                                                        <div className="flex justify-between items-start">
-                                                            <div className="flex-1">
-                                                                <p className="font-semibold text-lg">{order.scanType}</p>
-                                                                <p className="text-sm text-gray-600">Ordered: {new Date(order.createdAt).toLocaleString()}</p>
-                                                                {order.report && (
-                                                                    <details className="mt-2">
-                                                                        <summary className="cursor-pointer text-blue-600 hover:text-blue-800 text-sm font-semibold">
-                                                                            View Report
-                                                                        </summary>
-                                                                        <div className="mt-2 p-3 bg-white rounded border text-sm whitespace-pre-wrap font-mono">
-                                                                            {order.report}
-                                                                        </div>
-
-                                                                        {/* Display uploaded images */}
-                                                                        {order.images && order.images.length > 0 && (
-                                                                            <div className="mt-3">
-                                                                                <p className="font-semibold text-sm mb-2 text-indigo-700">Attached Images:</p>
-                                                                                <div className="grid grid-cols-2 gap-3">
-                                                                                    {order.images.map((img, index) => (
-                                                                                        <div key={index} className="border rounded p-2 bg-gray-50">
-                                                                                            <p className="font-semibold text-xs mb-1 text-blue-600">{img.name}</p>
-                                                                                            <img
-                                                                                                src={`${backendUrl}/${img.path}`}
-                                                                                                alt={img.name}
-                                                                                                className="w-full h-32 object-contain bg-white rounded cursor-pointer hover:opacity-80 border"
-                                                                                                onClick={() => window.open(`${backendUrl}/${img.path}`, '_blank')}
-                                                                                                title="Click to view full size"
-                                                                                            />
-                                                                                            <p className="text-xs text-gray-500 mt-1">
-                                                                                                {new Date(img.uploadedAt).toLocaleString()}
-                                                                                            </p>
-                                                                                        </div>
-                                                                                    ))}
-                                                                                </div>
-                                                                            </div>
-                                                                        )}
-
-                                                                        {/* Legacy image URL support */}
-                                                                        {order.resultImage && (
-                                                                            <div className="mt-2">
-                                                                                <a href={order.resultImage} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm">
-                                                                                    View Image (Legacy)
-                                                                                </a>
-                                                                            </div>
-                                                                        )}
-                                                                    </details>
-                                                                )}
-                                                            </div>
-                                                            <div className="flex gap-2 ml-4">
-                                                                <span className={`text-xs px-3 py-1 rounded ${order.charge?.status === 'paid' ? 'bg-green-200 text-green-800' : 'bg-yellow-200 text-yellow-800'}`}>
-                                                                    {order.charge?.status === 'paid' ? 'Paid' : 'Unpaid'}
-                                                                </span>
-                                                                <span className={`text-xs px-3 py-1 rounded ${order.status === 'completed' ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'}`}>
-                                                                    {order.status}
-                                                                </span>
-                                                                {canEdit && (user.role === 'admin' || order.doctor === user._id || order.doctor?._id === user._id) && order.status !== 'completed' && order.charge?.status !== 'paid' && (
-                                                                    <button
-                                                                        onClick={() => handleDeleteOrder('radiology', order._id)}
-                                                                        className="p-1.5 text-red-600 hover:bg-red-100 rounded-full transition-colors"
-                                                                        title="Delete Order"
-                                                                    >
-                                                                        <FaTrash />
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        {order.signedBy && (
-                                                            <p className="text-xs text-gray-500 mt-2 italic border-t pt-2">
-                                                                Report by: {order.signedBy.name}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <p className="text-gray-500">No radiology orders yet. Click "Add Radiology Order" to order imaging studies.</p>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* Prescriptions Tab */}
-                                {activeTab === 'prescriptions' && (
-                                    <div>
-                                        <div className="flex justify-between items-center mb-4">
-                                            <h3 className="text-xl font-bold">Prescriptions</h3>
-                                            <button
-                                                onClick={() => setShowRxModal(true)}
-                                                disabled={!canEdit}
-                                                className={`px-4 py-2 rounded flex items-center gap-2 ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-pink-600 text-white hover:bg-pink-700'}`}
-                                            >
-                                                <FaPlus /> Add Prescription
-                                            </button>
-                                        </div>
-
-                                        {currentPrescriptions.length > 0 ? (
-                                            <div className="space-y-3">
-                                                {/* Group prescriptions by date and sort by latest first */}
-                                                {Object.entries(
-                                                    currentPrescriptions.reduce((acc, rx) => {
-                                                        const date = new Date(rx.createdAt).toLocaleDateString('en-CA'); // Use ISO-like format YYYY-MM-DD for sorting
-                                                        if (!acc[date]) acc[date] = [];
-                                                        acc[date].push(rx);
-                                                        return acc;
-                                                    }, {})
-                                                )
-                                                    .sort(([dateA], [dateB]) => new Date(dateB) - new Date(dateA)) // Sort dates descending (newest first)
-                                                    .map(([date, prescriptions]) => (
-                                                        <div key={date} className="border rounded-lg overflow-hidden">
-                                                            {/* Day Header - Collapsible */}
-                                                            <button
-                                                                onClick={() => {
-                                                                    const newExpandedDays = { ...expandedDays };
-                                                                    newExpandedDays[date] = !newExpandedDays[date];
-                                                                    setExpandedDays(newExpandedDays);
-                                                                }}
-                                                                className="w-full bg-pink-100 hover:bg-pink-200 p-4 flex justify-between items-center transition-colors"
+                                                {/* Edit Encounter Status Modal */}
+                                                {showEditEncounterModal && (
+                                                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                                                        <div className="bg-white p-6 rounded shadow-lg w-96">
+                                                            <h3 className="text-lg font-semibold mb-4">Edit Encounter Status</h3>
+                                                            <label className="block mb-2">Encounter Status</label>
+                                                            <select
+                                                                className="w-full border rounded p-2 mb-4"
+                                                                value={editEncounterStatus}
+                                                                onChange={(e) => setEditEncounterStatus(e.target.value)}
                                                             >
-                                                                <div className="flex items-center gap-3">
-                                                                    <span className={`transform transition-transform ${expandedDays[date] ? 'rotate-180' : ''}`}>
-                                                                        <FaChevronDown />
-                                                                    </span>
-                                                                    <h4 className="font-semibold text-lg">
-                                                                        {new Date(date).toLocaleDateString('en-US', {
-                                                                            weekday: 'long',
-                                                                            year: 'numeric',
-                                                                            month: 'long',
-                                                                            day: 'numeric'
-                                                                        })}
-                                                                    </h4>
-                                                                    <span className="bg-pink-600 text-white text-xs px-2 py-1 rounded-full">
-                                                                        {prescriptions.length} prescription{prescriptions.length > 1 ? 's' : ''}
-                                                                    </span>
-                                                                </div>
-                                                                <FaChevronDown className={`transform transition-transform ${expandedDays[date] ? 'rotate-180' : ''}`} />
-                                                            </button>
+                                                                <option value="admitted">Admitted</option>
+                                                                <option value="in_progress">In Progress</option>
+                                                                <option value="with_doctor">With Doctor</option>
+                                                                <option value="in_nursing">In Nursing</option>
+                                                                <option value="in_lab">In Lab</option>
+                                                                <option value="in_radiology">In Radiology</option>
+                                                                <option value="in_pharmacy">In Pharmacy</option>
+                                                                <option value="discharged">Discharged</option>
+                                                            </select>
+                                                            <div className="flex justify-end space-x-2">
+                                                                <button className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400" onClick={() => setShowEditEncounterModal(false)}>Cancel</button>
+                                                                <button className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700" onClick={handleEditEncounterSave}>Save</button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
 
-                                                            {/* Prescriptions List - Collapsible Content */}
-                                                            {expandedDays[date] && (
-                                                                <div className="bg-white divide-y">
-                                                                    {prescriptions
-                                                                        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) // Sort prescriptions within day (newest first)
-                                                                        .map(rx => (
-                                                                            <div key={rx._id} className="p-4 hover:bg-gray-50 transition-colors">
-                                                                                <div className="flex justify-between items-start">
-                                                                                    <div className="flex-1">
-                                                                                        {rx.medicines.map((med, idx) => (
-                                                                                            <div key={idx} className="mb-3 last:mb-0">
-                                                                                                <p className="font-semibold text-lg text-gray-800 flex items-center gap-2">
-                                                                                                    {med.name}
-                                                                                                    {med.buyOutside && (
-                                                                                                        <span className="text-[10px] bg-orange-100 text-orange-800 px-2 py-0.5 rounded border border-orange-200">
-                                                                                                            BUY OUTSIDE
-                                                                                                        </span>
-                                                                                                    )}
-                                                                                                </p>
-                                                                                                <div className="text-sm text-gray-600 space-y-1 mt-1">
-                                                                                                    <p><span className="font-medium">Dosage:</span> {med.dosage}</p>
-                                                                                                    <p><span className="font-medium">Frequency:</span> {med.frequency}</p>
-                                                                                                    <p><span className="font-medium">Duration:</span> {(med.duration && !isNaN(med.duration)) ? `${med.duration} days` : med.duration}</p>
-                                                                                                    {med.instructions && (
-                                                                                                        <p><span className="font-medium">Instructions:</span> {med.instructions}</p>
-                                                                                                    )}
-                                                                                                </div>
-                                                                                            </div>
-                                                                                        ))}
-                                                                                        <p className="text-xs text-gray-500 mt-2">
-                                                                                            Prescribed at: {new Date(rx.createdAt).toLocaleString()}
-                                                                                        </p>
-                                                                                    </div>
-                                                                                    <div className="flex flex-col gap-2 ml-4">
-                                                                                        <span className={`text-xs px-3 py-1 rounded text-center ${rx.charge?.status === 'paid' ? 'bg-green-200 text-green-800' : 'bg-yellow-200 text-yellow-800'}`}>
-                                                                                            {rx.charge?.status === 'paid' ? 'Paid' : 'Unpaid'}
-                                                                                        </span>
-                                                                                        <span className={`text-xs px-3 py-1 rounded text-center ${rx.status === 'dispensed' ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'}`}>
-                                                                                            {rx.status}
-                                                                                        </span>
-                                                                                        {canEdit && (user.role === 'admin' || rx.doctor === user._id || rx.doctor?._id === user._id) && rx.status !== 'dispensed' && rx.charge?.status !== 'paid' && (
-                                                                                            <button
-                                                                                                onClick={() => handleDeleteOrder('prescription', rx._id)}
-                                                                                                className="p-1.5 text-red-600 hover:bg-red-100 rounded-full transition-colors"
-                                                                                                title="Delete Prescription"
-                                                                                            >
-                                                                                                <FaTrash />
-                                                                                            </button>
-                                                                                        )}
-                                                                                    </div>
-                                                                                </div>
-                                                                                {rx.dispensedBy && (
-                                                                                    <p className="text-xs text-gray-500 mt-2 italic border-t pt-2">
-                                                                                        Dispensed by: {rx.dispensedBy.name}
-                                                                                    </p>
-                                                                                )}
+                                                {/* â”€â”€ SECTION 1: Ward Round Notes â”€â”€ */}
+                                                <div className="mb-8">
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <FaNotesMedical className="text-teal-600" />
+                                                        <h4 className="text-base font-bold text-teal-700">Ward Round Notes</h4>
+                                                        <span className="text-xs bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-semibold">{wardRoundNotes.length}</span>
+                                                    </div>
+                                                    {wardRoundNotes.length > 0 ? (
+                                                        <div className="space-y-3">
+                                                            {[...wardRoundNotes].reverse().map((note, idx) => (
+                                                                <div key={idx} className="bg-teal-50 p-4 rounded-lg border border-teal-200">
+                                                                    <p className="whitespace-pre-wrap text-gray-800 text-sm">{note.text}</p>
+                                                                    <div className="mt-2 text-xs text-gray-500 flex justify-between border-t border-teal-200 pt-2">
+                                                                        <span>By: {note.author} ({note.role})</span>
+                                                                        <span>{new Date(note.createdAt).toLocaleString()}</span>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-sm text-gray-400 italic">No ward round notes recorded yet.</p>
+                                                    )}
+                                                </div>
+
+                                                {/* â”€â”€ SECTION 2: Theatre Operation Notes â”€â”€ */}
+                                                <div className="mb-8">
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <FaProcedures className="text-red-600" />
+                                                        <h4 className="text-base font-bold text-red-700">Theatre Operation Notes</h4>
+                                                        <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-semibold">{theatreNotes.length}</span>
+                                                    </div>
+                                                    {theatreNotes.length > 0 ? (
+                                                        <div className="space-y-5">
+                                                            {[...theatreNotes].reverse().map((note, idx) => (
+                                                                <div key={idx} className="border border-red-200 rounded-lg overflow-hidden">
+                                                                    <div className="bg-red-700 text-white px-5 py-3 flex justify-between items-center">
+                                                                        <div>
+                                                                            <p className="font-bold">{note.procedurePerformed || 'Operation Note'}</p>
+                                                                            <p className="text-xs opacity-80">
+                                                                                {note.dateOfSurgery ? new Date(note.dateOfSurgery).toLocaleDateString() : 'Date N/A'}
+                                                                                {note.surgeryType && ` â€¢ ${note.surgeryType}`}
+                                                                            </p>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className={`text-xs px-3 py-1 rounded-full font-bold ${note.status === 'Reviewed' ? 'bg-green-400 text-green-900' :
+                                                                                    note.status === 'Completed' ? 'bg-blue-300 text-blue-900' :
+                                                                                        'bg-yellow-300 text-yellow-900'
+                                                                                }`}>{note.status}</span>
+                                                                            {canEdit && (
+                                                                                <button
+                                                                                    onClick={() => { setTheatreNoteForm({ ...note }); setEditingTheatreNote(note._id); setShowTheatreModal(true); }}
+                                                                                    className="text-white hover:text-yellow-300 transition" title="Edit"
+                                                                                >
+                                                                                    <FaEdit />
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-gray-200">
+                                                                        {[
+                                                                            ['Pre-operative Diagnosis', note.preOperativeDiagnosis],
+                                                                            ['Post-operative Diagnosis', note.postOperativeDiagnosis],
+                                                                            ['Procedure Performed', note.procedurePerformed],
+                                                                            ['Operative Findings', note.operativeFindings],
+                                                                            ['Estimated Blood Loss', note.estimatedBloodLoss],
+                                                                            ['Blood Transfusion', note.bloodTransfusion],
+                                                                            ['Complications', note.complications],
+                                                                            ['Drains', note.drains],
+                                                                            ['Specimens', note.specimens],
+                                                                            ['Implants', note.implants],
+                                                                            ['Wound Closure', note.woundClosure],
+                                                                            ['Post-op Condition', note.postOperativeCondition],
+                                                                            ['Lead Surgeon', note.leadSurgeon],
+                                                                            ['Assistant Surgeons', note.assistantSurgeons],
+                                                                            ['Anaesthetist', note.anaesthetist],
+                                                                            ['Scrub Nurse', note.scrubNurse],
+                                                                            ['Circulating Nurse', note.circulatingNurse],
+                                                                            ['Anaesthesia Type', note.anaesthesiaType],
+                                                                            ['Theatre', note.theatreName],
+                                                                            ['Start / End Time', note.startTime && note.endTime ? `${note.startTime} - ${note.endTime}` : (note.startTime || note.endTime || '')],
+                                                                        ].filter(([, v]) => v).map(([label, value]) => (
+                                                                            <div key={label} className="bg-white p-3">
+                                                                                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">{label}</p>
+                                                                                <p className="text-sm text-gray-800">{value}</p>
                                                                             </div>
                                                                         ))}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    ))}
-                                            </div>
-                                        ) : (
-                                            <p className="text-gray-500">No prescriptions yet. Click "Add Prescription" to prescribe medications.</p>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* Referrals Tab */}
-                                {activeTab === 'referrals' && (
-                                    <div className="p-6">
-                                        <h3 className="text-xl font-bold text-gray-700 mb-4">Referral Letters</h3>
-                                        {referrals.length === 0 ? (
-                                            <p className="text-gray-500">No referrals created for this visit.</p>
-                                        ) : (
-                                            <div className="space-y-3">
-                                                {referrals.map(ref => (
-                                                    <div key={ref._id} className="border p-4 rounded bg-gray-50 flex justify-between items-start">
-                                                        <div className="flex-1">
-                                                            <p className="font-semibold text-lg">{ref.referredTo}</p>
-                                                            <p className="text-sm text-gray-600 mt-1"><strong>Diagnosis:</strong> {ref.diagnosis}</p>
-                                                            <p className="text-sm text-gray-600 mt-1"><strong>Reason:</strong> {ref.reason}</p>
-                                                            <p className="text-xs text-gray-500 mt-2">Created: {new Date(ref.createdAt).toLocaleDateString()} by Dr. {ref.doctor?.name || 'Unknown'}</p>
-                                                        </div>
-                                                        <div className="flex gap-2 ml-4">
-                                                            {ref.doctor?._id === user._id && user.role === 'doctor' && (
-                                                                <button
-                                                                    onClick={() => handleEditClick(ref)}
-                                                                    className="text-green-600 hover:text-green-800 flex items-center gap-1 px-3 py-2 border border-green-600 rounded hover:bg-green-50"
-                                                                >
-                                                                    <FaEdit /> Edit
-                                                                </button>
-                                                            )}
-                                                            <button
-                                                                onClick={() => printReferral(ref)}
-                                                                className="text-blue-600 hover:text-blue-800 flex items-center gap-1 px-3 py-2 border border-blue-600 rounded hover:bg-blue-50"
-                                                            >
-                                                                <FaFileMedical /> Print
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* Inpatient Notes Tab - unified tab for ward round notes & theatre operation notes */}
-                                {activeTab === 'notes' && (
-                                    <div>
-                                        {/* Header: title + action buttons */}
-                                        <div className="flex flex-wrap justify-between items-center mb-5 gap-3">
-                                            <h3 className="text-xl font-bold text-gray-800">Inpatient Notes</h3>
-                                            <div className="flex flex-wrap gap-2">
-                                                {/* Discharge button */}
-                                                {encounter.encounterStatus !== 'discharged' && (
-                                                    <button
-                                                        onClick={handleDischarge}
-                                                        disabled={!canEdit}
-                                                        className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${
-                                                            !canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-red-600 text-white hover:bg-red-700'
-                                                        }`}
-                                                    >
-                                                        <FaTimes />
-                                                        {encounter.encounterStatus === 'admitted' ? 'Discharge Patient' : 'Mark as Discharged'}
-                                                    </button>
-                                                )}
-                                                {encounter.encounterStatus === 'discharged' && (
-                                                    <div className="px-4 py-2 bg-green-600 text-white rounded flex items-center gap-2 text-sm">
-                                                        <FaTimes /> Discharged
-                                                    </div>
-                                                )}
-                                                {/* Add Ward Round Note button â€” doctors & nurses */}
-                                                {['doctor', 'nurse'].includes(user.role) && (
-                                                    <button
-                                                        onClick={() => setShowWardRoundModal(true)}
-                                                        disabled={!canEdit}
-                                                        className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${
-                                                            !canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-teal-600 text-white hover:bg-teal-700'
-                                                        }`}
-                                                    >
-                                                        <FaPlus /> Add Ward Round Note
-                                                    </button>
-                                                )}
-                                                {/* Add Theatre Note button â€” doctors only */}
-                                                {user.role === 'doctor' && (
-                                                    <button
-                                                        onClick={() => { setTheatreNoteForm({ ...emptyTheatreNote }); setEditingTheatreNote(null); setShowTheatreModal(true); }}
-                                                        disabled={!canEdit}
-                                                        className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${
-                                                            !canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-red-700 text-white hover:bg-red-800'
-                                                        }`}
-                                                    >
-                                                        <FaPlus /> Add Theatre Note
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Admission / Discharge Info Banner */}
-                                        {encounter.ward && (
-                                            <div className={`p-4 rounded mb-5 border ${encounter.encounterStatus === 'discharged' ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
-                                                <p className={`font-semibold ${encounter.encounterStatus === 'discharged' ? 'text-green-800' : 'text-blue-800'}`}>
-                                                    <FaProcedures className="inline mr-2" />
-                                                    {encounter.encounterStatus === 'discharged' ? 'Discharge Record' : 'Admitted In:'}
-                                                </p>
-                                                <p className="text-sm text-gray-700 ml-6 mt-1">
-                                                    Ward: {typeof encounter.ward === 'object' && encounter.ward?.name ? encounter.ward.name : (typeof encounter.ward === 'string' ? `ID: ${encounter.ward}` : 'N/A')} |
-                                                    Bed: {encounter.bed || 'N/A'} |
-                                                    Admitted On: {encounter.admissionDate ? new Date(encounter.admissionDate).toLocaleString() : 'N/A'}
-                                                </p>
-                                                {encounter.encounterStatus === 'discharged' && (
-                                                    <div className="mt-3 pt-3 border-t border-green-200 space-y-3">
-                                                        <div className="flex flex-wrap gap-4 text-sm">
-                                                            <span className="text-green-800 font-semibold">
-                                                                ✓ Discharged On: {encounter.dischargeDate ? new Date(encounter.dischargeDate).toLocaleString() : (encounter.updatedAt ? new Date(encounter.updatedAt).toLocaleString() : 'N/A')}
-                                                            </span>
-                                                            {encounter.dischargedBy?.name && (
-                                                                <span className="text-gray-600">
-                                                                    By: <span className="font-semibold text-gray-800">{encounter.dischargedBy.name}</span>
-                                                                    {encounter.dischargedBy.role && <span className="ml-1 text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full capitalize">{encounter.dischargedBy.role}</span>}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        {encounter.dischargeNotes ? (
-                                                            <div className="bg-white rounded-lg border border-green-300 overflow-hidden">
-                                                                <div className="bg-green-600 text-white px-3 py-2 text-xs font-semibold flex items-center gap-2">
-                                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                                                    DISCHARGE SUMMARY
-                                                                </div>
-                                                                <p className="text-sm text-gray-700 p-3 whitespace-pre-wrap">{encounter.dischargeNotes}</p>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                                                                ⚠ No discharge summary was recorded for this encounter.
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {/* Edit Encounter Status Modal */}
-                                        {showEditEncounterModal && (
-                                            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                                                <div className="bg-white p-6 rounded shadow-lg w-96">
-                                                    <h3 className="text-lg font-semibold mb-4">Edit Encounter Status</h3>
-                                                    <label className="block mb-2">Encounter Status</label>
-                                                    <select
-                                                        className="w-full border rounded p-2 mb-4"
-                                                        value={editEncounterStatus}
-                                                        onChange={(e) => setEditEncounterStatus(e.target.value)}
-                                                    >
-                                                        <option value="admitted">Admitted</option>
-                                                        <option value="in_progress">In Progress</option>
-                                                        <option value="with_doctor">With Doctor</option>
-                                                        <option value="in_nursing">In Nursing</option>
-                                                        <option value="in_lab">In Lab</option>
-                                                        <option value="in_radiology">In Radiology</option>
-                                                        <option value="in_pharmacy">In Pharmacy</option>
-                                                        <option value="discharged">Discharged</option>
-                                                    </select>
-                                                    <div className="flex justify-end space-x-2">
-                                                        <button className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400" onClick={() => setShowEditEncounterModal(false)}>Cancel</button>
-                                                        <button className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700" onClick={handleEditEncounterSave}>Save</button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* â”€â”€ SECTION 1: Ward Round Notes â”€â”€ */}
-                                        <div className="mb-8">
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <FaNotesMedical className="text-teal-600" />
-                                                <h4 className="text-base font-bold text-teal-700">Ward Round Notes</h4>
-                                                <span className="text-xs bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-semibold">{wardRoundNotes.length}</span>
-                                            </div>
-                                            {wardRoundNotes.length > 0 ? (
-                                                <div className="space-y-3">
-                                                    {[...wardRoundNotes].reverse().map((note, idx) => (
-                                                        <div key={idx} className="bg-teal-50 p-4 rounded-lg border border-teal-200">
-                                                            <p className="whitespace-pre-wrap text-gray-800 text-sm">{note.text}</p>
-                                                            <div className="mt-2 text-xs text-gray-500 flex justify-between border-t border-teal-200 pt-2">
-                                                                <span>By: {note.author} ({note.role})</span>
-                                                                <span>{new Date(note.createdAt).toLocaleString()}</span>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            ) : (
-                                                <p className="text-sm text-gray-400 italic">No ward round notes recorded yet.</p>
-                                            )}
-                                        </div>
-
-                                        {/* â”€â”€ SECTION 2: Theatre Operation Notes â”€â”€ */}
-                                        <div className="mb-8">
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <FaProcedures className="text-red-600" />
-                                                <h4 className="text-base font-bold text-red-700">Theatre Operation Notes</h4>
-                                                <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-semibold">{theatreNotes.length}</span>
-                                            </div>
-                                            {theatreNotes.length > 0 ? (
-                                                <div className="space-y-5">
-                                                    {[...theatreNotes].reverse().map((note, idx) => (
-                                                        <div key={idx} className="border border-red-200 rounded-lg overflow-hidden">
-                                                            <div className="bg-red-700 text-white px-5 py-3 flex justify-between items-center">
-                                                                <div>
-                                                                    <p className="font-bold">{note.procedurePerformed || 'Operation Note'}</p>
-                                                                    <p className="text-xs opacity-80">
-                                                                        {note.dateOfSurgery ? new Date(note.dateOfSurgery).toLocaleDateString() : 'Date N/A'}
-                                                                        {note.surgeryType && ` â€¢ ${note.surgeryType}`}
-                                                                    </p>
-                                                                </div>
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className={`text-xs px-3 py-1 rounded-full font-bold ${
-                                                                        note.status === 'Reviewed' ? 'bg-green-400 text-green-900' :
-                                                                        note.status === 'Completed' ? 'bg-blue-300 text-blue-900' :
-                                                                        'bg-yellow-300 text-yellow-900'
-                                                                    }`}>{note.status}</span>
-                                                                    {canEdit && (
-                                                                        <button
-                                                                            onClick={() => { setTheatreNoteForm({ ...note }); setEditingTheatreNote(note._id); setShowTheatreModal(true); }}
-                                                                            className="text-white hover:text-yellow-300 transition" title="Edit"
-                                                                        >
-                                                                            <FaEdit />
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-gray-200">
-                                                                {[
-                                                                    ['Pre-operative Diagnosis', note.preOperativeDiagnosis],
-                                                                    ['Post-operative Diagnosis', note.postOperativeDiagnosis],
-                                                                    ['Procedure Performed', note.procedurePerformed],
-                                                                    ['Operative Findings', note.operativeFindings],
-                                                                    ['Estimated Blood Loss', note.estimatedBloodLoss],
-                                                                    ['Blood Transfusion', note.bloodTransfusion],
-                                                                    ['Complications', note.complications],
-                                                                    ['Drains', note.drains],
-                                                                    ['Specimens', note.specimens],
-                                                                    ['Implants', note.implants],
-                                                                    ['Wound Closure', note.woundClosure],
-                                                                    ['Post-op Condition', note.postOperativeCondition],
-                                                                    ['Lead Surgeon', note.leadSurgeon],
-                                                                    ['Assistant Surgeons', note.assistantSurgeons],
-                                                                    ['Anaesthetist', note.anaesthetist],
-                                                                    ['Scrub Nurse', note.scrubNurse],
-                                                                    ['Circulating Nurse', note.circulatingNurse],
-                                                                    ['Anaesthesia Type', note.anaesthesiaType],
-                                                                    ['Theatre', note.theatreName],
-                                                                    ['Start / End Time', note.startTime && note.endTime ? `${note.startTime} - ${note.endTime}` : (note.startTime || note.endTime || '')],
-                                                                ].filter(([, v]) => v).map(([label, value]) => (
-                                                                    <div key={label} className="bg-white p-3">
-                                                                        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">{label}</p>
-                                                                        <p className="text-sm text-gray-800">{value}</p>
                                                                     </div>
-                                                                ))}
-                                                            </div>
-                                                            {note.operativeNotes && (
-                                                                <div className="bg-white p-4 border-t">
-                                                                    <p className="text-xs font-bold text-gray-500 uppercase mb-1">Operative Notes</p>
-                                                                    <p className="whitespace-pre-wrap text-sm text-gray-700">{note.operativeNotes}</p>
+                                                                    {note.operativeNotes && (
+                                                                        <div className="bg-white p-4 border-t">
+                                                                            <p className="text-xs font-bold text-gray-500 uppercase mb-1">Operative Notes</p>
+                                                                            <p className="whitespace-pre-wrap text-sm text-gray-700">{note.operativeNotes}</p>
+                                                                        </div>
+                                                                    )}
+                                                                    {note.postOperativeInstructions && (
+                                                                        <div className="bg-blue-50 p-4 border-t border-blue-100">
+                                                                            <p className="text-xs font-bold text-blue-700 uppercase mb-1">Post-operative Instructions</p>
+                                                                            <p className="whitespace-pre-wrap text-sm text-gray-700">{note.postOperativeInstructions}</p>
+                                                                        </div>
+                                                                    )}
+                                                                    {note.anaesthesiaNote && (
+                                                                        <div className="bg-purple-50 p-4 border-t border-purple-100">
+                                                                            <p className="text-xs font-bold text-purple-700 uppercase mb-1">Anaesthesia Notes</p>
+                                                                            <p className="whitespace-pre-wrap text-sm text-gray-700">{note.anaesthesiaNote}</p>
+                                                                        </div>
+                                                                    )}
+                                                                    <div className="bg-gray-50 px-4 py-2 text-xs text-gray-400 flex justify-between border-t">
+                                                                        <span>Created by: {note.createdBy} â€” {note.createdAt ? new Date(note.createdAt).toLocaleString() : ''}</span>
+                                                                        {note.updatedBy && <span>Updated by: {note.updatedBy} â€” {note.updatedAt ? new Date(note.updatedAt).toLocaleString() : ''}</span>}
+                                                                    </div>
                                                                 </div>
-                                                            )}
-                                                            {note.postOperativeInstructions && (
-                                                                <div className="bg-blue-50 p-4 border-t border-blue-100">
-                                                                    <p className="text-xs font-bold text-blue-700 uppercase mb-1">Post-operative Instructions</p>
-                                                                    <p className="whitespace-pre-wrap text-sm text-gray-700">{note.postOperativeInstructions}</p>
-                                                                </div>
-                                                            )}
-                                                            {note.anaesthesiaNote && (
-                                                                <div className="bg-purple-50 p-4 border-t border-purple-100">
-                                                                    <p className="text-xs font-bold text-purple-700 uppercase mb-1">Anaesthesia Notes</p>
-                                                                    <p className="whitespace-pre-wrap text-sm text-gray-700">{note.anaesthesiaNote}</p>
-                                                                </div>
-                                                            )}
-                                                            <div className="bg-gray-50 px-4 py-2 text-xs text-gray-400 flex justify-between border-t">
-                                                                <span>Created by: {note.createdBy} â€” {note.createdAt ? new Date(note.createdAt).toLocaleString() : ''}</span>
-                                                                {note.updatedBy && <span>Updated by: {note.updatedBy} â€” {note.updatedAt ? new Date(note.updatedAt).toLocaleString() : ''}</span>}
-                                                            </div>
+                                                            ))}
                                                         </div>
-                                                    ))}
+                                                    ) : (
+                                                        <p className="text-sm text-gray-400 italic">No theatre operation notes recorded yet.</p>
+                                                    )}
                                                 </div>
-                                            ) : (
-                                                <p className="text-sm text-gray-400 italic">No theatre operation notes recorded yet.</p>
-                                            )}
-                                        </div>
 
-                                        {/* â”€â”€ SECTION 3: General Inpatient Notes (legacy) â”€â”€ */}
-                                        {clinicalNotes.length > 0 && (
-                                            <div className="mb-4">
-                                                <div className="flex items-center gap-2 mb-3">
-                                                    <FaFileMedical className="text-yellow-600" />
-                                                    <h4 className="text-base font-bold text-yellow-700">General Notes</h4>
-                                                    <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-semibold">{clinicalNotes.length}</span>
-                                                </div>
-                                                <div className="space-y-3">
-                                                    {clinicalNotes.map((note, index) => (
-                                                        <div key={index} className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-                                                            <p className="whitespace-pre-wrap text-gray-800 text-sm">{note.text}</p>
-                                                            <div className="mt-2 text-xs text-gray-500 flex justify-between border-t border-yellow-200 pt-2">
-                                                                <span>By: {note.author} ({note.role})</span>
-                                                                <span>{new Date(note.createdAt).toLocaleString()}</span>
-                                                            </div>
+                                                {/* â”€â”€ SECTION 3: General Inpatient Notes (legacy) â”€â”€ */}
+                                                {clinicalNotes.length > 0 && (
+                                                    <div className="mb-4">
+                                                        <div className="flex items-center gap-2 mb-3">
+                                                            <FaFileMedical className="text-yellow-600" />
+                                                            <h4 className="text-base font-bold text-yellow-700">General Notes</h4>
+                                                            <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-semibold">{clinicalNotes.length}</span>
                                                         </div>
-                                                    ))}
-                                                </div>
+                                                        <div className="space-y-3">
+                                                            {clinicalNotes.map((note, index) => (
+                                                                <div key={index} className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                                                                    <p className="whitespace-pre-wrap text-gray-800 text-sm">{note.text}</p>
+                                                                    <div className="mt-2 text-xs text-gray-500 flex justify-between border-t border-yellow-200 pt-2">
+                                                                        <span>By: {note.author} ({note.role})</span>
+                                                                        <span>{new Date(note.createdAt).toLocaleString()}</span>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Empty state */}
+                                                {wardRoundNotes.length === 0 && theatreNotes.length === 0 && clinicalNotes.length === 0 && (
+                                                    <p className="text-gray-400 italic text-sm">No inpatient notes recorded yet. Use the buttons above to add ward round or theatre operation notes.</p>
+                                                )}
                                             </div>
                                         )}
-
-                                        {/* Empty state */}
-                                        {wardRoundNotes.length === 0 && theatreNotes.length === 0 && clinicalNotes.length === 0 && (
-                                            <p className="text-gray-400 italic text-sm">No inpatient notes recorded yet. Use the buttons above to add ward round or theatre operation notes.</p>
-                                        )}
                                     </div>
-                                )}
-                            </div>
                                 </>
                             )}
                         </div>
@@ -3268,32 +3301,32 @@ const PatientDetails = () => {
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-600 mb-1">Date of Surgery</label>
                                         <input type="date" className="w-full border rounded p-2 text-sm"
-                                            value={theatreNoteForm.dateOfSurgery ? theatreNoteForm.dateOfSurgery.toString().slice(0,10) : ''}
-                                            onChange={e => setTheatreNoteForm(p => ({...p, dateOfSurgery: e.target.value}))} />
+                                            value={theatreNoteForm.dateOfSurgery ? theatreNoteForm.dateOfSurgery.toString().slice(0, 10) : ''}
+                                            onChange={e => setTheatreNoteForm(p => ({ ...p, dateOfSurgery: e.target.value }))} />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-600 mb-1">Start Time</label>
                                         <input type="time" className="w-full border rounded p-2 text-sm"
                                             value={theatreNoteForm.startTime || ''}
-                                            onChange={e => setTheatreNoteForm(p => ({...p, startTime: e.target.value}))} />
+                                            onChange={e => setTheatreNoteForm(p => ({ ...p, startTime: e.target.value }))} />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-600 mb-1">End Time</label>
                                         <input type="time" className="w-full border rounded p-2 text-sm"
                                             value={theatreNoteForm.endTime || ''}
-                                            onChange={e => setTheatreNoteForm(p => ({...p, endTime: e.target.value}))} />
+                                            onChange={e => setTheatreNoteForm(p => ({ ...p, endTime: e.target.value }))} />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-600 mb-1">Theatre Name</label>
                                         <input type="text" className="w-full border rounded p-2 text-sm" placeholder="e.g. Main Theatre 1"
                                             value={theatreNoteForm.theatreName || ''}
-                                            onChange={e => setTheatreNoteForm(p => ({...p, theatreName: e.target.value}))} />
+                                            onChange={e => setTheatreNoteForm(p => ({ ...p, theatreName: e.target.value }))} />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-600 mb-1">Surgery Type</label>
                                         <select className="w-full border rounded p-2 text-sm"
                                             value={theatreNoteForm.surgeryType || 'Elective'}
-                                            onChange={e => setTheatreNoteForm(p => ({...p, surgeryType: e.target.value}))}>
+                                            onChange={e => setTheatreNoteForm(p => ({ ...p, surgeryType: e.target.value }))}>
                                             <option value="Elective">Elective</option>
                                             <option value="Emergency">Emergency</option>
                                         </select>
@@ -3302,7 +3335,7 @@ const PatientDetails = () => {
                                         <label className="block text-xs font-semibold text-gray-600 mb-1">Status</label>
                                         <select className="w-full border rounded p-2 text-sm"
                                             value={theatreNoteForm.status || 'Draft'}
-                                            onChange={e => setTheatreNoteForm(p => ({...p, status: e.target.value}))}>
+                                            onChange={e => setTheatreNoteForm(p => ({ ...p, status: e.target.value }))}>
                                             <option value="Draft">Draft</option>
                                             <option value="Completed">Completed</option>
                                             <option value="Reviewed">Reviewed</option>
@@ -3314,32 +3347,32 @@ const PatientDetails = () => {
                                         <label className="block text-xs font-semibold text-gray-600 mb-1">Procedure Performed</label>
                                         <textarea rows="2" className="w-full border rounded p-2 text-sm" placeholder="Describe the procedure..."
                                             value={theatreNoteForm.procedurePerformed || ''}
-                                            onChange={e => setTheatreNoteForm(p => ({...p, procedurePerformed: e.target.value}))} />
+                                            onChange={e => setTheatreNoteForm(p => ({ ...p, procedurePerformed: e.target.value }))} />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-600 mb-1">Pre-operative Diagnosis</label>
                                         <textarea rows="2" className="w-full border rounded p-2 text-sm"
                                             value={theatreNoteForm.preOperativeDiagnosis || ''}
-                                            onChange={e => setTheatreNoteForm(p => ({...p, preOperativeDiagnosis: e.target.value}))} />
+                                            onChange={e => setTheatreNoteForm(p => ({ ...p, preOperativeDiagnosis: e.target.value }))} />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-600 mb-1">Post-operative Diagnosis</label>
                                         <textarea rows="2" className="w-full border rounded p-2 text-sm"
                                             value={theatreNoteForm.postOperativeDiagnosis || ''}
-                                            onChange={e => setTheatreNoteForm(p => ({...p, postOperativeDiagnosis: e.target.value}))} />
+                                            onChange={e => setTheatreNoteForm(p => ({ ...p, postOperativeDiagnosis: e.target.value }))} />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-600 mb-1">Operative Findings</label>
                                         <textarea rows="2" className="w-full border rounded p-2 text-sm"
                                             value={theatreNoteForm.operativeFindings || ''}
-                                            onChange={e => setTheatreNoteForm(p => ({...p, operativeFindings: e.target.value}))} />
+                                            onChange={e => setTheatreNoteForm(p => ({ ...p, operativeFindings: e.target.value }))} />
                                     </div>
                                 </div>
                                 <div className="mt-4">
                                     <label className="block text-xs font-semibold text-gray-600 mb-1">Operative Notes</label>
                                     <textarea rows="4" className="w-full border rounded p-2 text-sm" placeholder="Detailed operative notes..."
                                         value={theatreNoteForm.operativeNotes || ''}
-                                        onChange={e => setTheatreNoteForm(p => ({...p, operativeNotes: e.target.value}))} />
+                                        onChange={e => setTheatreNoteForm(p => ({ ...p, operativeNotes: e.target.value }))} />
                                 </div>
                             </div>
 
@@ -3361,7 +3394,7 @@ const PatientDetails = () => {
                                             <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
                                             <input type="text" className="w-full border rounded p-2 text-sm"
                                                 value={theatreNoteForm[field] || ''}
-                                                onChange={e => setTheatreNoteForm(p => ({...p, [field]: e.target.value}))} />
+                                                onChange={e => setTheatreNoteForm(p => ({ ...p, [field]: e.target.value }))} />
                                         </div>
                                     ))}
                                 </div>
@@ -3369,7 +3402,7 @@ const PatientDetails = () => {
                                     <label className="block text-xs font-semibold text-gray-600 mb-1">Post-operative Instructions</label>
                                     <textarea rows="3" className="w-full border rounded p-2 text-sm"
                                         value={theatreNoteForm.postOperativeInstructions || ''}
-                                        onChange={e => setTheatreNoteForm(p => ({...p, postOperativeInstructions: e.target.value}))} />
+                                        onChange={e => setTheatreNoteForm(p => ({ ...p, postOperativeInstructions: e.target.value }))} />
                                 </div>
                             </div>
 
@@ -3388,7 +3421,7 @@ const PatientDetails = () => {
                                             <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
                                             <input type="text" className="w-full border rounded p-2 text-sm"
                                                 value={theatreNoteForm[field] || ''}
-                                                onChange={e => setTheatreNoteForm(p => ({...p, [field]: e.target.value}))} />
+                                                onChange={e => setTheatreNoteForm(p => ({ ...p, [field]: e.target.value }))} />
                                         </div>
                                     ))}
                                 </div>
@@ -3402,20 +3435,20 @@ const PatientDetails = () => {
                                         <label className="block text-xs font-semibold text-gray-600 mb-1">Anaesthesia Type</label>
                                         <input type="text" className="w-full border rounded p-2 text-sm" placeholder="e.g. General, Spinal, Local"
                                             value={theatreNoteForm.anaesthesiaType || ''}
-                                            onChange={e => setTheatreNoteForm(p => ({...p, anaesthesiaType: e.target.value}))} />
+                                            onChange={e => setTheatreNoteForm(p => ({ ...p, anaesthesiaType: e.target.value }))} />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-600 mb-1">Digital Signature</label>
                                         <input type="text" className="w-full border rounded p-2 text-sm" placeholder="Surgeon's name as signature"
                                             value={theatreNoteForm.digitalSignature || ''}
-                                            onChange={e => setTheatreNoteForm(p => ({...p, digitalSignature: e.target.value}))} />
+                                            onChange={e => setTheatreNoteForm(p => ({ ...p, digitalSignature: e.target.value }))} />
                                     </div>
                                 </div>
                                 <div className="mt-4">
                                     <label className="block text-xs font-semibold text-gray-600 mb-1">Anaesthesia Notes</label>
                                     <textarea rows="3" className="w-full border rounded p-2 text-sm"
                                         value={theatreNoteForm.anaesthesiaNote || ''}
-                                        onChange={e => setTheatreNoteForm(p => ({...p, anaesthesiaNote: e.target.value}))} />
+                                        onChange={e => setTheatreNoteForm(p => ({ ...p, anaesthesiaNote: e.target.value }))} />
                                 </div>
                             </div>
                         </div>
@@ -4376,14 +4409,14 @@ const PatientDetails = () => {
                             <h3 className="text-lg font-bold flex items-center gap-2">
                                 <FaProcedures /> Admit Patient (Inpatient)
                             </h3>
-                            <button 
-                                onClick={() => setShowConvertModal(false)} 
+                            <button
+                                onClick={() => setShowConvertModal(false)}
                                 className="text-white hover:text-gray-200 transition font-bold"
                             >
                                 âœ•
                             </button>
                         </div>
-                        
+
                         <div className="p-6">
                             <div className="mb-4 bg-purple-50 p-3 rounded border border-purple-100 text-sm">
                                 <p className="font-bold text-purple-900">{patient?.name}</p>
@@ -4393,11 +4426,10 @@ const PatientDetails = () => {
                             {/* Deposit Balance status */}
                             <div className="mb-4">
                                 <label className="block text-gray-700 font-bold text-sm mb-1">Financial Deposit Balance</label>
-                                <div className={`p-3 rounded border text-sm font-semibold flex flex-col gap-1 ${
-                                    isBlocked 
-                                        ? 'bg-red-50 text-red-800 border-red-200' 
+                                <div className={`p-3 rounded border text-sm font-semibold flex flex-col gap-1 ${isBlocked
+                                        ? 'bg-red-50 text-red-800 border-red-200'
                                         : 'bg-green-50 text-green-800 border-green-200'
-                                }`}>
+                                    }`}>
                                     <div className="flex justify-between items-center">
                                         <span>Patient Deposit:</span>
                                         <span className="font-bold">â‚¦{patient?.depositBalance?.toLocaleString() || '0'}</span>
@@ -4474,11 +4506,10 @@ const PatientDetails = () => {
                                 <button
                                     onClick={handleConvertToInpatient}
                                     disabled={!selectedWard || !selectedBed || isBlocked}
-                                    className={`px-4 py-2 rounded text-white text-sm font-semibold transition ${
-                                        !selectedWard || !selectedBed || isBlocked
+                                    className={`px-4 py-2 rounded text-white text-sm font-semibold transition ${!selectedWard || !selectedBed || isBlocked
                                             ? 'bg-purple-300 cursor-not-allowed'
                                             : 'bg-purple-600 hover:bg-purple-700 shadow-sm'
-                                    }`}
+                                        }`}
                                 >
                                     Confirm Admission
                                 </button>
