@@ -683,7 +683,29 @@ const CashierDashboard = () => {
                             {encounterCharges.filter(c => c.status === 'pending').length > 0 && (
                                 <div className="bg-gray-50 p-4 rounded">
                                     <div className="flex justify-between items-center mb-3">
-                                        <p className="font-semibold text-gray-800">Pending Charges:</p>
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="checkbox"
+                                                id="selectAllPending"
+                                                checked={
+                                                    encounterCharges.filter(c => c.status === 'pending').length > 0 &&
+                                                    encounterCharges.filter(c => c.status === 'pending').every(c => selectedCharges.includes(c._id))
+                                                }
+                                                onChange={() => {
+                                                    const pending = encounterCharges.filter(c => c.status === 'pending');
+                                                    const allSelected = pending.every(c => selectedCharges.includes(c._id));
+                                                    if (allSelected) {
+                                                        setSelectedCharges([]);
+                                                    } else {
+                                                        setSelectedCharges(pending.map(c => c._id));
+                                                    }
+                                                }}
+                                                className="w-4 h-4 cursor-pointer"
+                                            />
+                                            <label htmlFor="selectAllPending" className="font-semibold text-gray-800 cursor-pointer select-none">
+                                                Select All Charges
+                                            </label>
+                                        </div>
                                         <button
                                             onClick={() => handleSelectEncounter(selectedEncounter)}
                                             className="text-blue-600 hover:text-blue-800 text-xs font-semibold flex items-center gap-1.5 bg-white border px-3 py-1.5 rounded shadow-sm hover:shadow transition-all"
