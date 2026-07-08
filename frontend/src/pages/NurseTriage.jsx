@@ -80,6 +80,9 @@ const NurseTriage = () => {
     const [availableBeds, setAvailableBeds] = useState([]);
     const [retainershipDepositStatus, setRetainershipDepositStatus] = useState([]);
     const [encounterToConvert, setEncounterToConvert] = useState(null);
+    const [showDischargeModal, setShowDischargeModal] = useState(false);
+    const [dischargeNote, setDischargeNote] = useState('');
+    const [encounterToDischarge, setEncounterToDischarge] = useState(null);
 
     // Drug Administration State
     const [dispensedPrescriptions, setDispensedPrescriptions] = useState([]);
@@ -855,22 +858,32 @@ const NurseTriage = () => {
 
     const handleDischarge = async (e, encounter) => {
         e.stopPropagation();
-        if (!window.confirm('Are you sure you want to discharge this patient? This will release their bed and close the encounter.')) {
+        setEncounterToDischarge(encounter);
+        setDischargeNote('');
+        setShowDischargeModal(true);
+    };
+
+    const handleConfirmDischarge = async () => {
+        if (!encounterToDischarge) return;
+        if (!dischargeNote.trim()) {
+            toast.error('Please write a discharge note / summary before discharging.');
             return;
         }
-
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            await axios.put(`${backendUrl}/api/visits/${encounter._id}`, {
+            await axios.put(`${backendUrl}/api/visits/${encounterToDischarge._id}`, {
                 encounterStatus: 'discharged',
-                status: 'Discharged'
+                status: 'Discharged',
+                dischargeNotes: dischargeNote
             }, config);
 
             toast.success('Patient discharged successfully!');
+            setShowDischargeModal(false);
+            setDischargeNote('');
 
             // Refresh patient encounters if this patient is selected
-            if (selectedPatient && (selectedPatient._id === encounter.patient._id || selectedPatient._id === encounter.patient)) {
+            if (selectedPatient && (selectedPatient._id === encounterToDischarge.patient._id || selectedPatient._id === encounterToDischarge.patient)) {
                 handleSelectPatient(selectedPatient);
             }
         } catch (error) {
@@ -1479,7 +1492,7 @@ const NurseTriage = () => {
                                                         Admit Patient
                                                     </button>
                                                 )}
-                                                {selectedEncounter.type === 'Inpatient' && (
+                                                {selectedEncounter.type === 'Inpatient' && selectedEncounter.encounterStatus !== 'discharged' && (
                                                     <button
                                                         onClick={(e) => handleDischarge(e, selectedEncounter)}
                                                         className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 flex items-center gap-2 text-sm"
@@ -1487,10 +1500,35 @@ const NurseTriage = () => {
                                                         Discharge Patient
                                                     </button>
                                                 )}
+                                                {selectedEncounter.type === 'Inpatient' && selectedEncounter.encounterStatus === 'discharged' && (
+                                                    <div className="px-4 py-2 bg-green-600 text-white rounded flex items-center gap-2 text-sm">
+                                                        ✓ Discharged
+                                                    </div>
+                                                )}
                                             </>
                                         )}
                                     </div>
                                 </div>
+
+                                {/* Discharge Summary Banner - shown when patient is discharged */}
+                                {selectedEncounter.encounterStatus === 'discharged' && (
+                                    <div className="mb-5 rounded-xl border border-green-200 overflow-hidden shadow-sm">
+                                        <div className="bg-green-600 text-white px-4 py-2 flex items-center justify-between text-sm font-semibold">
+                                            <span>✓ Discharge Record</span>
+                                            <span className="font-normal text-green-200 text-xs">
+                                                {selectedEncounter.dischargeDate ? new Date(selectedEncounter.dischargeDate).toLocaleString() : ''}
+                                                {selectedEncounter.dischargedBy?.name && ` · By ${selectedEncounter.dischargedBy.name}`}
+                                            </span>
+                                        </div>
+                                        <div className="bg-green-50 px-4 py-3">
+                                            {selectedEncounter.dischargeNotes ? (
+                                                <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedEncounter.dischargeNotes}</p>
+                                            ) : (
+                                                <p className="text-sm text-amber-700 italic">No discharge summary was recorded.</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Charges Table - Always visible */}
                                 {encounterCharges.filter(c => c.charge?.type === 'nursing').length > 0 && (
@@ -1740,6 +1778,69 @@ const NurseTriage = () => {
                     </div>
                 )
             }
+
+            {/* Discharge Note Modal */}
+            {showDischargeModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+                        {/* Header */}
+                        <div className="bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-4 flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-white bg-opacity-20 flex items-center justify-center">
+                                <FaNotesMedical className="text-lg" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold">Discharge Patient</h3>
+                                <p className="text-red-200 text-sm">
+                                    {encounterToDischarge?.patient?.name || 'Patient'} — A discharge note is required
+                                </p>
+                            </div>
+                        </div>
+                        {/* Body */}
+                        <div className="p-6 space-y-4">
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2 text-sm text-amber-800">
+                                <span className="text-amber-500 font-bold text-base mt-0.5">⚠</span>
+                                <span>Discharging will <strong>release the bed</strong> and close the encounter. This action cannot be undone.</span>
+                            </div>
+                            {encounterToDischarge?.bed && (
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+                                    <span className="font-semibold">Bed to be released: </span>
+                                    {typeof encounterToDischarge.ward === 'object' ? encounterToDischarge.ward?.name : 'Ward'} — {encounterToDischarge.bed}
+                                </div>
+                            )}
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Discharge Note / Summary <span className="text-red-500">*</span>
+                                </label>
+                                <textarea
+                                    value={dischargeNote}
+                                    onChange={e => setDischargeNote(e.target.value)}
+                                    rows={6}
+                                    placeholder="Write a discharge summary including: patient's condition at discharge, instructions given, medications on discharge, follow-up plan, etc."
+                                    className="w-full border-2 border-gray-200 focus:border-red-400 rounded-lg p-3 text-sm resize-none outline-none transition"
+                                />
+                                <p className="text-xs text-gray-400 mt-1">{dischargeNote.length} characters</p>
+                            </div>
+                        </div>
+                        {/* Footer */}
+                        <div className="px-6 pb-6 flex gap-3">
+                            <button
+                                onClick={handleConfirmDischarge}
+                                disabled={!dischargeNote.trim() || loading}
+                                className={`flex-1 py-3 rounded-lg font-semibold text-sm transition ${!dischargeNote.trim() || loading ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700'}`}
+                            >
+                                {loading ? 'Discharging...' : 'Confirm Discharge & Release Bed'}
+                            </button>
+                            <button
+                                onClick={() => { setShowDischargeModal(false); setDischargeNote(''); setEncounterToDischarge(null); }}
+                                disabled={loading}
+                                className="flex-1 py-3 rounded-lg font-semibold text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 transition"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Nursing Notes Modal */}
             {

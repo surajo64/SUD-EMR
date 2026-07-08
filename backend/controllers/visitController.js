@@ -13,6 +13,47 @@ const checkUnpaidConsultation = async (visitId) => {
     return charges.some(c => c.charge && c.charge.type === 'consultation' && c.status === 'pending');
 };
 
+const formatVisitWithClinicalNotes = (visit) => {
+    if (!visit) return null;
+    const visitObj = visit.toObject ? visit.toObject() : visit;
+    if ((!visitObj.clinicalNotes || visitObj.clinicalNotes.length === 0) &&
+        (visitObj.presentingComplaints || visitObj.historyOfPresentingComplaint || visitObj.assessment || visitObj.plan || (visitObj.diagnosis && visitObj.diagnosis.length > 0))) {
+        
+        visitObj.clinicalNotes = [{
+            _id: 'legacy-root',
+            doctor: visitObj.consultingPhysician || visitObj.doctor,
+            presentingComplaints: visitObj.presentingComplaints || '',
+            historyOfPresentingComplaint: visitObj.historyOfPresentingComplaint || '',
+            systemReview: visitObj.systemReview || '',
+            pastMedicalSurgicalHistory: visitObj.pastMedicalSurgicalHistory || '',
+            socialFamilyHistory: visitObj.socialFamilyHistory || '',
+            drugsHistory: visitObj.drugsHistory || '',
+            functionalCognitiveStatus: visitObj.functionalCognitiveStatus || '',
+            menstruationGynecologicalObstetricsHistory: visitObj.menstruationGynecologicalObstetricsHistory || '',
+            pregnancyHistory: visitObj.pregnancyHistory || '',
+            immunization: visitObj.immunization || '',
+            nutritional: visitObj.nutritional || '',
+            developmentalMilestones: visitObj.developmentalMilestones || '',
+            generalAppearance: visitObj.generalAppearance || '',
+            heent: visitObj.heent || '',
+            neck: visitObj.neck || '',
+            cvs: visitObj.cvs || '',
+            resp: visitObj.resp || '',
+            abd: visitObj.abd || '',
+            neuro: visitObj.neuro || '',
+            msk: visitObj.msk || '',
+            skin: visitObj.skin || '',
+            assessment: visitObj.assessment || '',
+            plan: visitObj.plan || '',
+            diagnosis: visitObj.diagnosis || [],
+            createdAt: visitObj.updatedAt || visitObj.createdAt,
+            updatedAt: visitObj.updatedAt || visitObj.createdAt
+        }];
+    }
+    return visitObj;
+};
+
+
 // @desc    Create new visit (Check-in)
 // @route   POST /api/visits
 // @access  Private
@@ -213,17 +254,19 @@ const getVisits = async (req, res) => {
     const visits = await Visit.find(query)
         .populate('patient', 'name mrn age gender contact')
         .populate('doctor', 'name')
+        .populate('clinicalNotes.doctor', 'name role')
         .populate('clinic', 'name department')
         .populate('ward', 'name dailyRate')
         .populate('waivedBy', 'name')
-        .populate('seenBy', 'name');
+        .populate('seenBy', 'name')
+        .populate('dischargedBy', 'name role');
 
     // Fetch unpaid consultation status for each visit
     const visitsWithPaymentStatus = await Promise.all(visits.map(async (visit) => {
         const hasUnpaid = await checkUnpaidConsultation(visit._id);
-        const visitObj = visit.toObject();
-        visitObj.hasUnpaidConsultation = hasUnpaid;
-        return visitObj;
+        const formattedVisit = formatVisitWithClinicalNotes(visit);
+        formattedVisit.hasUnpaidConsultation = hasUnpaid;
+        return formattedVisit;
     }));
 
     res.json(visitsWithPaymentStatus);
@@ -284,6 +327,8 @@ const updateVisit = async (req, res) => {
         if (encounterStatus) {
             if (encounterStatus === 'discharged' && visit.encounterStatus !== 'discharged') {
                 visit.dischargeDate = new Date();
+                visit.dischargedBy = req.user._id;
+                if (req.body.dischargeNotes) visit.dischargeNotes = req.body.dischargeNotes;
                 if (visit.ward && visit.bed) {
                     const Ward = require('../models/wardModel');
                     const wardDoc = await Ward.findById(visit.ward);
@@ -378,10 +423,12 @@ const getVisitById = async (req, res) => {
         .populate('patient', 'name age gender')
         .populate('doctor', 'name')
         .populate('consultingPhysician', 'name')
+        .populate('clinicalNotes.doctor', 'name role')
         .populate('clinic', 'name department')
         .populate('ward', 'name dailyRate')
         .populate('waivedBy', 'name')
-        .populate('seenBy', 'name');
+        .populate('seenBy', 'name')
+        .populate('dischargedBy', 'name role');
 
     if (visit) {
         if (req.user && req.user.role === 'doctor') {
@@ -398,9 +445,9 @@ const getVisitById = async (req, res) => {
         }
 
         const hasUnpaid = await checkUnpaidConsultation(visit._id);
-        const visitObj = visit.toObject();
-        visitObj.hasUnpaidConsultation = hasUnpaid;
-        res.json(visitObj);
+        const formattedVisit = formatVisitWithClinicalNotes(visit);
+        formattedVisit.hasUnpaidConsultation = hasUnpaid;
+        res.json(formattedVisit);
     } else {
         res.status(404).json({ message: 'Visit not found' });
     }
@@ -433,15 +480,16 @@ const getVisitsByPatient = async (req, res) => {
             .sort({ createdAt: -1 })
             .populate('doctor', 'name')
             .populate('consultingPhysician', 'name')
+            .populate('clinicalNotes.doctor', 'name role')
             .populate('clinic', 'name department')
             .populate('ward', 'name')
             .populate('waivedBy', 'name');
 
         const visitsWithPaymentStatus = await Promise.all(visits.map(async (visit) => {
             const hasUnpaid = await checkUnpaidConsultation(visit._id);
-            const visitObj = visit.toObject();
-            visitObj.hasUnpaidConsultation = hasUnpaid;
-            return visitObj;
+            const formattedVisit = formatVisitWithClinicalNotes(visit);
+            formattedVisit.hasUnpaidConsultation = hasUnpaid;
+            return formattedVisit;
         }));
 
         res.json(visitsWithPaymentStatus);
@@ -927,6 +975,112 @@ const saveTheatreNote = async (req, res) => {
     }
 };
 
+// @desc    Save (add or edit) a structured clinical note for a visit
+// @route   POST /api/visits/:id/clinical-notes
+// @access  Private (Doctor)
+const saveClinicalNote = async (req, res) => {
+    try {
+        const visit = await Visit.findById(req.params.id);
+        if (!visit) return res.status(404).json({ message: 'Visit not found' });
+
+        // Doctors must pay consultation first
+        if (req.user.role === 'doctor') {
+            const hasUnpaid = await checkUnpaidConsultation(visit._id);
+            if (hasUnpaid) {
+                return res.status(402).json({ message: 'Access denied: Patient has unpaid consultation charges. Please direct them to the cashier.' });
+            }
+        }
+
+        const {
+            noteId,
+            presentingComplaints, historyOfPresentingComplaint, systemReview,
+            pastMedicalSurgicalHistory, socialFamilyHistory, drugsHistory,
+            functionalCognitiveStatus, menstruationGynecologicalObstetricsHistory,
+            pregnancyHistory, immunization, nutritional, developmentalMilestones,
+            generalAppearance, heent, neck, cvs, resp, abd, neuro, msk, skin,
+            assessment, plan, diagnosis
+        } = req.body;
+
+        const noteData = {
+            presentingComplaints, historyOfPresentingComplaint, systemReview,
+            pastMedicalSurgicalHistory, socialFamilyHistory, drugsHistory,
+            functionalCognitiveStatus, menstruationGynecologicalObstetricsHistory,
+            pregnancyHistory, immunization, nutritional, developmentalMilestones,
+            generalAppearance, heent, neck, cvs, resp, abd, neuro, msk, skin,
+            assessment, plan,
+            diagnosis: diagnosis || [],
+            updatedAt: new Date()
+        };
+
+        if (noteId && noteId !== 'legacy-root') {
+            // EDIT: find existing clinical note
+            const idx = visit.clinicalNotes.findIndex(n => n._id.toString() === noteId);
+            if (idx === -1) return res.status(404).json({ message: 'Clinical note not found' });
+
+            // Only the note's author can edit
+            const noteDoctor = visit.clinicalNotes[idx].doctor?.toString();
+            if (noteDoctor !== req.user._id.toString()) {
+                return res.status(403).json({ message: 'Access denied: Only the doctor who wrote this note can edit it.' });
+            }
+
+            Object.assign(visit.clinicalNotes[idx], noteData);
+        } else if (noteId === 'legacy-root') {
+            // EDIT legacy root note: update root fields (keeps backward compatibility)
+            const consultingDoctorId = visit.consultingPhysician?.toString();
+            if (consultingDoctorId && consultingDoctorId !== req.user._id.toString()) {
+                return res.status(403).json({ message: 'Access denied: Only the doctor who wrote this note can edit it.' });
+            }
+
+            Object.assign(visit, noteData);
+            if (req.user.role === 'doctor') {
+                visit.consultingPhysician = req.user._id;
+                visit.seen = true;
+                visit.seenBy = req.user._id;
+                visit.seenAt = new Date();
+            }
+        } else {
+            // ADD: new clinical note
+            const newNote = {
+                ...noteData,
+                doctor: req.user._id,
+                createdAt: new Date()
+            };
+            visit.clinicalNotes.push(newNote);
+
+            // If this is the first clinical note, also sync to root fields for backward compatibility
+            if (visit.clinicalNotes.length === 1) {
+                Object.assign(visit, noteData);
+                if (req.user.role === 'doctor') {
+                    visit.consultingPhysician = req.user._id;
+                    visit.seen = true;
+                    visit.seenBy = req.user._id;
+                    visit.seenAt = new Date();
+                }
+            }
+        }
+
+        if (diagnosis && diagnosis.length > 0 && !noteId) {
+            visit.diagnosis = diagnosis;
+        } else if (diagnosis && noteId === 'legacy-root') {
+            visit.diagnosis = diagnosis;
+        }
+
+        await visit.save();
+
+        // Return fully populated visit
+        const updatedVisit = await Visit.findById(visit._id)
+            .populate('patient', 'name age gender')
+            .populate('doctor', 'name')
+            .populate('consultingPhysician', 'name')
+            .populate('clinicalNotes.doctor', 'name role');
+
+        res.status(201).json(formatVisitWithClinicalNotes(updatedVisit));
+    } catch (error) {
+        console.error('saveClinicalNote error:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     createVisit,
     getVisits,
@@ -938,7 +1092,8 @@ module.exports = {
     addWardRoundNote,
     saveTheatreNote,
     convertToInpatient,
-    changeEncounterType
+    changeEncounterType,
+    saveClinicalNote
 };
 
 

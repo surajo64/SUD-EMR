@@ -41,10 +41,9 @@ const attemptPaymentForCharge = async (charge, visit, userId) => {
 
     try {
         if (provider === 'Standard') {
-            const creditLimit = 50000;
             const currentBalance = patient.depositBalance || 0;
 
-            if (currentBalance + creditLimit >= amount) {
+            if (currentBalance >= amount) {
                 // Deduct from deposit
                 patient.depositBalance = currentBalance - amount;
                 await patient.save();
@@ -71,8 +70,10 @@ const attemptPaymentForCharge = async (charge, visit, userId) => {
                 await charge.save();
 
                 console.log(`[BedFeeBilling] Auto-paid pending charge ${charge._id} from deposit. New Balance: ${patient.depositBalance}`);
+                return true; // success
             } else {
-                console.log(`[BedFeeBilling] Insufficient deposit balance for patient ${patient.name}. Required: ${amount}, Balance: ${currentBalance}`);
+                console.log(`[BedFeeBilling] Insufficient deposit balance for patient ${patient.name} . Required: ${amount}, Balance: ${currentBalance}`);
+                return false; // failed
             }
         } else if (['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(provider)) {
             // Deduct from HMO Retainership balance
@@ -124,11 +125,14 @@ const attemptPaymentForCharge = async (charge, visit, userId) => {
                     await charge.save();
 
                     console.log(`[BedFeeBilling] Auto-paid pending charge ${charge._id} from HMO Retainership (${hmo.name}) deposit. Balance: ${balance - amount}`);
+                    return true; // success
                 } else {
                     console.log(`[BedFeeBilling] Insufficient HMO Retainership (${hmo.name}) balance. Required: ${amount}, Balance: ${balance}`);
+                    return false; // failed
                 }
             } else {
                 console.log(`[BedFeeBilling] HMO not found for name: ${patient.hmo}`);
+                return false;
             }
         }
     } catch (paymentError) {
@@ -242,12 +246,26 @@ const checkAndGenerateBedFeesForVisit = async (visitOrId, currentDate = new Date
 
         console.log(`[BedFeeBilling] Visit ${visit._id} admitted since ${new Date(admissionDate).toISOString()}: Expected ${totalDaysExpected} charges, Found ${existingCharges.length} charges.`);
 
-        // 1. Process/attempt payment on any existing charges that are still pending
+        // 1. Process/attempt payment on any existing charges that are still pending.
+        //    Stop retrying as soon as one payment fails — if balance is insufficient
+        //    for one charge, it will be insufficient for all remaining ones too.
+        let paymentBlocked = false;
+        let blockedCount = 0;
         for (const charge of existingCharges) {
             if (charge.status === 'pending') {
+                if (paymentBlocked) {
+                    blockedCount++;
+                    continue; // skip without spamming logs
+                }
                 console.log(`[BedFeeBilling] Attempting auto-pay for pending charge ${charge._id} (${charge.itemName}).`);
-                await attemptPaymentForCharge(charge, visit, userId);
+                const paid = await attemptPaymentForCharge(charge, visit, userId);
+                if (paid === false) {
+                    paymentBlocked = true; // stop trying further charges for this visit
+                }
             }
+        }
+        if (blockedCount > 0) {
+            console.log(`[BedFeeBilling] Skipped ${blockedCount} additional pending charges for patient ${visit.patient?.name || visit._id} (insufficient balance).`);
         }
 
         // 2. Generate and pay any missing charges for subsequent days

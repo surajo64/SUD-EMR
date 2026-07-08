@@ -33,7 +33,7 @@ const PatientDetails = () => {
         const params = [];
 
         for (const line of lines) {
-            // Match patterns like "- WBC: _____ x10^3/μL (Normal: 4.0-11.0)"
+            // Match patterns like "- WBC: _____ x10^3/Î¼L (Normal: 4.0-11.0)"
             // OR "- Malaria: ++ Positive/Negative"
             const match = line.match(/^\s*-\s*([^:]+):\s*(.*?)(?:\s*\(?(?:Normal:\s*)?([^)]*)\)?)?$/);
             if (match) {
@@ -147,15 +147,15 @@ const PatientDetails = () => {
                                 if (p.value) {
                                     if (rangeS === 'low') {
                                         bgColor = '#fed7aa';
-                                        statusText = '↓ LOW';
+                                        statusText = 'â†“ LOW';
                                         statusColor = '#9a3412';
                                     } else if (rangeS === 'high') {
                                         bgColor = '#fecaca';
-                                        statusText = '↑ HIGH';
+                                        statusText = 'â†‘ HIGH';
                                         statusColor = '#991b1b';
                                     } else {
                                         bgColor = '#d1fae5';
-                                        statusText = '✓ Normal';
+                                        statusText = 'âœ“ Normal';
                                         statusColor = '#065f46';
                                     }
                                 }
@@ -306,6 +306,9 @@ const PatientDetails = () => {
     const [diagSearchTerm, setDiagSearchTerm] = useState('');
     const [showDiagDropdown, setShowDiagDropdown] = useState(false);
     const [showSoapModal, setShowSoapModal] = useState(false);
+    const [editingNoteId, setEditingNoteId] = useState(null); // null = new note, string = editing existing note _id
+    const [showDischargeModal, setShowDischargeModal] = useState(false);
+    const [dischargeNote, setDischargeNote] = useState('');
 
     // Inpatient Conversion State
     const [showConvertModal, setShowConvertModal] = useState(false);
@@ -517,42 +520,82 @@ const PatientDetails = () => {
 
     useEffect(() => {
         if (showSoapModal && encounter && patient) {
-            const initialSoap = {
-                presentingComplaints: encounter.presentingComplaints || '',
-                historyOfPresentingComplaint: encounter.historyOfPresentingComplaint || '',
-                systemReview: encounter.systemReview || '',
-                pastMedicalSurgicalHistory: encounter.pastMedicalSurgicalHistory || '',
-                socialFamilyHistory: encounter.socialFamilyHistory || '',
-                drugsHistory: encounter.drugsHistory || '',
-                functionalCognitiveStatus: encounter.functionalCognitiveStatus || '',
-                menstruationGynecologicalObstetricsHistory: encounter.menstruationGynecologicalObstetricsHistory || '',
-                pregnancyHistory: encounter.pregnancyHistory || '',
-                immunization: encounter.immunization || '',
-                nutritional: encounter.nutritional || '',
-                developmentalMilestones: encounter.developmentalMilestones || '',
-                // Physical Examination
-                generalAppearance: encounter.generalAppearance || '',
-                heent: encounter.heent || '',
-                neck: encounter.neck || '',
-                cvs: encounter.cvs || '',
-                resp: encounter.resp || '',
-                abd: encounter.abd || '',
-                neuro: encounter.neuro || '',
-                msk: encounter.msk || '',
-                skin: encounter.skin || '',
-                assessment: encounter.assessment || '',
-                plan: encounter.plan || '',
-                diagnosis: encounter.diagnosis || []
+            // Determine note source: if editing an existing note, load its values; otherwise blank
+            const blankSoap = {
+                presentingComplaints: '',
+                historyOfPresentingComplaint: '',
+                systemReview: '',
+                pastMedicalSurgicalHistory: '',
+                socialFamilyHistory: '',
+                drugsHistory: '',
+                functionalCognitiveStatus: '',
+                menstruationGynecologicalObstetricsHistory: '',
+                pregnancyHistory: '',
+                immunization: '',
+                nutritional: '',
+                developmentalMilestones: '',
+                generalAppearance: '',
+                heent: '',
+                neck: '',
+                cvs: '',
+                resp: '',
+                abd: '',
+                neuro: '',
+                msk: '',
+                skin: '',
+                assessment: '',
+                plan: '',
+                diagnosis: []
             };
 
-            // Restore draft if exists
-            const saved = localStorage.getItem(`draft_soap_${patient._id}_${encounter._id}`);
-            if (saved) {
-                try {
-                    const draft = JSON.parse(saved);
-                    setSoapNote({ ...initialSoap, ...draft });
-                } catch (e) {
-                    console.error("Error parsing SOAP draft", e);
+            let initialSoap = blankSoap;
+            if (editingNoteId) {
+                // Find the note being edited
+                const noteSource = editingNoteId === 'legacy-root'
+                    ? encounter
+                    : (encounter.clinicalNotes || []).find(n => n._id?.toString() === editingNoteId);
+                if (noteSource) {
+                    initialSoap = {
+                        presentingComplaints: noteSource.presentingComplaints || '',
+                        historyOfPresentingComplaint: noteSource.historyOfPresentingComplaint || '',
+                        systemReview: noteSource.systemReview || '',
+                        pastMedicalSurgicalHistory: noteSource.pastMedicalSurgicalHistory || '',
+                        socialFamilyHistory: noteSource.socialFamilyHistory || '',
+                        drugsHistory: noteSource.drugsHistory || '',
+                        functionalCognitiveStatus: noteSource.functionalCognitiveStatus || '',
+                        menstruationGynecologicalObstetricsHistory: noteSource.menstruationGynecologicalObstetricsHistory || '',
+                        pregnancyHistory: noteSource.pregnancyHistory || '',
+                        immunization: noteSource.immunization || '',
+                        nutritional: noteSource.nutritional || '',
+                        developmentalMilestones: noteSource.developmentalMilestones || '',
+                        generalAppearance: noteSource.generalAppearance || '',
+                        heent: noteSource.heent || '',
+                        neck: noteSource.neck || '',
+                        cvs: noteSource.cvs || '',
+                        resp: noteSource.resp || '',
+                        abd: noteSource.abd || '',
+                        neuro: noteSource.neuro || '',
+                        msk: noteSource.msk || '',
+                        skin: noteSource.skin || '',
+                        assessment: noteSource.assessment || '',
+                        plan: noteSource.plan || '',
+                        diagnosis: noteSource.diagnosis || []
+                    };
+                }
+            }
+
+            // Restore draft for new notes only
+            if (!editingNoteId) {
+                const saved = localStorage.getItem(`draft_soap_${patient._id}_${encounter._id}`);
+                if (saved) {
+                    try {
+                        const draft = JSON.parse(saved);
+                        setSoapNote({ ...initialSoap, ...draft });
+                    } catch (e) {
+                        console.error("Error parsing SOAP draft", e);
+                        setSoapNote(initialSoap);
+                    }
+                } else {
                     setSoapNote(initialSoap);
                 }
             } else {
@@ -565,7 +608,7 @@ const PatientDetails = () => {
             setSelectedWard('');
             setSelectedBed('');
         }
-    }, [showSoapModal, encounter, showConvertModal, patient]);
+    }, [showSoapModal, encounter, showConvertModal, patient, editingNoteId]);
 
     // Auto-save SOAP Note
     useEffect(() => {
@@ -737,11 +780,11 @@ const PatientDetails = () => {
     // 2. Outpatient: Active for 24 hours from creation
     const isEncounterActive = () => {
         if (!encounter) {
-            console.log('🔍 isEncounterActive: No encounter');
+            console.log('ðŸ” isEncounterActive: No encounter');
             return false;
         }
         if (viewingPastEncounter) {
-            console.log('🔍 isEncounterActive: Viewing past encounter');
+            console.log('ðŸ” isEncounterActive: Viewing past encounter');
             return false;
         }
 
@@ -750,7 +793,7 @@ const PatientDetails = () => {
             // Active statuses: admitted, in_progress, with_doctor, in_nursing, in_lab, in_radiology, in_pharmacy, in_ward, awaiting_services
             const activeStatuses = ['admitted', 'in_progress', 'with_doctor', 'in_nursing', 'in_lab', 'in_radiology', 'in_pharmacy', 'in_ward', 'awaiting_services', 'registered', 'payment_pending'];
             const isActive = activeStatuses.includes(encounter.encounterStatus);
-            console.log('🔍 isEncounterActive: Inpatient encounter', {
+            console.log('ðŸ” isEncounterActive: Inpatient encounter', {
                 encounterStatus: encounter.encounterStatus,
                 isActive,
                 ward: encounter.ward,
@@ -764,7 +807,7 @@ const PatientDetails = () => {
             const now = new Date().getTime();
             const isActive = (now - created) < oneDay;
             const hoursOld = Math.floor((now - created) / (60 * 60 * 1000));
-            console.log('🔍 isEncounterActive: Non-inpatient encounter', {
+            console.log('ðŸ” isEncounterActive: Non-inpatient encounter', {
                 type: encounter.type,
                 createdAt: encounter.createdAt,
                 hoursOld,
@@ -876,23 +919,24 @@ const PatientDetails = () => {
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            await axios.put(
-                `${backendUrl}/api/visits/${encounter._id}`,
-                {
-                    ...soapNote,
-                    assessment: soapNote.assessment,
-                    diagnosis: soapNote.diagnosis, // Pass the array of objects
-                    consultingPhysician: user.role === 'doctor' ? user._id : (encounter.consultingPhysician || user._id)
-                },
+            const payload = {
+                ...soapNote,
+                diagnosis: soapNote.diagnosis,
+                ...(editingNoteId ? { noteId: editingNoteId } : {})
+            };
+            const { data } = await axios.post(
+                `${backendUrl}/api/visits/${encounter._id}/clinical-notes`,
+                payload,
                 config
             );
-            toast.success('SOAP notes saved!');
+            toast.success(editingNoteId ? 'Clinical note updated!' : 'Clinical note added!');
             localStorage.removeItem(`draft_soap_${patient._id}_${encounter._id}`);
             setShowSoapModal(false);
+            setEditingNoteId(null);
 
-            // Refresh encounter to show updated SOAP notes
-            const { data } = await axios.get(`${backendUrl}/api/visits/${encounter._id}`, config);
+            // Update encounter with fresh data from server response
             setEncounter(data);
+            setClinicalNotes(data.notes || []);
 
             // Clear form
             setSoapNote({
@@ -923,7 +967,7 @@ const PatientDetails = () => {
             });
         } catch (error) {
             console.error(error);
-            toast.error('Error saving SOAP notes');
+            toast.error(error.response?.data?.message || 'Error saving clinical note');
         } finally {
             setLoading(false);
         }
@@ -1355,18 +1399,31 @@ const PatientDetails = () => {
 
     const handleDischarge = async () => {
         if (!encounter) return;
-        if (!window.confirm('Are you sure you want to discharge this patient? This will release the bed.')) return;
+        setShowDischargeModal(true);
+    };
 
+    const handleConfirmDischarge = async () => {
+        if (!encounter) return;
+        if (!dischargeNote.trim()) {
+            toast.error('Please write a discharge note / summary before discharging.');
+            return;
+        }
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             await axios.put(
                 `${backendUrl}/api/visits/${encounter._id}`,
-                { encounterStatus: 'discharged', status: 'Discharged' },
+                {
+                    encounterStatus: 'discharged',
+                    status: 'Discharged',
+                    dischargeNotes: dischargeNote
+                },
                 config
             );
             toast.success('Patient discharged successfully');
-            fetchPatient(); // Refresh to update status
+            setShowDischargeModal(false);
+            setDischargeNote('');
+            fetchPatient();
         } catch (error) {
             console.error(error);
             toast.error('Error discharging patient');
@@ -1572,7 +1629,7 @@ const PatientDetails = () => {
 
         switch (vitalType) {
             case 'temperature':
-                // Normal: 36.1-37.2°C
+                // Normal: 36.1-37.2Â°C
                 if (numValue < 36.1) return 'text-yellow-600 font-semibold';
                 if (numValue > 37.2) return 'text-red-600 font-semibold';
                 return '';
@@ -1590,7 +1647,7 @@ const PatientDetails = () => {
                 return '';
 
             case 'spo2':
-                // Normal: ≥95%
+                // Normal: â‰¥95%
                 if (numValue < 95) return 'text-red-600 font-semibold';
                 if (numValue < 90) return 'text-red-700 font-bold';
                 return '';
@@ -1719,7 +1776,7 @@ const PatientDetails = () => {
                                             historyParts.push('\n--- Recent Vitals ---');
                                             if (vitals.bloodPressure) historyParts.push(`BP: ${vitals.bloodPressure}`);
                                             if (vitals.heartRate) historyParts.push(`HR: ${vitals.heartRate} bpm`);
-                                            if (vitals.temperature) historyParts.push(`Temp: ${vitals.temperature} °C`);
+                                            if (vitals.temperature) historyParts.push(`Temp: ${vitals.temperature} Â°C`);
                                             if (vitals.weight) historyParts.push(`Weight: ${vitals.weight} kg`);
                                             if (vitals.respiratoryRate) historyParts.push(`RR: ${vitals.respiratoryRate} resp/min`);
                                             if (vitals.spo2) historyParts.push(`SpO2: ${vitals.spo2}%`);
@@ -1876,7 +1933,7 @@ const PatientDetails = () => {
                                             <div>
                                                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 mb-4">
                                                     <div className="bg-blue-50 p-2 rounded text-center">
-                                                        <p className="text-xs text-gray-600">Temp (°C)</p>
+                                                        <p className="text-xs text-gray-600">Temp (Â°C)</p>
                                                         <p className={`font-bold ${getVitalColorClass('temperature', vitals.temperature)}`}>
                                                             {vitals.temperature || '-'}
                                                         </p>
@@ -2159,283 +2216,252 @@ const PatientDetails = () => {
 
                                 {/* SOAP Notes Tab */}
                                 {activeTab === 'soap' && (
-                                    <div>
-                                        <h3 className="text-xl font-bold">Clinical Documentation</h3>
-                                        {(() => {
-                                            const hasNote = !!(encounter.presentingComplaints || encounter.historyOfPresentingComplaint ||
-                                                encounter.assessment || encounter.plan ||
-                                                (encounter.diagnosis && encounter.diagnosis.length > 0) ||
-                                                encounter.generalAppearance || encounter.heent);
-                                            const isAuthor = encounter.consultingPhysician?._id === user?._id ||
-                                                encounter.consultingPhysician === user?._id;
-                                            const isEditMode = hasNote && isAuthor;
-                                            return (
+                                    <div className="space-y-4">
+                                        <div className="flex justify-between items-center">
+                                            <h3 className="text-xl font-bold">Clinical Documentation</h3>
+                                            {canEdit && (
                                                 <button
-                                                    onClick={() => setShowSoapModal(true)}
-                                                    disabled={!canEdit}
-                                                    className={`px-4 py-2 rounded flex items-center gap-2 ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : isEditMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-green-600 text-white hover:bg-green-700'}`}
+                                                    onClick={() => { setEditingNoteId(null); setShowSoapModal(true); }}
+                                                    className="px-4 py-2 rounded flex items-center gap-2 bg-green-600 text-white hover:bg-green-700"
                                                 >
-                                                    {isEditMode ? <><FaEdit /> Edit Clinical Note</> : <><FaPlus /> Add Clinical Note</>}
+                                                    <FaPlus /> Add Clinical Note
                                                 </button>
-                                            );
-                                        })()}
-                                        {/* Check if any clinical documentation exists */}
-                                        {(encounter.presentingComplaints || encounter.historyOfPresentingComplaint ||
-                                            encounter.systemReview || encounter.pastMedicalSurgicalHistory ||
-                                            encounter.socialFamilyHistory || encounter.drugsHistory ||
-                                            encounter.functionalCognitiveStatus || encounter.menstruationGynecologicalObstetricsHistory ||
-                                            encounter.pregnancyHistory || encounter.immunization ||
-                                            encounter.nutritional || encounter.developmentalMilestones ||
-                                            encounter.assessment || encounter.plan ||
-                                            (encounter.diagnosis && encounter.diagnosis.length > 0) ||
-                                            encounter.subjective || encounter.objective) ? (
-                                            <div className="space-y-4">
-                                                {/* Doctor and Timestamp Info */}
-                                                <div className="bg-blue-50 border-l-4 border-blue-600 p-4 rounded">
-                                                    <p className="text-sm text-gray-700">
-                                                        <span className="font-semibold">Documented by:</span>{encounter.consultingPhysician?.name || 'Unknown'}
-                                                        {encounter.updatedAt && (
-                                                            <span className="ml-4 text-gray-600">
-                                                                on {new Date(encounter.updatedAt).toLocaleString()}
-                                                            </span>
-                                                        )}
-                                                    </p>
-                                                </div>
+                                            )}
+                                        </div>
 
-                                                {/* Structured Clinical History Fields - Collapsible */}
-                                                {(encounter.presentingComplaints || encounter.historyOfPresentingComplaint ||
-                                                    encounter.systemReview || encounter.pastMedicalSurgicalHistory ||
-                                                    encounter.socialFamilyHistory || encounter.drugsHistory ||
-                                                    encounter.functionalCognitiveStatus || encounter.menstruationGynecologicalObstetricsHistory ||
-                                                    encounter.pregnancyHistory || encounter.immunization ||
-                                                    encounter.nutritional || encounter.developmentalMilestones ||
-                                                    encounter.subjective || encounter.objective) && (
-                                                        <div className="border rounded-lg overflow-hidden">
-                                                            {/* Collapsible Header */}
-                                                            <button
-                                                                onClick={() => setExpandedSections(prev => ({ ...prev, history: !prev.history }))}
-                                                                className="w-full bg-gradient-to-r from-gray-100 to-gray-50 hover:from-gray-200 hover:to-gray-100 p-4 flex justify-between items-center transition-colors"
-                                                            >
-                                                                <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                                                                    <FaNotesMedical className="text-blue-600" />
-                                                                    Clinical History
-                                                                </h4>
-                                                                {expandedSections.history ? (
-                                                                    <FaChevronUp className="text-gray-600" />
-                                                                ) : (
-                                                                    <FaChevronDown className="text-gray-600" />
-                                                                )}
-                                                            </button>
+                                        {/* List of clinical notes */}
+                                        {(() => {
+                                            const allNotes = encounter.clinicalNotes && encounter.clinicalNotes.length > 0
+                                                ? encounter.clinicalNotes
+                                                : [];
+                                            if (allNotes.length === 0) {
+                                                return (
+                                                    <p className="text-gray-500">No clinical notes recorded yet. Click "Add Clinical Note" to begin documentation.</p>
+                                                );
+                                            }
+                                            return (
+                                                <div className="space-y-6">
+                                                    {allNotes.map((note, noteIndex) => {
+                                                        const noteId = note._id?.toString();
+                                                        const noteDoctor = note.doctor;
+                                                        const noteDoctorId = typeof noteDoctor === 'object' ? noteDoctor?._id?.toString() : noteDoctor?.toString();
+                                                        const isNoteAuthor = noteDoctorId === user?._id;
+                                                        const noteDoctorName = typeof noteDoctor === 'object' ? (noteDoctor?.name || 'Unknown') : (encounter.consultingPhysician?.name || 'Unknown');
 
-                                                            {/* Collapsible Content */}
-                                                            {expandedSections.history && (
-                                                                <div className="p-4 space-y-4 bg-white">
-                                                                    {encounter.presentingComplaints && (
-                                                                        <div className="bg-gray-50 p-4 rounded border-l-4 border-gray-400">
-                                                                            <p className="font-semibold text-gray-700 mb-2">01. Presenting Complaints</p>
-                                                                            <p className="text-gray-800 whitespace-pre-wrap">{encounter.presentingComplaints}</p>
+                                                        return (
+                                                            <div key={noteId || noteIndex} className="border rounded-xl shadow-sm overflow-hidden">
+                                                                {/* Note Header */}
+                                                                <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-5 py-3 flex justify-between items-center">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="w-8 h-8 rounded-full bg-white text-blue-700 flex items-center justify-center font-bold text-sm">
+                                                                            {noteIndex + 1}
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="font-semibold text-sm">Dr. {noteDoctorName}</p>
+                                                                            <p className="text-blue-200 text-xs">
+                                                                                {note.createdAt ? new Date(note.createdAt).toLocaleString() : 'Date N/A'}
+                                                                                {note.updatedAt && note.updatedAt !== note.createdAt && (
+                                                                                    <span className="ml-2">(updated {new Date(note.updatedAt).toLocaleString()})</span>
+                                                                                )}
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                    {canEdit && isNoteAuthor && (
+                                                                        <button
+                                                                            onClick={() => { setEditingNoteId(noteId); setShowSoapModal(true); }}
+                                                                            className="flex items-center gap-1 bg-white text-blue-700 px-3 py-1 rounded-lg text-sm font-semibold hover:bg-blue-50 transition"
+                                                                        >
+                                                                            <FaEdit /> Edit
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+
+                                                                <div className="bg-white p-4 space-y-3">
+                                                                    {/* Clinical History - Collapsible */}
+                                                                    {(note.presentingComplaints || note.historyOfPresentingComplaint ||
+                                                                        note.systemReview || note.pastMedicalSurgicalHistory ||
+                                                                        note.socialFamilyHistory || note.drugsHistory ||
+                                                                        note.functionalCognitiveStatus || note.menstruationGynecologicalObstetricsHistory ||
+                                                                        note.pregnancyHistory || note.immunization ||
+                                                                        note.nutritional || note.developmentalMilestones) && (
+                                                                        <div className="border rounded-lg overflow-hidden">
+                                                                            <button
+                                                                                onClick={() => setExpandedSections(prev => ({ ...prev, [`history_${noteId}`]: !prev[`history_${noteId}`] }))}
+                                                                                className="w-full bg-gradient-to-r from-gray-100 to-gray-50 hover:from-gray-200 hover:to-gray-100 p-3 flex justify-between items-center transition-colors"
+                                                                            >
+                                                                                <h4 className="text-base font-bold text-gray-800 flex items-center gap-2">
+                                                                                    <FaNotesMedical className="text-blue-600" /> Clinical History
+                                                                                </h4>
+                                                                                {expandedSections[`history_${noteId}`] ? <FaChevronUp className="text-gray-600" /> : <FaChevronDown className="text-gray-600" />}
+                                                                            </button>
+                                                                            {expandedSections[`history_${noteId}`] && (
+                                                                                <div className="p-4 space-y-3 bg-white">
+                                                                                    {note.presentingComplaints && (
+                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">01. Presenting Complaints</p>
+                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.presentingComplaints}</p>
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {note.historyOfPresentingComplaint && (
+                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">02. History of Presenting Complaint</p>
+                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.historyOfPresentingComplaint}</p>
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {note.systemReview && (
+                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">03. System Review</p>
+                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.systemReview}</p>
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {note.pastMedicalSurgicalHistory && (
+                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">04. Past Medical / Surgical History</p>
+                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.pastMedicalSurgicalHistory}</p>
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {note.socialFamilyHistory && (
+                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">05. Social and Family History</p>
+                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.socialFamilyHistory}</p>
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {note.drugsHistory && (
+                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">06. Drugs History</p>
+                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.drugsHistory}</p>
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {note.functionalCognitiveStatus && (
+                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">07. Functional Cognitive Status</p>
+                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.functionalCognitiveStatus}</p>
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {note.menstruationGynecologicalObstetricsHistory && (
+                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">08. Menstruation / Gyn / Obstetrics History</p>
+                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.menstruationGynecologicalObstetricsHistory}</p>
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {note.pregnancyHistory && (
+                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">09. Pregnancy History</p>
+                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.pregnancyHistory}</p>
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {note.immunization && (
+                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">10. Immunization</p>
+                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.immunization}</p>
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {note.nutritional && (
+                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">11. Nutritional</p>
+                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.nutritional}</p>
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {note.developmentalMilestones && (
+                                                                                        <div className="bg-gray-50 p-3 rounded border-l-4 border-gray-400">
+                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">12. Developmental Milestones</p>
+                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.developmentalMilestones}</p>
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                            )}
                                                                         </div>
                                                                     )}
 
-                                                                    {encounter.historyOfPresentingComplaint && (
-                                                                        <div className="bg-gray-50 p-4 rounded border-l-4 border-gray-400">
-                                                                            <p className="font-semibold text-gray-700 mb-2">02. History of Presenting Complaint</p>
-                                                                            <p className="text-gray-800 whitespace-pre-wrap">{encounter.historyOfPresentingComplaint}</p>
+                                                                    {/* Physical Examination - Collapsible */}
+                                                                    {(note.generalAppearance || note.heent || note.neck || note.cvs || note.resp || note.abd || note.neuro || note.msk || note.skin) && (
+                                                                        <div className="border rounded-lg overflow-hidden">
+                                                                            <button
+                                                                                onClick={() => setExpandedSections(prev => ({ ...prev, [`physEx_${noteId}`]: !prev[`physEx_${noteId}`] }))}
+                                                                                className="w-full bg-gradient-to-r from-teal-100 to-teal-50 hover:from-teal-200 hover:to-teal-100 p-3 flex justify-between items-center transition-colors"
+                                                                            >
+                                                                                <h4 className="text-base font-bold text-gray-800 flex items-center gap-2">
+                                                                                    <FaHeartbeat className="text-teal-600" /> Physical Examination
+                                                                                </h4>
+                                                                                {expandedSections[`physEx_${noteId}`] ? <FaChevronUp className="text-gray-600" /> : <FaChevronDown className="text-gray-600" />}
+                                                                            </button>
+                                                                            {expandedSections[`physEx_${noteId}`] && (
+                                                                                <div className="p-4 space-y-3 bg-white">
+                                                                                    {note.generalAppearance && (
+                                                                                        <div className="bg-teal-50 p-3 rounded border-l-4 border-teal-500">
+                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">A. General Appearance</p>
+                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.generalAppearance}</p>
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {(note.heent || note.neck || note.cvs || note.resp || note.abd || note.neuro || note.msk || note.skin) && (
+                                                                                        <div className="bg-teal-50 p-3 rounded border-l-4 border-teal-400">
+                                                                                            <p className="font-semibold text-gray-700 mb-2 text-sm">B. Systemic Examination</p>
+                                                                                            <div className="grid grid-cols-2 gap-2 text-sm">
+                                                                                                {note.heent && <div><span className="font-semibold text-gray-600">HEENT: </span><span className="text-gray-800">{note.heent}</span></div>}
+                                                                                                {note.neck && <div><span className="font-semibold text-gray-600">Neck: </span><span className="text-gray-800">{note.neck}</span></div>}
+                                                                                                {note.cvs && <div><span className="font-semibold text-gray-600">CVS: </span><span className="text-gray-800">{note.cvs}</span></div>}
+                                                                                                {note.resp && <div><span className="font-semibold text-gray-600">Resp: </span><span className="text-gray-800">{note.resp}</span></div>}
+                                                                                                {note.abd && <div><span className="font-semibold text-gray-600">Abd: </span><span className="text-gray-800">{note.abd}</span></div>}
+                                                                                                {note.neuro && <div><span className="font-semibold text-gray-600">Neuro: </span><span className="text-gray-800">{note.neuro}</span></div>}
+                                                                                                {note.msk && <div><span className="font-semibold text-gray-600">MSK: </span><span className="text-gray-800">{note.msk}</span></div>}
+                                                                                                {note.skin && <div><span className="font-semibold text-gray-600">Skin: </span><span className="text-gray-800">{note.skin}</span></div>}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                            )}
                                                                         </div>
                                                                     )}
 
-                                                                    {encounter.systemReview && (
-                                                                        <div className="bg-gray-50 p-4 rounded border-l-4 border-gray-400">
-                                                                            <p className="font-semibold text-gray-700 mb-2">03. System Review</p>
-                                                                            <p className="text-gray-800 whitespace-pre-wrap">{encounter.systemReview}</p>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {encounter.pastMedicalSurgicalHistory && (
-                                                                        <div className="bg-gray-50 p-4 rounded border-l-4 border-gray-400">
-                                                                            <p className="font-semibold text-gray-700 mb-2">04. Past Medical / Surgical History</p>
-                                                                            <p className="text-gray-800 whitespace-pre-wrap">{encounter.pastMedicalSurgicalHistory}</p>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {encounter.socialFamilyHistory && (
-                                                                        <div className="bg-gray-50 p-4 rounded border-l-4 border-gray-400">
-                                                                            <p className="font-semibold text-gray-700 mb-2">05. Social and Family History</p>
-                                                                            <p className="text-gray-800 whitespace-pre-wrap">{encounter.socialFamilyHistory}</p>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {encounter.drugsHistory && (
-                                                                        <div className="bg-gray-50 p-4 rounded border-l-4 border-gray-400">
-                                                                            <p className="font-semibold text-gray-700 mb-2">06. Drugs History</p>
-                                                                            <p className="text-gray-800 whitespace-pre-wrap">{encounter.drugsHistory}</p>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {encounter.functionalCognitiveStatus && (
-                                                                        <div className="bg-gray-50 p-4 rounded border-l-4 border-gray-400">
-                                                                            <p className="font-semibold text-gray-700 mb-2">07. Functional Cognitive Status</p>
-                                                                            <p className="text-gray-800 whitespace-pre-wrap">{encounter.functionalCognitiveStatus}</p>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {encounter.menstruationGynecologicalObstetricsHistory && (
-                                                                        <div className="bg-gray-50 p-4 rounded border-l-4 border-gray-400">
-                                                                            <p className="font-semibold text-gray-700 mb-2">08. Menstruation / Gynecological / Obstetrics History</p>
-                                                                            <p className="text-gray-800 whitespace-pre-wrap">{encounter.menstruationGynecologicalObstetricsHistory}</p>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {encounter.pregnancyHistory && (
-                                                                        <div className="bg-gray-50 p-4 rounded border-l-4 border-gray-400">
-                                                                            <p className="font-semibold text-gray-700 mb-2">09. Pregnancy History</p>
-                                                                            <p className="text-gray-800 whitespace-pre-wrap">{encounter.pregnancyHistory}</p>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {encounter.immunization && (
-                                                                        <div className="bg-gray-50 p-4 rounded border-l-4 border-gray-400">
-                                                                            <p className="font-semibold text-gray-700 mb-2">10. Immunization</p>
-                                                                            <p className="text-gray-800 whitespace-pre-wrap">{encounter.immunization}</p>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {encounter.nutritional && (
-                                                                        <div className="bg-gray-50 p-4 rounded border-l-4 border-gray-400">
-                                                                            <p className="font-semibold text-gray-700 mb-2">11. Nutritional</p>
-                                                                            <p className="text-gray-800 whitespace-pre-wrap">{encounter.nutritional}</p>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {encounter.developmentalMilestones && (
-                                                                        <div className="bg-gray-50 p-4 rounded border-l-4 border-gray-400">
-                                                                            <p className="font-semibold text-gray-700 mb-2">12. Developmental Milestones</p>
-                                                                            <p className="text-gray-800 whitespace-pre-wrap">{encounter.developmentalMilestones}</p>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {/* Legacy SOAP fields (for backward compatibility) */}
-                                                                    {encounter.subjective && (
-                                                                        <div className="bg-gray-50 p-4 rounded border-l-4 border-yellow-400">
-                                                                            <p className="font-semibold text-gray-700 mb-2">Subjective (Legacy):</p>
-                                                                            <p className="text-gray-800 whitespace-pre-wrap">{encounter.subjective}</p>
-                                                                        </div>
-                                                                    )}
-                                                                    {encounter.objective && (
-                                                                        <div className="bg-gray-50 p-4 rounded border-l-4 border-yellow-400">
-                                                                            <p className="font-semibold text-gray-700 mb-2">Objective (Legacy):</p>
-                                                                            <p className="text-gray-800 whitespace-pre-wrap">{encounter.objective}</p>
+                                                                    {/* Assessment & Plan - Collapsible */}
+                                                                    {(note.assessment || (note.diagnosis && note.diagnosis.length > 0) || note.plan) && (
+                                                                        <div className="border rounded-lg overflow-hidden">
+                                                                            <button
+                                                                                onClick={() => setExpandedSections(prev => ({ ...prev, [`assess_${noteId}`]: !prev[`assess_${noteId}`] }))}
+                                                                                className="w-full bg-gradient-to-r from-blue-100 to-blue-50 hover:from-blue-200 hover:to-blue-100 p-3 flex justify-between items-center transition-colors"
+                                                                            >
+                                                                                <h4 className="text-base font-bold text-gray-800 flex items-center gap-2">
+                                                                                    <FaFileMedical className="text-green-600" /> Assessment & Plan
+                                                                                </h4>
+                                                                                {expandedSections[`assess_${noteId}`] ? <FaChevronUp className="text-gray-600" /> : <FaChevronDown className="text-gray-600" />}
+                                                                            </button>
+                                                                            {expandedSections[`assess_${noteId}`] && (
+                                                                                <div className="p-4 space-y-3 bg-white">
+                                                                                    {(note.assessment || (note.diagnosis && note.diagnosis.length > 0)) && (
+                                                                                        <div className="bg-blue-50 p-3 rounded border-l-4 border-blue-600">
+                                                                                            <p className="font-semibold text-gray-700 mb-2 text-sm">Assessment (Diagnosis):</p>
+                                                                                            {note.diagnosis && note.diagnosis.length > 0 && (
+                                                                                                <div className="mb-2 flex flex-wrap gap-2">
+                                                                                                    {note.diagnosis.map((d, i) => (
+                                                                                                        <span key={i} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-medium border border-blue-300">
+                                                                                                            {d.code} - {d.description}
+                                                                                                        </span>
+                                                                                                    ))}
+                                                                                                </div>
+                                                                                            )}
+                                                                                            {note.assessment && <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.assessment}</p>}
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {note.plan && (
+                                                                                        <div className="bg-green-50 p-3 rounded border-l-4 border-green-600">
+                                                                                            <p className="font-semibold text-gray-700 mb-1 text-sm">Plan:</p>
+                                                                                            <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.plan}</p>
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                            )}
                                                                         </div>
                                                                     )}
                                                                 </div>
-                                                            )}
-                                                        </div>
-                                                    )}
-
-                                                {/* Physical Examination Section - Collapsible */}
-                                                {(encounter.generalAppearance || encounter.heent || encounter.neck || encounter.cvs || encounter.resp || encounter.abd || encounter.neuro || encounter.msk || encounter.skin) && (
-                                                    <div className="border rounded-lg overflow-hidden mt-4">
-                                                        <button
-                                                            onClick={() => setExpandedSections(prev => ({ ...prev, physicalExam: !prev.physicalExam }))}
-                                                            className="w-full bg-gradient-to-r from-teal-100 to-teal-50 hover:from-teal-200 hover:to-teal-100 p-4 flex justify-between items-center transition-colors"
-                                                        >
-                                                            <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                                                                <FaHeartbeat className="text-teal-600" />
-                                                                Physical Examination
-                                                            </h4>
-                                                            {expandedSections.physicalExam ? (
-                                                                <FaChevronUp className="text-gray-600" />
-                                                            ) : (
-                                                                <FaChevronDown className="text-gray-600" />
-                                                            )}
-                                                        </button>
-                                                        {expandedSections.physicalExam && (
-                                                            <div className="p-4 space-y-3 bg-white">
-                                                                {/* A. General Appearance */}
-                                                                {encounter.generalAppearance && (
-                                                                    <div className="bg-teal-50 p-4 rounded border-l-4 border-teal-500">
-                                                                        <p className="font-semibold text-gray-700 mb-1">A. General Appearance</p>
-                                                                        <p className="text-sm text-gray-500 mb-1">General:</p>
-                                                                        <p className="text-gray-800 whitespace-pre-wrap">{encounter.generalAppearance}</p>
-                                                                    </div>
-                                                                )}
-                                                                {/* B. Systemic Examination */}
-                                                                {(encounter.heent || encounter.neck || encounter.cvs || encounter.resp || encounter.abd || encounter.neuro || encounter.msk || encounter.skin) && (
-                                                                    <div className="bg-teal-50 p-4 rounded border-l-4 border-teal-400">
-                                                                        <p className="font-semibold text-gray-700 mb-3">B. Systemic Examination</p>
-                                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                                                                            {encounter.heent && <div><span className="font-semibold text-gray-600">HEENT: </span><span className="text-gray-800">{encounter.heent}</span></div>}
-                                                                            {encounter.neck && <div><span className="font-semibold text-gray-600">Neck: </span><span className="text-gray-800">{encounter.neck}</span></div>}
-                                                                            {encounter.cvs && <div><span className="font-semibold text-gray-600">CVS: </span><span className="text-gray-800">{encounter.cvs}</span></div>}
-                                                                            {encounter.resp && <div><span className="font-semibold text-gray-600">Resp: </span><span className="text-gray-800">{encounter.resp}</span></div>}
-                                                                            {encounter.abd && <div><span className="font-semibold text-gray-600">Abd: </span><span className="text-gray-800">{encounter.abd}</span></div>}
-                                                                            {encounter.neuro && <div><span className="font-semibold text-gray-600">Neuro: </span><span className="text-gray-800">{encounter.neuro}</span></div>}
-                                                                            {encounter.msk && <div><span className="font-semibold text-gray-600">MSK: </span><span className="text-gray-800">{encounter.msk}</span></div>}
-                                                                            {encounter.skin && <div><span className="font-semibold text-gray-600">Skin: </span><span className="text-gray-800">{encounter.skin}</span></div>}
-                                                                        </div>
-                                                                    </div>
-                                                                )}
                                                             </div>
-                                                        )}
-                                                    </div>
-                                                )}
-
-                                                {/* Assessment & Plan Section - Collapsible */}
-                                                {(encounter.assessment || (encounter.diagnosis && encounter.diagnosis.length > 0) || encounter.plan) && (
-                                                    <div className="border rounded-lg overflow-hidden mt-4">
-                                                        {/* Collapsible Header */}
-                                                        <button
-                                                            onClick={() => setExpandedSections(prev => ({ ...prev, assessment: !prev.assessment }))}
-                                                            className="w-full bg-gradient-to-r from-blue-100 to-blue-50 hover:from-blue-200 hover:to-blue-100 p-4 flex justify-between items-center transition-colors"
-                                                        >
-                                                            <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                                                                <FaFileMedical className="text-green-600" />
-                                                                Assessment & Plan
-                                                            </h4>
-                                                            {expandedSections.assessment ? (
-                                                                <FaChevronUp className="text-gray-600" />
-                                                            ) : (
-                                                                <FaChevronDown className="text-gray-600" />
-                                                            )}
-                                                        </button>
-
-                                                        {/* Collapsible Content */}
-                                                        {expandedSections.assessment && (
-                                                            <div className="p-4 space-y-4 bg-white">
-                                                                {(encounter.assessment || (encounter.diagnosis && encounter.diagnosis.length > 0)) && (
-                                                                    <div className="bg-blue-50 p-4 rounded border-l-4 border-blue-600">
-                                                                        <p className="font-semibold text-gray-700 mb-2">Assessment (Diagnosis):</p>
-                                                                        {encounter.diagnosis && encounter.diagnosis.length > 0 && (
-                                                                            <div className="mb-2 flex flex-wrap gap-2">
-                                                                                {encounter.diagnosis.map((d, i) => (
-                                                                                    <span key={i} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium border border-blue-300">
-                                                                                        {d.code} - {d.description}
-                                                                                    </span>
-                                                                                ))}
-                                                                            </div>
-                                                                        )}
-                                                                        {encounter.assessment && (
-                                                                            <p className="text-gray-800 whitespace-pre-wrap">{encounter.assessment}</p>
-                                                                        )}
-                                                                    </div>
-                                                                )}
-
-                                                                {encounter.plan && (
-                                                                    <div className="bg-green-50 p-4 rounded border-l-4 border-green-600">
-                                                                        <p className="font-semibold text-gray-700 mb-2">Plan:</p>
-                                                                        <p className="text-gray-800 whitespace-pre-wrap">{encounter.plan}</p>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ) : (
-                                            <p className="text-gray-500">No clinical notes recorded yet. Click "Add Clinical Note" to begin documentation.</p>
-                                        )}
+                                                        );
+                                                    })}
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 )}
+
 
                                 {/* Lab Orders Tab */}
                                 {activeTab === 'lab' && (
@@ -2877,7 +2903,7 @@ const PatientDetails = () => {
                                                         <FaTimes /> Discharged
                                                     </div>
                                                 )}
-                                                {/* Add Ward Round Note button — doctors & nurses */}
+                                                {/* Add Ward Round Note button â€” doctors & nurses */}
                                                 {['doctor', 'nurse'].includes(user.role) && (
                                                     <button
                                                         onClick={() => setShowWardRoundModal(true)}
@@ -2889,7 +2915,7 @@ const PatientDetails = () => {
                                                         <FaPlus /> Add Ward Round Note
                                                     </button>
                                                 )}
-                                                {/* Add Theatre Note button — doctors only */}
+                                                {/* Add Theatre Note button â€” doctors only */}
                                                 {user.role === 'doctor' && (
                                                     <button
                                                         onClick={() => { setTheatreNoteForm({ ...emptyTheatreNote }); setEditingTheatreNote(null); setShowTheatreModal(true); }}
@@ -2904,27 +2930,42 @@ const PatientDetails = () => {
                                             </div>
                                         </div>
 
-                                        {/* Admission Info Banner */}
+                                        {/* Admission / Discharge Info Banner */}
                                         {encounter.ward && (
-                                            <div className="bg-blue-50 p-4 rounded mb-5 border border-blue-200">
-                                                <p className="font-semibold text-blue-800">
+                                            <div className={`p-4 rounded mb-5 border ${encounter.encounterStatus === 'discharged' ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
+                                                <p className={`font-semibold ${encounter.encounterStatus === 'discharged' ? 'text-green-800' : 'text-blue-800'}`}>
                                                     <FaProcedures className="inline mr-2" />
-                                                    Admitted In:
+                                                    {encounter.encounterStatus === 'discharged' ? 'Discharge Record' : 'Admitted In:'}
                                                 </p>
-                                                <p className="text-sm text-gray-700 ml-6">
+                                                <p className="text-sm text-gray-700 ml-6 mt-1">
                                                     Ward: {typeof encounter.ward === 'object' && encounter.ward?.name ? encounter.ward.name : (typeof encounter.ward === 'string' ? `ID: ${encounter.ward}` : 'N/A')} |
                                                     Bed: {encounter.bed || 'N/A'} |
                                                     Admitted On: {encounter.admissionDate ? new Date(encounter.admissionDate).toLocaleString() : 'N/A'}
                                                 </p>
                                                 {encounter.encounterStatus === 'discharged' && (
-                                                    <div className="mt-3 pt-3 border-t border-blue-200">
-                                                        <p className="font-semibold text-green-800">
-                                                            Discharged On: {encounter.dischargeDate ? new Date(encounter.dischargeDate).toLocaleString() : (encounter.updatedAt ? new Date(encounter.updatedAt).toLocaleString() : 'N/A')}
-                                                        </p>
-                                                        {encounter.dischargeNotes && (
-                                                            <div className="mt-2 p-3 bg-white rounded border">
-                                                                <p className="text-sm font-semibold text-gray-700 mb-1">Discharge Summary:</p>
-                                                                <p className="text-sm text-gray-600">{encounter.dischargeNotes}</p>
+                                                    <div className="mt-3 pt-3 border-t border-green-200 space-y-3">
+                                                        <div className="flex flex-wrap gap-4 text-sm">
+                                                            <span className="text-green-800 font-semibold">
+                                                                ✓ Discharged On: {encounter.dischargeDate ? new Date(encounter.dischargeDate).toLocaleString() : (encounter.updatedAt ? new Date(encounter.updatedAt).toLocaleString() : 'N/A')}
+                                                            </span>
+                                                            {encounter.dischargedBy?.name && (
+                                                                <span className="text-gray-600">
+                                                                    By: <span className="font-semibold text-gray-800">{encounter.dischargedBy.name}</span>
+                                                                    {encounter.dischargedBy.role && <span className="ml-1 text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full capitalize">{encounter.dischargedBy.role}</span>}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {encounter.dischargeNotes ? (
+                                                            <div className="bg-white rounded-lg border border-green-300 overflow-hidden">
+                                                                <div className="bg-green-600 text-white px-3 py-2 text-xs font-semibold flex items-center gap-2">
+                                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                                                    DISCHARGE SUMMARY
+                                                                </div>
+                                                                <p className="text-sm text-gray-700 p-3 whitespace-pre-wrap">{encounter.dischargeNotes}</p>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                                                                ⚠ No discharge summary was recorded for this encounter.
                                                             </div>
                                                         )}
                                                     </div>
@@ -2960,7 +3001,7 @@ const PatientDetails = () => {
                                             </div>
                                         )}
 
-                                        {/* ── SECTION 1: Ward Round Notes ── */}
+                                        {/* â”€â”€ SECTION 1: Ward Round Notes â”€â”€ */}
                                         <div className="mb-8">
                                             <div className="flex items-center gap-2 mb-3">
                                                 <FaNotesMedical className="text-teal-600" />
@@ -2984,7 +3025,7 @@ const PatientDetails = () => {
                                             )}
                                         </div>
 
-                                        {/* ── SECTION 2: Theatre Operation Notes ── */}
+                                        {/* â”€â”€ SECTION 2: Theatre Operation Notes â”€â”€ */}
                                         <div className="mb-8">
                                             <div className="flex items-center gap-2 mb-3">
                                                 <FaProcedures className="text-red-600" />
@@ -3000,7 +3041,7 @@ const PatientDetails = () => {
                                                                     <p className="font-bold">{note.procedurePerformed || 'Operation Note'}</p>
                                                                     <p className="text-xs opacity-80">
                                                                         {note.dateOfSurgery ? new Date(note.dateOfSurgery).toLocaleDateString() : 'Date N/A'}
-                                                                        {note.surgeryType && ` • ${note.surgeryType}`}
+                                                                        {note.surgeryType && ` â€¢ ${note.surgeryType}`}
                                                                     </p>
                                                                 </div>
                                                                 <div className="flex items-center gap-2">
@@ -3067,8 +3108,8 @@ const PatientDetails = () => {
                                                                 </div>
                                                             )}
                                                             <div className="bg-gray-50 px-4 py-2 text-xs text-gray-400 flex justify-between border-t">
-                                                                <span>Created by: {note.createdBy} — {note.createdAt ? new Date(note.createdAt).toLocaleString() : ''}</span>
-                                                                {note.updatedBy && <span>Updated by: {note.updatedBy} — {note.updatedAt ? new Date(note.updatedAt).toLocaleString() : ''}</span>}
+                                                                <span>Created by: {note.createdBy} â€” {note.createdAt ? new Date(note.createdAt).toLocaleString() : ''}</span>
+                                                                {note.updatedBy && <span>Updated by: {note.updatedBy} â€” {note.updatedAt ? new Date(note.updatedAt).toLocaleString() : ''}</span>}
                                                             </div>
                                                         </div>
                                                     ))}
@@ -3078,7 +3119,7 @@ const PatientDetails = () => {
                                             )}
                                         </div>
 
-                                        {/* ── SECTION 3: General Inpatient Notes (legacy) ── */}
+                                        {/* â”€â”€ SECTION 3: General Inpatient Notes (legacy) â”€â”€ */}
                                         {clinicalNotes.length > 0 && (
                                             <div className="mb-4">
                                                 <div className="flex items-center gap-2 mb-3">
@@ -3419,14 +3460,69 @@ const PatientDetails = () => {
                 </div>
             )}
 
+            {/* Discharge Note Modal */}
+            {showDischargeModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+                        {/* Header */}
+                        <div className="bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-4 flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-white bg-opacity-20 flex items-center justify-center">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold">Discharge Patient</h3>
+                                <p className="text-red-200 text-sm">A discharge note is required to complete this process</p>
+                            </div>
+                        </div>
+                        {/* Body */}
+                        <div className="p-6 space-y-4">
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2 text-sm text-amber-800">
+                                <svg className="w-5 h-5 mt-0.5 flex-shrink-0 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M12 3a9 9 0 110 18A9 9 0 0112 3z" /></svg>
+                                <span>Discharging will <strong>release the bed</strong> and close the encounter. This action cannot be undone.</span>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Discharge Note / Summary <span className="text-red-500">*</span>
+                                </label>
+                                <textarea
+                                    value={dischargeNote}
+                                    onChange={e => setDischargeNote(e.target.value)}
+                                    rows={6}
+                                    placeholder="Write a discharge summary including: condition at discharge, instructions given, follow-up plan, medications prescribed on discharge, etc."
+                                    className="w-full border-2 border-gray-200 focus:border-red-400 rounded-lg p-3 text-sm resize-none outline-none transition"
+                                />
+                                <p className="text-xs text-gray-400 mt-1">{dischargeNote.length} characters</p>
+                            </div>
+                        </div>
+                        {/* Footer */}
+                        <div className="px-6 pb-6 flex gap-3">
+                            <button
+                                onClick={handleConfirmDischarge}
+                                disabled={!dischargeNote.trim() || loading}
+                                className={`flex-1 py-3 rounded-lg font-semibold text-sm transition ${!dischargeNote.trim() || loading ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700'}`}
+                            >
+                                {loading ? 'Discharging...' : 'Confirm Discharge'}
+                            </button>
+                            <button
+                                onClick={() => { setShowDischargeModal(false); setDischargeNote(''); }}
+                                disabled={loading}
+                                className="flex-1 py-3 rounded-lg font-semibold text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 transition"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* SOAP Modal */}
             {
                 showSoapModal && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                         <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                             <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-xl font-bold">Add SOAP Note</h3>
-                                <button onClick={() => setShowSoapModal(false)} className="text-gray-500 hover:text-gray-700">
+                                <h3 className="text-xl font-bold">{editingNoteId ? 'Edit Clinical Note' : 'Add Clinical Note'}</h3>
+                                <button onClick={() => { setShowSoapModal(false); setEditingNoteId(null); }} className="text-gray-500 hover:text-gray-700">
                                     <FaTimes size={24} />
                                 </button>
                             </div>
@@ -3743,7 +3839,7 @@ const PatientDetails = () => {
                                             </div>
                                             {soapNote.diagnosis.length === 0 && (
                                                 <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                                                    <span className="font-bold">⚠</span> At least one ICD-11 diagnosis is required before saving.
+                                                    <span className="font-bold">âš </span> At least one ICD-11 diagnosis is required before saving.
                                                 </p>
                                             )}
                                         </div>
@@ -3767,16 +3863,16 @@ const PatientDetails = () => {
                                         disabled={soapNote.diagnosis.length === 0}
                                         className={`px-6 py-2 rounded font-semibold transition-colors ${soapNote.diagnosis.length === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'}`}
                                     >
-                                        Save SOAP Notes
+                                        {editingNoteId ? 'Update Clinical Note' : 'Save Clinical Note'}
                                     </button>
                                     <button
-                                        onClick={() => setShowSoapModal(false)}
+                                        onClick={() => { setShowSoapModal(false); setEditingNoteId(null); }}
                                         className="bg-gray-400 text-white px-6 py-2 rounded hover:bg-gray-500"
                                     >
                                         Cancel
                                     </button>
                                     {soapNote.diagnosis.length === 0 && (
-                                        <span className="text-red-500 text-sm font-medium">⚠ Diagnosis required to save</span>
+                                        <span className="text-red-500 text-sm font-medium">âš  Diagnosis required to save</span>
                                     )}
                                 </div>
                             </div>
@@ -3827,7 +3923,7 @@ const PatientDetails = () => {
                                                             }}
                                                         >
                                                             <div className="font-semibold">{charge.name}</div>
-                                                            <div className="text-xs text-gray-500">₦{charge.basePrice}</div>
+                                                            <div className="text-xs text-gray-500">â‚¦{charge.basePrice}</div>
                                                         </div>
                                                     ))
                                                 ) : (
@@ -3860,7 +3956,7 @@ const PatientDetails = () => {
                                                 {tempLabOrders.map(test => (
                                                     <tr key={test._id} className="border-b">
                                                         <td className="p-2">{test.name}</td>
-                                                        <td className="p-2">₦{test.basePrice}</td>
+                                                        <td className="p-2">â‚¦{test.basePrice}</td>
                                                         <td className="p-2">
                                                             <button
                                                                 onClick={() => handleRemoveLabFromQueue(test._id)}
@@ -3950,7 +4046,7 @@ const PatientDetails = () => {
                                                             }}
                                                         >
                                                             <div className="font-semibold">{charge.name}</div>
-                                                            <div className="text-xs text-gray-500">₦{charge.basePrice}</div>
+                                                            <div className="text-xs text-gray-500">â‚¦{charge.basePrice}</div>
                                                         </div>
                                                     ))
                                                 ) : (
@@ -3983,7 +4079,7 @@ const PatientDetails = () => {
                                                 {tempRadOrders.map(scan => (
                                                     <tr key={scan._id} className="border-b">
                                                         <td className="p-2">{scan.name}</td>
-                                                        <td className="p-2">₦{scan.basePrice}</td>
+                                                        <td className="p-2">â‚¦{scan.basePrice}</td>
                                                         <td className="p-2">
                                                             <button
                                                                 onClick={() => handleRemoveRadFromQueue(scan._id)}
@@ -4069,7 +4165,7 @@ const PatientDetails = () => {
                                                                 )}
                                                             </div>
                                                             <div className="text-xs text-gray-500">
-                                                                Total Stock: {drug.quantity} {drug.batches.length > 1 && `(${drug.batches.length} batches)`} | ₦{drug.price}
+                                                                Total Stock: {drug.quantity} {drug.batches.length > 1 && `(${drug.batches.length} batches)`} | â‚¦{drug.price}
                                                             </div>
                                                         </div>
                                                     ))}
@@ -4284,7 +4380,7 @@ const PatientDetails = () => {
                                 onClick={() => setShowConvertModal(false)} 
                                 className="text-white hover:text-gray-200 transition font-bold"
                             >
-                                ✕
+                                âœ•
                             </button>
                         </div>
                         
@@ -4304,18 +4400,18 @@ const PatientDetails = () => {
                                 }`}>
                                     <div className="flex justify-between items-center">
                                         <span>Patient Deposit:</span>
-                                        <span className="font-bold">₦{patient?.depositBalance?.toLocaleString() || '0'}</span>
+                                        <span className="font-bold">â‚¦{patient?.depositBalance?.toLocaleString() || '0'}</span>
                                     </div>
                                     {isRetainership && (
                                         <div className="flex justify-between items-center border-t border-dashed border-gray-300 pt-1 mt-1">
                                             <span>Retainership ({patient?.hmo}):</span>
-                                            <span className="font-bold">{hasHmoDeposit ? '✅ Active Deposit' : '❌ No Deposit'}</span>
+                                            <span className="font-bold">{hasHmoDeposit ? 'âœ… Active Deposit' : 'âŒ No Deposit'}</span>
                                         </div>
                                     )}
                                 </div>
                                 {isBlocked && (
                                     <p className="text-xs text-red-600 mt-1 font-semibold">
-                                        ⚠️ Patient has no deposit balance. Admission is blocked until a deposit is paid.
+                                        âš ï¸ Patient has no deposit balance. Admission is blocked until a deposit is paid.
                                     </p>
                                 )}
                             </div>
@@ -4361,7 +4457,7 @@ const PatientDetails = () => {
                                 <div className="mb-4 p-3 bg-blue-50 rounded text-xs text-blue-800 border border-blue-100">
                                     <p className="font-bold">Provider: {patient.provider}</p>
                                     <p>
-                                        Rate: ₦{wards.find(w => w._id === selectedWard)?.rates?.[patient.provider] ||
+                                        Rate: â‚¦{wards.find(w => w._id === selectedWard)?.rates?.[patient.provider] ||
                                             wards.find(w => w._id === selectedWard)?.rates?.Standard ||
                                             wards.find(w => w._id === selectedWard)?.dailyRate || 0}
                                     </p>

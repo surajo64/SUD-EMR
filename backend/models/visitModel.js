@@ -79,6 +79,44 @@ const visitSchema = mongoose.Schema({
     dischargeDate: {
         type: Date
     },
+    // Discharge Summary
+    dischargeNotes: { type: String },
+    dischargedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+
+    clinicalNotes: [{
+        doctor: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+        presentingComplaints: { type: String },
+        historyOfPresentingComplaint: { type: String },
+        systemReview: { type: String },
+        pastMedicalSurgicalHistory: { type: String },
+        socialFamilyHistory: { type: String },
+        drugsHistory: { type: String },
+        functionalCognitiveStatus: { type: String },
+        menstruationGynecologicalObstetricsHistory: { type: String },
+        pregnancyHistory: { type: String },
+        immunization: { type: String },
+        nutritional: { type: String },
+        developmentalMilestones: { type: String },
+        generalAppearance: { type: String },
+        heent: { type: String },
+        neck: { type: String },
+        cvs: { type: String },
+        resp: { type: String },
+        abd: { type: String },
+        neuro: { type: String },
+        msk: { type: String },
+        skin: { type: String },
+        assessment: { type: String },
+        plan: { type: String },
+        diagnosis: [{
+            code: String,
+            description: String,
+            type: { type: String, enum: ['Primary', 'Secondary'] }
+        }],
+        createdAt: { type: Date, default: Date.now },
+        updatedAt: { type: Date, default: Date.now }
+    }],
+
     notes: [{
         text: String,
         author: String, // Name of the user who added the note
