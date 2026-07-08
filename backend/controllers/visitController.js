@@ -16,12 +16,28 @@ const checkUnpaidConsultation = async (visitId) => {
 const formatVisitWithClinicalNotes = (visit) => {
     if (!visit) return null;
     const visitObj = visit.toObject ? visit.toObject() : visit;
+
+    // Check if we have clinical notes (excluding virtual legacy ones)
+    let firstDoctor = null;
+    if (visitObj.clinicalNotes && visitObj.clinicalNotes.length > 0) {
+        const sortedNotes = [...visitObj.clinicalNotes].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        const firstNote = sortedNotes[0];
+        if (firstNote && firstNote.doctor) {
+            firstDoctor = firstNote.doctor;
+        }
+    }
+
+    if (firstDoctor) {
+        visitObj.consultingPhysician = firstDoctor;
+    }
+
     if ((!visitObj.clinicalNotes || visitObj.clinicalNotes.length === 0) &&
         (visitObj.presentingComplaints || visitObj.historyOfPresentingComplaint || visitObj.assessment || visitObj.plan || (visitObj.diagnosis && visitObj.diagnosis.length > 0))) {
         
+        const legacyDoctor = visitObj.consultingPhysician || visitObj.doctor;
         visitObj.clinicalNotes = [{
             _id: 'legacy-root',
-            doctor: visitObj.consultingPhysician || visitObj.doctor,
+            doctor: legacyDoctor,
             presentingComplaints: visitObj.presentingComplaints || '',
             historyOfPresentingComplaint: visitObj.historyOfPresentingComplaint || '',
             systemReview: visitObj.systemReview || '',
@@ -49,6 +65,11 @@ const formatVisitWithClinicalNotes = (visit) => {
             createdAt: visitObj.updatedAt || visitObj.createdAt,
             updatedAt: visitObj.updatedAt || visitObj.createdAt
         }];
+        visitObj.consultingPhysician = legacyDoctor;
+    } else if (!visitObj.clinicalNotes || visitObj.clinicalNotes.length === 0) {
+        if (!visitObj.consultingPhysician) {
+            visitObj.consultingPhysician = null;
+        }
     }
     return visitObj;
 };
@@ -213,40 +234,43 @@ const getVisits = async (req, res) => {
         const doctorClinicName = req.user.assignedSpecialityClinic?.name;
         const doctorId = req.user._id;
 
-        query.$and = query.$and || [];
-
-        // Speciality restriction visibility rule:
+        let specialityFilter = {};
         if (doctorClinicId) {
             if (doctorClinicName === 'General Physician') {
-                // General Physician doctors can see:
-                // 1. Unrestricted general visits (needSpeciality !== true)
-                // 2. Visits restricted to General Physician speciality clinic
-                query.$and.push({
+                specialityFilter = {
                     $or: [
                         { needSpeciality: { $ne: true } },
                         { specialityClinic: doctorClinicId }
                     ]
-                });
+                };
             } else {
-                // Non-General Physician doctors (e.g. Obgyn, Pediatrics, etc.) can ONLY see:
-                // Visits explicitly restricted to their clinic
-                query.$and.push({
+                specialityFilter = {
                     needSpeciality: true,
                     specialityClinic: doctorClinicId
-                });
+                };
             }
         } else {
-            // If the doctor has no assigned clinic, fallback to showing only general visits
-            query.$and.push({
+            specialityFilter = {
                 needSpeciality: { $ne: true }
-            });
+            };
         }
 
-        // Specific Doctor restriction
-        query.$and.push({
+        const specificDoctorFilter = {
             $or: [
                 { needSpecificDoctor: { $ne: true } },
                 { specificDoctor: doctorId }
+            ]
+        };
+
+        query.$and = query.$and || [];
+        // Admitted inpatients can be accessed by all doctors of any speciality.
+        // Therefore, restrictions ONLY apply if the encounter is NOT Inpatient.
+        query.$and.push({
+            $or: [
+                { type: 'Inpatient' },
+                {
+                    $and: [specialityFilter, specificDoctorFilter]
+                }
             ]
         });
     }
@@ -254,6 +278,7 @@ const getVisits = async (req, res) => {
     const visits = await Visit.find(query)
         .populate('patient', 'name mrn age gender contact')
         .populate('doctor', 'name')
+        .populate('consultingPhysician', 'name')
         .populate('clinicalNotes.doctor', 'name role')
         .populate('clinic', 'name department')
         .populate('ward', 'name dailyRate')
@@ -432,15 +457,18 @@ const getVisitById = async (req, res) => {
 
     if (visit) {
         if (req.user && req.user.role === 'doctor') {
-            const doctorClinicId = req.user.assignedSpecialityClinic?._id || req.user.assignedSpecialityClinic;
-            const doctorId = req.user._id;
+            // All doctors can access any admitted/inpatient encounter.
+            if (visit.type !== 'Inpatient') {
+                const doctorClinicId = req.user.assignedSpecialityClinic?._id || req.user.assignedSpecialityClinic;
+                const doctorId = req.user._id;
 
-            if (visit.needSpeciality && visit.specialityClinic && visit.specialityClinic.toString() !== doctorClinicId?.toString()) {
-                return res.status(403).json({ message: 'Access denied: This encounter is restricted to a different speciality clinic.' });
-            }
+                if (visit.needSpeciality && visit.specialityClinic && visit.specialityClinic.toString() !== doctorClinicId?.toString()) {
+                    return res.status(403).json({ message: 'Access denied: This encounter is restricted to a different speciality clinic.' });
+                }
 
-            if (visit.needSpecificDoctor && visit.specificDoctor && visit.specificDoctor.toString() !== doctorId.toString()) {
-                return res.status(403).json({ message: 'Access denied: This encounter is restricted to a specific doctor.' });
+                if (visit.needSpecificDoctor && visit.specificDoctor && visit.specificDoctor.toString() !== doctorId.toString()) {
+                    return res.status(403).json({ message: 'Access denied: This encounter is restricted to a specific doctor.' });
+                }
             }
         }
 

@@ -138,6 +138,13 @@ const getPatients = async (req, res) => {
             const doctorClinicId = req.user.assignedSpecialityClinic?._id || req.user.assignedSpecialityClinic;
             const doctorId = req.user._id;
 
+            // Find all patients who are currently active inpatients (so they shouldn't be excluded/restricted)
+            const activeInpatients = await Visit.find({
+                type: 'Inpatient',
+                encounterStatus: { $in: ['admitted', 'in_ward', 'in_nursing', 'with_doctor', 'awaiting_services'] }
+            }).select('patient');
+            const activeInpatientIds = activeInpatients.map(v => v.patient?.toString()).filter(Boolean);
+
             // Find any active encounters today that this doctor is NOT permitted to see
             const restrictedVisits = await Visit.find({
                 createdAt: { $gte: startOfDay, $lte: endOfDay },
@@ -147,7 +154,10 @@ const getPatients = async (req, res) => {
                 ]
             }).select('patient');
 
-            const excludedPatientIds = restrictedVisits.map(v => v.patient);
+            const excludedPatientIds = restrictedVisits
+                .map(v => v.patient?.toString())
+                .filter(id => id && !activeInpatientIds.includes(id));
+
             if (excludedPatientIds.length > 0) {
                 filter._id = { $nin: excludedPatientIds };
             }
@@ -387,21 +397,31 @@ const getPatientById = async (req, res) => {
                 endOfDay.setHours(23, 59, 59, 999);
 
                 const Visit = require('../models/visitModel');
-                const doctorClinicId = req.user.assignedSpecialityClinic?._id || req.user.assignedSpecialityClinic;
-                const doctorId = req.user._id;
 
-                // Check if patient has any active restricted encounters today that this doctor cannot see
-                const restrictedVisit = await Visit.findOne({
+                // Check if patient is currently an active inpatient
+                const isActiveInpatient = await Visit.findOne({
                     patient: patient._id,
-                    createdAt: { $gte: startOfDay, $lte: endOfDay },
-                    $or: [
-                        { needSpeciality: true, specialityClinic: { $ne: doctorClinicId } },
-                        { needSpecificDoctor: true, specificDoctor: { $ne: doctorId } }
-                    ]
+                    type: 'Inpatient',
+                    encounterStatus: { $in: ['admitted', 'in_ward', 'in_nursing', 'with_doctor', 'awaiting_services'] }
                 });
 
-                if (restrictedVisit) {
-                    return res.status(403).json({ message: 'Access denied: Patient is restricted to a different speciality clinic or doctor today.' });
+                if (!isActiveInpatient) {
+                    const doctorClinicId = req.user.assignedSpecialityClinic?._id || req.user.assignedSpecialityClinic;
+                    const doctorId = req.user._id;
+
+                    // Check if patient has any active restricted encounters today that this doctor cannot see
+                    const restrictedVisit = await Visit.findOne({
+                        patient: patient._id,
+                        createdAt: { $gte: startOfDay, $lte: endOfDay },
+                        $or: [
+                            { needSpeciality: true, specialityClinic: { $ne: doctorClinicId } },
+                            { needSpecificDoctor: true, specificDoctor: { $ne: doctorId } }
+                        ]
+                    });
+
+                    if (restrictedVisit) {
+                        return res.status(403).json({ message: 'Access denied: Patient is restricted to a different speciality clinic or doctor today.' });
+                    }
                 }
             }
 

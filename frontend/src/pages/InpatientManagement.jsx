@@ -16,7 +16,7 @@ const InpatientManagement = () => {
     const [filteredInpatients, setFilteredInpatients] = useState([]);
     const [wards, setWards] = useState([]);
     const [selectedWard, setSelectedWard] = useState('all');
-    
+
     const { user } = useContext(AuthContext);
     const { backendUrl } = useContext(AppContext);
     const navigate = useNavigate();
@@ -44,12 +44,12 @@ const InpatientManagement = () => {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             // Fetch all inpatient visits and filter for active ones in the frontend for maximum compatibility
             const { data } = await axios.get(`${backendUrl}/api/visits?type=Inpatient`, config);
-            
+
             const activeInpatients = data.filter(v => v.patient && v.encounterStatus !== 'discharged' && v.encounterStatus !== 'cancelled');
-            
+
             // Sort by admission date or created date (latest first)
             activeInpatients.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-            
+
             setInpatients(activeInpatients);
             setFilteredInpatients(activeInpatients);
         } catch (error) {
@@ -104,7 +104,7 @@ const InpatientManagement = () => {
     return (
         <Layout>
             {loading && <LoadingOverlay />}
-            
+
             <div className="mb-6 flex justify-between items-center">
                 <div>
                     <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
@@ -149,7 +149,7 @@ const InpatientManagement = () => {
                     <div className="col-span-full bg-gray-50 border-2 border-dashed border-gray-200 p-12 rounded-xl text-center">
                         <FaHospital className="text-6xl text-gray-300 mx-auto mb-4" />
                         <p className="text-gray-500 text-xl font-medium">No inpatients found matching your search.</p>
-                        <button 
+                        <button
                             onClick={fetchInpatients}
                             className="mt-4 text-green-600 font-bold hover:underline"
                         >
@@ -158,7 +158,7 @@ const InpatientManagement = () => {
                     </div>
                 ) : (
                     filteredInpatients.map((visit) => (
-                        <div 
+                        <div
                             key={visit._id}
                             onClick={() => handleSelectPatient(visit)}
                             className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition cursor-pointer border border-transparent hover:border-green-200"
@@ -195,7 +195,7 @@ const InpatientManagement = () => {
                                     <div>
                                         <p className="text-xs text-gray-500 uppercase font-bold">Consulting Doctor</p>
                                         <p className="font-semibold text-sm">
-                                            Dr. {visit.consultingPhysician?.name || visit.doctor?.name || 'Not assigned'}
+                                            {visit.consultingPhysician?.name ? ` ${visit.consultingPhysician.name}` : 'Not assigned'}
                                         </p>
                                     </div>
                                 </div>

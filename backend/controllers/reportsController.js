@@ -1339,6 +1339,7 @@ const getClinicalReport = async (req, res) => {
                 .populate('patient')
                 .populate('doctor', 'name role')
                 .populate('consultingPhysician', 'name role')
+                .populate('clinicalNotes.doctor', 'name role')
                 .sort({ createdAt: -1 });
 
             results = results.filter(v => v.patient &&
@@ -1348,11 +1349,31 @@ const getClinicalReport = async (req, res) => {
             );
 
             results.forEach(v => {
-                // Find best clinical doctor to attribute
-                let clinicalDoctor = v.consultingPhysician || v.doctor;
+                // Find first doctor who wrote a clinical note
+                let clinicalDoctor = null;
+                if (v.clinicalNotes && v.clinicalNotes.length > 0) {
+                    const sortedNotes = [...v.clinicalNotes].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                    const firstNote = sortedNotes[0];
+                    if (firstNote && firstNote.doctor) {
+                        clinicalDoctor = firstNote.doctor;
+                    }
+                }
+
+                if (!clinicalDoctor) {
+                    clinicalDoctor = v.consultingPhysician;
+                }
+
+                // Fallback to doctor if not a receptionist
+                if (!clinicalDoctor || clinicalDoctor.role === 'receptionist') {
+                    if (v.doctor && v.doctor.role !== 'receptionist') {
+                        clinicalDoctor = v.doctor;
+                    } else {
+                        clinicalDoctor = null;
+                    }
+                }
 
                 // If the check-in person (receptionist) is still showing, try finding a doctor in notes
-                if (clinicalDoctor?.role === 'receptionist' && v.notes && v.notes.length > 0) {
+                if ((!clinicalDoctor || clinicalDoctor.role === 'receptionist') && v.notes && v.notes.length > 0) {
                     const drNote = [...v.notes].reverse().find(n => n.role?.toLowerCase() === 'doctor');
                     if (drNote) clinicalDoctor = { name: drNote.author };
                 }
@@ -1644,6 +1665,7 @@ const getVisitReport = async (req, res) => {
             .populate('patient')
             .populate('doctor', 'name role')
             .populate('consultingPhysician', 'name role')
+            .populate('clinicalNotes.doctor', 'name role')
             .populate('clinic', 'name')
             .populate('ward', 'name')
             .sort({ createdAt: -1 });
@@ -1669,8 +1691,26 @@ const getVisitReport = async (req, res) => {
         // Map related data to visits
         const consolidatedData = visits.map(v => {
             const visitIdStr = v._id.toString();
+            
+            // Resolve consultingPhysician based on first clinical note
+            let firstDoctor = null;
+            if (v.clinicalNotes && v.clinicalNotes.length > 0) {
+                const sortedNotes = [...v.clinicalNotes].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                const firstNote = sortedNotes[0];
+                if (firstNote && firstNote.doctor) {
+                    firstDoctor = firstNote.doctor;
+                }
+            }
+            
+            const visitObj = v.toObject();
+            if (firstDoctor) {
+                visitObj.consultingPhysician = firstDoctor;
+            } else if (!visitObj.consultingPhysician) {
+                visitObj.consultingPhysician = null;
+            }
+
             return {
-                ...v.toObject(),
+                ...visitObj,
                 vitalSigns: vitals.filter(s => s.visit?.toString() === visitIdStr),
                 labOrders: labs.filter(l => l.visit?.toString() === visitIdStr),
                 radiologyOrders: rads.filter(r => r.visit?.toString() === visitIdStr),

@@ -24,11 +24,21 @@ const runDailyWardChargesJob = async () => {
     }
 };
 
+const mongoose = require('mongoose');
+
 const setupCronJobs = () => {
-    // Run once on startup after a small delay to ensure DB connects
-    setTimeout(() => {
-        runDailyWardChargesJob().catch(err => console.error('Startup daily ward charges job failed:', err));
-    }, 5000);
+    // Run once on startup when database is connected to avoid buffering timeouts
+    const runJobIfConnected = () => {
+        if (mongoose.connection.readyState === 1) {
+            runDailyWardChargesJob().catch(err => console.error('Startup daily ward charges job failed:', err));
+        } else {
+            mongoose.connection.once('connected', () => {
+                runDailyWardChargesJob().catch(err => console.error('Startup daily ward charges job failed:', err));
+            });
+        }
+    };
+
+    runJobIfConnected();
 
     // Run every hour
     cron.schedule('0 * * * *', async () => {

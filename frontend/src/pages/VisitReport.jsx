@@ -74,7 +74,7 @@ const VisitReport = () => {
             'Encounter ID': v._id,
             'Clinic/Dept': v.clinic?.name || v.type || 'N/A',
             'Status': v.encounterStatus || v.status || 'N/A',
-            'Doctor': v.consultingPhysician?.name || v.doctor?.name || 'N/A',
+            'Doctor': v.consultingPhysician?.name ? `Dr. ${v.consultingPhysician.name}` : 'N/A',
 
             // Vital Signs
             'Vitals': v.vitalSigns.map(s => `BP: ${s.bloodPressure}, T: ${s.temperature}C, P: ${s.pulseRate}, R: ${s.respiratoryRate}, SpO2: ${s.spo2}%, W: ${s.weight}kg, H: ${s.height}cm, BMI: ${s.bmi}`).join(' | '),
@@ -231,7 +231,7 @@ const VisitReport = () => {
                                             <div className="flex items-center gap-6">
                                                 <div className="text-right hidden sm:block">
                                                     <p className="text-[10px] uppercase font-bold text-gray-400">Doctor</p>
-                                                    <p className="text-sm font-bold text-gray-700">{visit.consultingPhysician?.name || visit.doctor?.name || 'N/A'}</p>
+                                                    <p className="text-sm font-bold text-gray-700">{visit.consultingPhysician?.name ? `Dr. ${visit.consultingPhysician.name}` : 'N/A'}</p>
                                                 </div>
                                                 {expandedVisits[visit._id] ? <FaChevronUp className="text-gray-400" /> : <FaChevronDown className="text-gray-400" />}
                                             </div>
