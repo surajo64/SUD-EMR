@@ -88,12 +88,12 @@ const FrontDeskDashboard = () => {
             return;
         }
 
-        const logoHtml = hospitalSettings?.hospitalLogo 
-            ? `<img src="${hospitalSettings.hospitalLogo.startsWith('data:') || hospitalSettings.hospitalLogo.startsWith('http') ? hospitalSettings.hospitalLogo : `${backendUrl}/uploads/${hospitalSettings.hospitalLogo}`}" alt="Logo" style="max-height: 80px; max-width: 150px; object-fit: contain; display: block; margin: 0 auto 10px;" />` 
+        const logoHtml = hospitalSettings?.hospitalLogo
+            ? `<img src="${hospitalSettings.hospitalLogo.startsWith('data:') || hospitalSettings.hospitalLogo.startsWith('http') ? hospitalSettings.hospitalLogo : `${backendUrl}/uploads/${hospitalSettings.hospitalLogo}`}" alt="Logo" style="max-height: 80px; max-width: 150px; object-fit: contain; display: block; margin: 0 auto 10px;" />`
             : '';
 
-        const phoneHtml = hospitalSettings?.phone 
-            ? `<p>Phone: ${hospitalSettings.phone} ${hospitalSettings.email ? ` | Email: ${hospitalSettings.email}` : ''}</p>` 
+        const phoneHtml = hospitalSettings?.phone
+            ? `<p>Phone: ${hospitalSettings.phone} ${hospitalSettings.email ? ` | Email: ${hospitalSettings.email}` : ''}</p>`
             : '';
 
         printWindow.document.write(`
@@ -123,7 +123,7 @@ const FrontDeskDashboard = () => {
                 <body>
                     <div class="header">
                         ${logoHtml}
-                        <h1>${hospitalSettings?.hospitalName || 'HOSPITAL CONSENT'}</h1>
+                        <h1>${hospitalSettings?.reportHeader || 'HOSPITAL CONSENT'}</h1>
                         <p>${hospitalSettings?.address || ''}</p>
                         ${phoneHtml}
                     </div>
@@ -795,7 +795,7 @@ const FrontDeskDashboard = () => {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             // Fetch charges for this encounter
             const { data: encCharges } = await axios.get(`${backendUrl}/api/encounter-charges/encounter/${activeEncounter._id}`, config);
-            
+
             // Set all form states to populate
             setSelectedPatient(patient);
             setSelectedEncounterId(activeEncounter._id);
@@ -810,11 +810,11 @@ const FrontDeskDashboard = () => {
             setSelectedSpecificDoctor(activeEncounter.specificDoctor?._id || activeEncounter.specificDoctor || '');
             setSelectedWard(activeEncounter.ward?._id || activeEncounter.ward || '');
             setSelectedBed(activeEncounter.bed || '');
-            
+
             // Set original and selected charges
             setOriginalEncounterCharges(encCharges);
             setSelectedCharges(encCharges.map(ec => ec.charge?._id || ec.charge).filter(Boolean));
-            
+
             setIsEditing(true);
             setShowEncounterModal(true);
         } catch (error) {
@@ -1612,7 +1612,7 @@ const FrontDeskDashboard = () => {
                                 </div>
                             )}
 
-                             {selectedCharges.length > 0 && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && (
+                            {selectedCharges.length > 0 && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && (
                                 <div className="bg-blue-50 p-4 rounded mb-6">
                                     <div className="flex justify-between items-center">
                                         <span className="font-semibold text-lg">Total Charges:</span>
@@ -1770,9 +1770,8 @@ const FrontDeskDashboard = () => {
                                                                     }
                                                                     setAddChargesSearchQuery(''); // Clear and close dropdown
                                                                 }}
-                                                                className={`w-full text-left p-3 hover:bg-gray-50 flex justify-between items-center border-b border-gray-100 last:border-b-0 transition-colors ${
-                                                                    isAlreadySelected ? 'opacity-50 cursor-not-allowed bg-green-50/20' : ''
-                                                                }`}
+                                                                className={`w-full text-left p-3 hover:bg-gray-50 flex justify-between items-center border-b border-gray-100 last:border-b-0 transition-colors ${isAlreadySelected ? 'opacity-50 cursor-not-allowed bg-green-50/20' : ''
+                                                                    }`}
                                                                 disabled={isAlreadySelected}
                                                             >
                                                                 <div>

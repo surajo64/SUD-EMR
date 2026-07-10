@@ -943,7 +943,7 @@ const PatientDetails = () => {
                 consentDate: formatDateForInput(note.consent.consentDate),
                 relationship: note.consent.relationship || 'self',
                 explanationDate: formatDateForInput(note.consent.explanationDate),
-                
+
                 patientSignatureName: note.consent.patientSignatureName || '',
                 patientSignatureDate: formatDateForInput(note.consent.patientSignatureDate),
                 surgeonSignatureName: note.consent.surgeonSignatureName || '',
@@ -952,9 +952,9 @@ const PatientDetails = () => {
                 guardianSignatureDate: formatDateForInput(note.consent.guardianSignatureDate),
                 anaesthetistSignatureName: note.consent.anaesthetistSignatureName || '',
                 anaesthetistSignatureDate: formatDateForInput(note.consent.anaesthetistSignatureDate),
-                
+
                 relationshipWithPatient: note.consent.relationshipWithPatient || '',
-                
+
                 patientThumbprint: note.consent.patientThumbprint || '',
                 patientThumbprintDate: formatDateForInput(note.consent.patientThumbprintDate),
                 witnessThumbprint: note.consent.witnessThumbprint || '',
@@ -977,7 +977,7 @@ const PatientDetails = () => {
                 consentDate: formatDateForInput(new Date()),
                 relationship: 'self',
                 explanationDate: formatDateForInput(new Date()),
-                
+
                 patientSignatureName: patient?.name || '',
                 patientSignatureDate: formatDateForInput(new Date()),
                 surgeonSignatureName: note.createdBy || note.leadSurgeon || '',
@@ -986,9 +986,9 @@ const PatientDetails = () => {
                 guardianSignatureDate: '',
                 anaesthetistSignatureName: note.anaesthetist || '',
                 anaesthetistSignatureDate: formatDateForInput(new Date()),
-                
+
                 relationshipWithPatient: '',
-                
+
                 patientThumbprint: '',
                 patientThumbprintDate: '',
                 witnessThumbprint: '',
@@ -1009,28 +1009,28 @@ const PatientDetails = () => {
                     'Content-Type': 'multipart/form-data'
                 }
             };
-            
+
             const formData = new FormData();
-            
+
             if (consentTab === 'upload' && !consentFile && !consentForm.uploadedFile) {
                 toast.error('Please select a PDF or image file to upload.');
                 setLoading(false);
                 return;
             }
-            
+
             if (consentFile) {
                 formData.append('consentFile', consentFile);
             }
-            
+
             // Send the entire consentForm data to preserve both digital fields and file path
             formData.append('consentData', JSON.stringify(consentForm));
-            
+
             const { data } = await axios.post(
                 `${backendUrl}/api/visits/${encounter._id}/theatre-notes/${consentActiveNote._id}/consent`,
                 formData,
                 config
             );
-            
+
             setTheatreNotes(data);
             setShowConsentModal(false);
             toast.success('Consent saved successfully');
@@ -1048,12 +1048,12 @@ const PatientDetails = () => {
             return;
         }
 
-        const logoHtml = hospitalSettings?.hospitalLogo 
-            ? `<img src="${hospitalSettings.hospitalLogo.startsWith('data:') || hospitalSettings.hospitalLogo.startsWith('http') ? hospitalSettings.hospitalLogo : `${backendUrl}/uploads/${hospitalSettings.hospitalLogo}`}" alt="Logo" style="max-height: 80px; max-width: 150px; object-fit: contain; display: block; margin: 0 auto 10px;" />` 
+        const logoHtml = hospitalSettings?.hospitalLogo
+            ? `<img src="${hospitalSettings.hospitalLogo.startsWith('data:') || hospitalSettings.hospitalLogo.startsWith('http') ? hospitalSettings.hospitalLogo : `${backendUrl}/uploads/${hospitalSettings.hospitalLogo}`}" alt="Logo" style="max-height: 80px; max-width: 150px; object-fit: contain; display: block; margin: 0 auto 10px;" />`
             : '';
 
-        const phoneHtml = hospitalSettings?.phone 
-            ? `<p>Phone: ${hospitalSettings.phone} ${hospitalSettings.email ? ` | Email: ${hospitalSettings.email}` : ''}</p>` 
+        const phoneHtml = hospitalSettings?.phone
+            ? `<p>Phone: ${hospitalSettings.phone} ${hospitalSettings.email ? ` | Email: ${hospitalSettings.email}` : ''}</p>`
             : '';
 
         printWindow.document.write(`
@@ -1083,7 +1083,7 @@ const PatientDetails = () => {
                 <body>
                     <div class="header">
                         ${logoHtml}
-                        <h1>${hospitalSettings?.hospitalName || 'HOSPITAL CONSENT'}</h1>
+                        <h1>${hospitalSettings?.reportHeader || 'HOSPITAL CONSENT'}</h1>
                         <p>${hospitalSettings?.address || ''}</p>
                         ${phoneHtml}
                     </div>
@@ -3364,8 +3364,8 @@ const PatientDetails = () => {
                                                                         </div>
                                                                         <div className="flex items-center gap-2">
                                                                             <span className={`text-xs px-3 py-1 rounded-full font-bold ${note.status === 'Reviewed' ? 'bg-green-400 text-green-900' :
-                                                                                    note.status === 'Completed' ? 'bg-blue-300 text-blue-900' :
-                                                                                        'bg-yellow-300 text-yellow-900'
+                                                                                note.status === 'Completed' ? 'bg-blue-300 text-blue-900' :
+                                                                                    'bg-yellow-300 text-yellow-900'
                                                                                 }`}>{note.status}</span>
                                                                             {canEdit && (
                                                                                 <button
@@ -3813,8 +3813,8 @@ const PatientDetails = () => {
                             <h3 className="text-xl font-bold flex items-center gap-2">
                                 <FaFileAlt /> Surgical Consent Registry
                             </h3>
-                            <button 
-                                onClick={() => { setShowConsentModal(false); setConsentActiveNote(null); }} 
+                            <button
+                                onClick={() => { setShowConsentModal(false); setConsentActiveNote(null); }}
                                 className="hover:text-indigo-200 p-1"
                             >
                                 <FaTimes size={24} />
@@ -3827,22 +3827,20 @@ const PatientDetails = () => {
                                 <button
                                     type="button"
                                     onClick={() => setConsentTab('digital')}
-                                    className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
-                                        consentTab === 'digital' 
-                                            ? 'bg-indigo-600 text-white shadow-sm' 
+                                    className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${consentTab === 'digital'
+                                            ? 'bg-indigo-600 text-white shadow-sm'
                                             : 'bg-white border text-gray-700 hover:bg-gray-100'
-                                    }`}
+                                        }`}
                                 >
                                     Digital Consent Form
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setConsentTab('upload')}
-                                    className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
-                                        consentTab === 'upload' 
-                                            ? 'bg-indigo-600 text-white shadow-sm' 
+                                    className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${consentTab === 'upload'
+                                            ? 'bg-indigo-600 text-white shadow-sm'
                                             : 'bg-white border text-gray-700 hover:bg-gray-100'
-                                    }`}
+                                        }`}
                                 >
                                     Upload Filled Form (PDF/Image)
                                 </button>
@@ -3884,10 +3882,10 @@ const PatientDetails = () => {
                                                 {/* Printed Header */}
                                                 <div className="text-center border-b pb-4">
                                                     {hospitalSettings?.hospitalLogo && (
-                                                        <img 
-                                                            src={hospitalSettings.hospitalLogo.startsWith('data:') || hospitalSettings.hospitalLogo.startsWith('http') ? hospitalSettings.hospitalLogo : `${backendUrl}/uploads/${hospitalSettings.hospitalLogo}`} 
-                                                            alt="Logo" 
-                                                            className="max-h-20 max-w-[150px] mx-auto object-contain mb-3" 
+                                                        <img
+                                                            src={hospitalSettings.hospitalLogo.startsWith('data:') || hospitalSettings.hospitalLogo.startsWith('http') ? hospitalSettings.hospitalLogo : `${backendUrl}/uploads/${hospitalSettings.hospitalLogo}`}
+                                                            alt="Logo"
+                                                            className="max-h-20 max-w-[150px] mx-auto object-contain mb-3"
                                                         />
                                                     )}
                                                     <h2 className="text-xl font-bold uppercase tracking-wider">{hospitalSettings?.hospitalName || 'Hospital Consent Registry'}</h2>
@@ -3997,15 +3995,15 @@ const PatientDetails = () => {
                                                     {consentActiveNote.consent.uploadedFile.toLowerCase().endsWith('.pdf') ? (
                                                         <div className="w-full flex flex-col items-center space-y-4">
                                                             <div className="w-full h-[600px] border rounded bg-white relative">
-                                                                <iframe 
-                                                                    src={`${backendUrl}/${consentActiveNote.consent.uploadedFile}`} 
+                                                                <iframe
+                                                                    src={`${backendUrl}/${consentActiveNote.consent.uploadedFile}`}
                                                                     className="w-full h-full"
                                                                     title="Uploaded Consent PDF"
                                                                 />
                                                             </div>
-                                                            <a 
+                                                            <a
                                                                 href={`${backendUrl}/${consentActiveNote.consent.uploadedFile}`}
-                                                                target="_blank" 
+                                                                target="_blank"
                                                                 rel="noopener noreferrer"
                                                                 className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 shadow-md transition"
                                                             >
@@ -4014,12 +4012,12 @@ const PatientDetails = () => {
                                                         </div>
                                                     ) : (
                                                         <div className="w-full flex flex-col items-center space-y-4">
-                                                            <img 
-                                                                src={`${backendUrl}/${consentActiveNote.consent.uploadedFile}`} 
-                                                                alt="Uploaded Consent" 
+                                                            <img
+                                                                src={`${backendUrl}/${consentActiveNote.consent.uploadedFile}`}
+                                                                alt="Uploaded Consent"
                                                                 className="max-w-full max-h-[600px] rounded-lg object-contain shadow-md"
                                                             />
-                                                            <a 
+                                                            <a
                                                                 href={`${backendUrl}/${consentActiveNote.consent.uploadedFile}`}
                                                                 download
                                                                 target="_blank"
@@ -4046,10 +4044,10 @@ const PatientDetails = () => {
                                             {/* Logo and Header Details */}
                                             <div className="text-center border-b pb-4">
                                                 {hospitalSettings?.hospitalLogo && (
-                                                    <img 
-                                                        src={hospitalSettings.hospitalLogo.startsWith('data:') || hospitalSettings.hospitalLogo.startsWith('http') ? hospitalSettings.hospitalLogo : `${backendUrl}/uploads/${hospitalSettings.hospitalLogo}`} 
-                                                        alt="Logo" 
-                                                        className="max-h-20 max-w-[150px] mx-auto object-contain mb-3" 
+                                                    <img
+                                                        src={hospitalSettings.hospitalLogo.startsWith('data:') || hospitalSettings.hospitalLogo.startsWith('http') ? hospitalSettings.hospitalLogo : `${backendUrl}/uploads/${hospitalSettings.hospitalLogo}`}
+                                                        alt="Logo"
+                                                        className="max-h-20 max-w-[150px] mx-auto object-contain mb-3"
                                                     />
                                                 )}
                                                 <h2 className="text-xl font-bold uppercase tracking-wider">{hospitalSettings?.hospitalName || 'Hospital Consent Registry'}</h2>
@@ -4064,21 +4062,21 @@ const PatientDetails = () => {
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     <div>
                                                         <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Full Name of Patient (Surname first)</label>
-                                                        <input 
-                                                            type="text" 
+                                                        <input
+                                                            type="text"
                                                             className="w-full border rounded p-2 text-sm bg-gray-50"
                                                             placeholder="Patient Name"
-                                                            value={consentForm.patientName} 
+                                                            value={consentForm.patientName}
                                                             onChange={e => setConsentForm(p => ({ ...p, patientName: e.target.value }))}
                                                         />
                                                     </div>
                                                     <div>
                                                         <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Full Address of Patient (Not P.O. Box)</label>
-                                                        <input 
-                                                            type="text" 
+                                                        <input
+                                                            type="text"
                                                             className="w-full border rounded p-2 text-sm"
                                                             placeholder="Patient Address"
-                                                            value={consentForm.patientAddress} 
+                                                            value={consentForm.patientAddress}
                                                             onChange={e => setConsentForm(p => ({ ...p, patientAddress: e.target.value }))}
                                                         />
                                                     </div>
@@ -4091,11 +4089,11 @@ const PatientDetails = () => {
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     <div>
                                                         <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Full Name of Physician (Surname first)</label>
-                                                        <input 
-                                                            type="text" 
+                                                        <input
+                                                            type="text"
                                                             className="w-full border rounded p-2 text-sm"
                                                             placeholder="Dr. Surname First"
-                                                            value={consentForm.physicianName} 
+                                                            value={consentForm.physicianName}
                                                             onChange={e => setConsentForm(p => ({ ...p, physicianName: e.target.value }))}
                                                         />
                                                     </div>
@@ -4108,20 +4106,20 @@ const PatientDetails = () => {
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     <div>
                                                         <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Procedure</label>
-                                                        <input 
-                                                            type="text" 
+                                                        <input
+                                                            type="text"
                                                             className="w-full border rounded p-2 text-sm bg-gray-50"
                                                             placeholder="Procedure Name"
-                                                            value={consentForm.procedureName} 
+                                                            value={consentForm.procedureName}
                                                             onChange={e => setConsentForm(p => ({ ...p, procedureName: e.target.value }))}
                                                         />
                                                     </div>
                                                     <div>
                                                         <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Consent Date</label>
-                                                        <input 
-                                                            type="date" 
+                                                        <input
+                                                            type="date"
                                                             className="w-full border rounded p-2 text-sm"
-                                                            value={consentForm.consentDate} 
+                                                            value={consentForm.consentDate}
                                                             onChange={e => setConsentForm(p => ({ ...p, consentDate: e.target.value }))}
                                                         />
                                                     </div>
@@ -4130,9 +4128,9 @@ const PatientDetails = () => {
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     <div>
                                                         <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Relationship to Patient (e.g. self/child/spouse/etc.)</label>
-                                                        <select 
+                                                        <select
                                                             className="w-full border rounded p-2 text-sm"
-                                                            value={consentForm.relationship} 
+                                                            value={consentForm.relationship}
                                                             onChange={e => setConsentForm(p => ({ ...p, relationship: e.target.value }))}
                                                         >
                                                             <option value="self">Self</option>
@@ -4145,10 +4143,10 @@ const PatientDetails = () => {
                                                     </div>
                                                     <div>
                                                         <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Explanation Date (Presentation Date)</label>
-                                                        <input 
-                                                            type="date" 
+                                                        <input
+                                                            type="date"
                                                             className="w-full border rounded p-2 text-sm"
-                                                            value={consentForm.explanationDate} 
+                                                            value={consentForm.explanationDate}
                                                             onChange={e => setConsentForm(p => ({ ...p, explanationDate: e.target.value }))}
                                                         />
                                                     </div>
@@ -4168,7 +4166,7 @@ const PatientDetails = () => {
 
                                                 {/* Signatures Fields */}
                                                 <h4 className="text-sm font-bold text-gray-700 border-b pb-1 mt-6">Signatures & Approvals</h4>
-                                                
+
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                                     {/* Patient Signature */}
                                                     <div className="border p-4 rounded bg-gray-50 space-y-3">
@@ -4281,14 +4279,14 @@ const PatientDetails = () => {
                                             </div>
 
                                             <div className="w-full max-w-xs">
-                                                <input 
-                                                    type="file" 
-                                                    id="consent-file-upload" 
-                                                    accept=".pdf,image/*" 
-                                                    className="hidden" 
+                                                <input
+                                                    type="file"
+                                                    id="consent-file-upload"
+                                                    accept=".pdf,image/*"
+                                                    className="hidden"
                                                     onChange={e => setConsentFile(e.target.files[0])}
                                                 />
-                                                <label 
+                                                <label
                                                     htmlFor="consent-file-upload"
                                                     className="block text-center cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-2 px-4 rounded-lg shadow transition"
                                                 >
@@ -4299,8 +4297,8 @@ const PatientDetails = () => {
                                             {consentFile ? (
                                                 <div className="bg-green-50 border border-green-200 text-green-800 text-xs px-3 py-2 rounded-lg w-full flex justify-between items-center">
                                                     <span className="truncate max-w-[80%] font-semibold">{consentFile.name}</span>
-                                                    <button 
-                                                        onClick={() => setConsentFile(null)} 
+                                                    <button
+                                                        onClick={() => setConsentFile(null)}
                                                         className="text-red-500 hover:text-red-700 font-bold ml-2 text-sm"
                                                     >
                                                         Remove
@@ -5274,8 +5272,8 @@ const PatientDetails = () => {
                             <div className="mb-4">
                                 <label className="block text-gray-700 font-bold text-sm mb-1">Financial Deposit Balance</label>
                                 <div className={`p-3 rounded border text-sm font-semibold flex flex-col gap-1 ${isBlocked
-                                        ? 'bg-red-50 text-red-800 border-red-200'
-                                        : 'bg-green-50 text-green-800 border-green-200'
+                                    ? 'bg-red-50 text-red-800 border-red-200'
+                                    : 'bg-green-50 text-green-800 border-green-200'
                                     }`}>
                                     <div className="flex justify-between items-center">
                                         <span>Patient Deposit:</span>
@@ -5354,8 +5352,8 @@ const PatientDetails = () => {
                                     onClick={handleConvertToInpatient}
                                     disabled={!selectedWard || !selectedBed || isBlocked}
                                     className={`px-4 py-2 rounded text-white text-sm font-semibold transition ${!selectedWard || !selectedBed || isBlocked
-                                            ? 'bg-purple-300 cursor-not-allowed'
-                                            : 'bg-purple-600 hover:bg-purple-700 shadow-sm'
+                                        ? 'bg-purple-300 cursor-not-allowed'
+                                        : 'bg-purple-600 hover:bg-purple-700 shadow-sm'
                                         }`}
                                 >
                                     Confirm Admission
