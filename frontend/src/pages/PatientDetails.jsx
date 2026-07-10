@@ -9,8 +9,9 @@ import { checkRange, getRangeColorClass } from '../utils/labUtils';
 import Layout from '../components/Layout';
 import LoadingOverlay from '../components/loadingOverlay';
 import AppointmentModal from '../components/AppointmentModal';
-import { FaTimes, FaFileMedical, FaPills, FaChevronDown, FaChevronUp, FaHeartbeat, FaNotesMedical, FaProcedures, FaXRay, FaVial, FaUserMd, FaCalendarPlus, FaPlus, FaTrash, FaEdit, FaSearch, FaClock, FaChevronRight, FaFileAlt, FaCheckCircle, FaInfoCircle, FaDollarSign } from 'react-icons/fa';
+import { FaTimes, FaFileMedical, FaPills, FaChevronDown, FaChevronUp, FaHeartbeat, FaNotesMedical, FaProcedures, FaXRay, FaVial, FaUserMd, FaCalendarPlus, FaPlus, FaTrash, FaEdit, FaSearch, FaClock, FaChevronRight, FaFileAlt, FaCheckCircle, FaInfoCircle, FaDollarSign, FaPrint, FaUpload, FaEye, FaDownload } from 'react-icons/fa';
 import icd11Data from '../data/icd11.json';
+import useHospitalSettings from '../hooks/useHospitalSettings';
 
 const getNurseFirstName = (fullName) => {
     if (!fullName) return 'Unknown';
@@ -28,6 +29,7 @@ const PatientDetails = () => {
     const { id } = useParams();
     const { user } = useContext(AuthContext);
     const { backendUrl } = useContext(AppContext);
+    const { settings: hospitalSettings } = useHospitalSettings();
     const [loading, setLoading] = useState(false);
     const [patient, setPatient] = useState(null);
     const [encounter, setEncounter] = useState(null);
@@ -390,6 +392,34 @@ const PatientDetails = () => {
         anaesthesiaNote: '', digitalSignature: '', status: 'Draft'
     };
     const [theatreNoteForm, setTheatreNoteForm] = useState({ ...emptyTheatreNote });
+    const [showConsentModal, setShowConsentModal] = useState(false);
+    const [consentActiveNote, setConsentActiveNote] = useState(null);
+    const [consentTab, setConsentTab] = useState('digital');
+    const [consentFile, setConsentFile] = useState(null);
+    const [isConsentViewing, setIsConsentViewing] = useState(false);
+    const emptyConsentForm = {
+        patientName: '',
+        patientAddress: '',
+        physicianName: '',
+        procedureName: '',
+        consentDate: '',
+        relationship: 'self',
+        explanationDate: '',
+        patientSignatureName: '',
+        patientSignatureDate: '',
+        surgeonSignatureName: '',
+        surgeonSignatureDate: '',
+        guardianSignatureName: '',
+        guardianSignatureDate: '',
+        anaesthetistSignatureName: '',
+        anaesthetistSignatureDate: '',
+        relationshipWithPatient: '',
+        patientThumbprint: '',
+        patientThumbprintDate: '',
+        witnessThumbprint: '',
+        witnessThumbprintDate: '',
+    };
+    const [consentForm, setConsentForm] = useState({ ...emptyConsentForm });
     const [dispensedPrescriptions, setDispensedPrescriptions] = useState([]);
     const [administrationHistory, setAdministrationHistory] = useState([]);
 
@@ -890,6 +920,260 @@ const PatientDetails = () => {
             setAvailableBeds([]);
         }
     }, [selectedWard, wards]);
+
+    const formatDateForInput = (d) => {
+        if (!d) return '';
+        try {
+            return new Date(d).toISOString().slice(0, 10);
+        } catch (e) {
+            return '';
+        }
+    };
+
+    const handleOpenConsentModal = (note) => {
+        setConsentActiveNote(note);
+        setConsentFile(null);
+        if (note.consent) {
+            setIsConsentViewing(true);
+            setConsentForm({
+                patientName: note.consent.patientName || '',
+                patientAddress: note.consent.patientAddress || '',
+                physicianName: note.consent.physicianName || '',
+                procedureName: note.consent.procedureName || '',
+                consentDate: formatDateForInput(note.consent.consentDate),
+                relationship: note.consent.relationship || 'self',
+                explanationDate: formatDateForInput(note.consent.explanationDate),
+                
+                patientSignatureName: note.consent.patientSignatureName || '',
+                patientSignatureDate: formatDateForInput(note.consent.patientSignatureDate),
+                surgeonSignatureName: note.consent.surgeonSignatureName || '',
+                surgeonSignatureDate: formatDateForInput(note.consent.surgeonSignatureDate),
+                guardianSignatureName: note.consent.guardianSignatureName || '',
+                guardianSignatureDate: formatDateForInput(note.consent.guardianSignatureDate),
+                anaesthetistSignatureName: note.consent.anaesthetistSignatureName || '',
+                anaesthetistSignatureDate: formatDateForInput(note.consent.anaesthetistSignatureDate),
+                
+                relationshipWithPatient: note.consent.relationshipWithPatient || '',
+                
+                patientThumbprint: note.consent.patientThumbprint || '',
+                patientThumbprintDate: formatDateForInput(note.consent.patientThumbprintDate),
+                witnessThumbprint: note.consent.witnessThumbprint || '',
+                witnessThumbprintDate: formatDateForInput(note.consent.witnessThumbprintDate),
+                uploadedFile: note.consent.uploadedFile || '',
+            });
+            if (note.consent.uploadedFile) {
+                setConsentTab('upload');
+            } else {
+                setConsentTab('digital');
+            }
+        } else {
+            setIsConsentViewing(false);
+            setConsentTab('digital');
+            setConsentForm({
+                patientName: patient?.name || '',
+                patientAddress: patient?.address || '',
+                physicianName: note.createdBy || note.leadSurgeon || '',
+                procedureName: note.procedurePerformed || '',
+                consentDate: formatDateForInput(new Date()),
+                relationship: 'self',
+                explanationDate: formatDateForInput(new Date()),
+                
+                patientSignatureName: patient?.name || '',
+                patientSignatureDate: formatDateForInput(new Date()),
+                surgeonSignatureName: note.createdBy || note.leadSurgeon || '',
+                surgeonSignatureDate: formatDateForInput(new Date()),
+                guardianSignatureName: '',
+                guardianSignatureDate: '',
+                anaesthetistSignatureName: note.anaesthetist || '',
+                anaesthetistSignatureDate: formatDateForInput(new Date()),
+                
+                relationshipWithPatient: '',
+                
+                patientThumbprint: '',
+                patientThumbprintDate: '',
+                witnessThumbprint: '',
+                witnessThumbprintDate: '',
+                uploadedFile: '',
+            });
+        }
+        setShowConsentModal(true);
+    };
+
+    const handleSaveConsent = async () => {
+        if (!encounter || !consentActiveNote) return;
+        try {
+            setLoading(true);
+            const config = {
+                headers: {
+                    Authorization: `Bearer ${user.token}`,
+                    'Content-Type': 'multipart/form-data'
+                }
+            };
+            
+            const formData = new FormData();
+            
+            if (consentTab === 'upload' && !consentFile && !consentForm.uploadedFile) {
+                toast.error('Please select a PDF or image file to upload.');
+                setLoading(false);
+                return;
+            }
+            
+            if (consentFile) {
+                formData.append('consentFile', consentFile);
+            }
+            
+            // Send the entire consentForm data to preserve both digital fields and file path
+            formData.append('consentData', JSON.stringify(consentForm));
+            
+            const { data } = await axios.post(
+                `${backendUrl}/api/visits/${encounter._id}/theatre-notes/${consentActiveNote._id}/consent`,
+                formData,
+                config
+            );
+            
+            setTheatreNotes(data);
+            setShowConsentModal(false);
+            toast.success('Consent saved successfully');
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Error saving consent');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handlePrintConsent = () => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            alert('Please allow popups for this website to print.');
+            return;
+        }
+
+        const logoHtml = hospitalSettings?.hospitalLogo 
+            ? `<img src="${hospitalSettings.hospitalLogo.startsWith('data:') || hospitalSettings.hospitalLogo.startsWith('http') ? hospitalSettings.hospitalLogo : `${backendUrl}/uploads/${hospitalSettings.hospitalLogo}`}" alt="Logo" style="max-height: 80px; max-width: 150px; object-fit: contain; display: block; margin: 0 auto 10px;" />` 
+            : '';
+
+        const phoneHtml = hospitalSettings?.phone 
+            ? `<p>Phone: ${hospitalSettings.phone} ${hospitalSettings.email ? ` | Email: ${hospitalSettings.email}` : ''}</p>` 
+            : '';
+
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Consent Form - ${patient?.name || ''}</title>
+                    <style>
+                        @page {
+                            size: A4;
+                            margin: 10mm 15mm;
+                        }
+                        body { font-family: 'Times New Roman', serif; padding: 0; margin: 0; color: #000; line-height: 1.35; font-size: 13px; }
+                        .header { text-align: center; margin-bottom: 12px; border-bottom: 2px double #000; padding-bottom: 6px; position: relative; }
+                        .header h1 { font-size: 18px; text-transform: uppercase; margin: 2px 0; font-weight: bold; letter-spacing: 0.5px; }
+                        .header p { font-size: 12px; margin: 1px 0; }
+                        .title { text-align: center; font-size: 14px; font-weight: bold; text-transform: uppercase; text-decoration: underline; margin: 10px 0; letter-spacing: 0.5px; }
+                        .paragraph { margin: 6px 0; text-align: justify; }
+                        .line-fill { border-bottom: 1px dotted #000; display: inline-block; padding: 0 5px; font-weight: bold; font-style: italic; min-width: 120px; text-align: center; }
+                        .grid-signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 25px; margin-top: 12px; }
+                        .signature-box { border-top: 1px solid #000; margin-top: 15px; padding-top: 2px; font-size: 11px; line-height: 1.35; }
+                        .footer { text-align: center; font-size: 9px; margin-top: 15px; color: #555; border-top: 1px solid #ddd; padding-top: 4px; }
+                        @media print {
+                            body { padding: 0; margin: 0; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        ${logoHtml}
+                        <h1>${hospitalSettings?.hospitalName || 'HOSPITAL CONSENT'}</h1>
+                        <p>${hospitalSettings?.address || ''}</p>
+                        ${phoneHtml}
+                    </div>
+                    <div class="title">Consent for Surgery/Procedures</div>
+                    
+                    <div class="paragraph">
+                        I, <span class="line-fill" style="min-width: 300px;">${consentForm.patientName || '______________________________________'}</span> (Full names of the patient, surname first),
+                    </div>
+                    <div class="paragraph">
+                        of <span class="line-fill" style="min-width: 450px;">${consentForm.patientAddress || '______________________________________'}</span> (Full address of the Patient not P.O.Box),
+                    </div>
+                    <div class="paragraph">
+                        Hereby, after detailed explanation of the risks and benefits to me by
+                    </div>
+                    <div class="paragraph">
+                        Dr. <span class="line-fill" style="min-width: 300px;">${consentForm.physicianName || '______________________________________'}</span> (Full names of the physician, surname first),
+                    </div>
+                    <div class="paragraph">
+                        Willingly consent to the procedure of <span class="line-fill" style="min-width: 300px;">${consentForm.procedureName || '______________________________________'}</span> 
+                        on <span class="line-fill" style="min-width: 150px;">${consentForm.consentDate ? new Date(consentForm.consentDate).toLocaleDateString() : '__________________'}</span>.
+                    </div>
+                    <div class="paragraph">
+                        Relationship to Patient: <span class="line-fill" style="min-width: 250px;">${consentForm.relationship || '__________________'}</span>.
+                    </div>
+                    
+                    <div class="paragraph" style="margin-top: 25px;">
+                        I affirm that I clearly understand the language of presentation. The option to think over the procedure for a period before assenting was also presented to me.
+                    </div>
+                    
+                    <div class="paragraph">
+                        <strong>I further affirm:</strong>
+                        <ul style="margin-top: 5px; padding-left: 20px;">
+                            <li>That explanation about this Surgery/procedure was first given to me at presentation date <span class="line-fill" style="min-width: 150px;">${consentForm.explanationDate ? new Date(consentForm.explanationDate).toLocaleDateString() : '_______________'}</span></li>
+                            <li>That the extent of the procedure and mode of Anaesthesia are left to the discretion of the Physician, including the use of blood and/or its product.</li>
+                            <li>That any additional surgery or procedure to that described above will only be carried out if necessary and in my best interest and can be justified for medical reasons.</li>
+                            <li>I understand that an assurance has not been given that the operation will be performed by a particular surgeon.</li>
+                        </ul>
+                    </div>
+
+                    <div class="grid-signatures">
+                        <div class="signature-box">
+                            <strong>Name and Signature of Patient:</strong><br/>
+                            Name: ${consentForm.patientSignatureName || '______________________'}<br/>
+                            Date: ${consentForm.patientSignatureDate ? new Date(consentForm.patientSignatureDate).toLocaleDateString() : '__________'}
+                        </div>
+                        <div class="signature-box">
+                            <strong>Name and Signature of Surgeon:</strong><br/>
+                            Name: ${consentForm.surgeonSignatureName || '______________________'}<br/>
+                            Date: ${consentForm.surgeonSignatureDate ? new Date(consentForm.surgeonSignatureDate).toLocaleDateString() : '__________'}
+                        </div>
+                        <div class="signature-box">
+                            <strong>Name and Signature of Guardian/Witness:</strong><br/>
+                            Name: ${consentForm.guardianSignatureName || '______________________'}<br/>
+                            Relationship: ${consentForm.relationshipWithPatient || '______________________'}<br/>
+                            Date: ${consentForm.guardianSignatureDate ? new Date(consentForm.guardianSignatureDate).toLocaleDateString() : '__________'}
+                        </div>
+                        <div class="signature-box">
+                            <strong>Name and Signature of Anaesthetist:</strong><br/>
+                            Name: ${consentForm.anaesthetistSignatureName || '______________________'}<br/>
+                            Date: ${consentForm.anaesthetistSignatureDate ? new Date(consentForm.anaesthetistSignatureDate).toLocaleDateString() : '__________'}
+                        </div>
+                    </div>
+
+                    <div class="grid-signatures" style="margin-top: 30px;">
+                        <div class="signature-box">
+                            <strong>Thumb print of Patient:</strong><br/>
+                            Confirm: ${consentForm.patientThumbprint ? 'Yes' : '______________________'}<br/>
+                            Date: ${consentForm.patientThumbprintDate ? new Date(consentForm.patientThumbprintDate).toLocaleDateString() : '__________'}
+                        </div>
+                        <div class="signature-box">
+                            <strong>Thumb print of Witness/Guardian:</strong><br/>
+                            Confirm: ${consentForm.witnessThumbprint ? 'Yes' : '______________________'}<br/>
+                            Date: ${consentForm.witnessThumbprintDate ? new Date(consentForm.witnessThumbprintDate).toLocaleDateString() : '__________'}
+                        </div>
+                    </div>
+
+                    <div class="footer">
+                        Generated by ${user.name} on ${new Date().toLocaleString()} | EMR Consent Registry
+                    </div>
+                    
+                    <script>
+                        window.onload = function() {
+                            window.print();
+                        }
+                    </script>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+    };
 
     const handleConvertToInpatient = async () => {
         if (!selectedWard || !selectedBed) {
@@ -3114,6 +3398,7 @@ const PatientDetails = () => {
                                                                             ['Circulating Nurse', note.circulatingNurse],
                                                                             ['Anaesthesia Type', note.anaesthesiaType],
                                                                             ['Theatre', note.theatreName],
+                                                                            ['Recorded By', note.createdBy],
                                                                             ['Start / End Time', note.startTime && note.endTime ? `${note.startTime} - ${note.endTime}` : (note.startTime || note.endTime || '')],
                                                                         ].filter(([, v]) => v).map(([label, value]) => (
                                                                             <div key={label} className="bg-white p-3">
@@ -3140,6 +3425,32 @@ const PatientDetails = () => {
                                                                             <p className="whitespace-pre-wrap text-sm text-gray-700">{note.anaesthesiaNote}</p>
                                                                         </div>
                                                                     )}
+                                                                    {/* Consent Action Button */}
+                                                                    <div className="bg-white px-5 py-3 border-t flex items-center justify-between">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="text-xs font-bold text-gray-500 uppercase">Surgical Consent:</span>
+                                                                            {note.consent ? (
+                                                                                <span className="text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                                                                                    {note.consent.uploadedFile ? 'Uploaded File' : 'Digitally Signed'}
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-xs font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full">
+                                                                                    Missing
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        <button
+                                                                            onClick={() => handleOpenConsentModal(note)}
+                                                                            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 \${
+                                                                                note.consent 
+                                                                                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white' 
+                                                                                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                                                                            }`}
+                                                                        >
+                                                                            {note.consent ? <FaEye /> : <FaPlus />}
+                                                                            {note.consent ? 'View / Edit Consent' : 'Write Consent'}
+                                                                        </button>
+                                                                    </div>
                                                                     <div className="bg-gray-50 px-4 py-2 text-xs text-gray-400 flex justify-between border-t">
                                                                         <span>Created by: {note.createdBy} â€” {note.createdAt ? new Date(note.createdAt).toLocaleString() : ''}</span>
                                                                         {note.updatedBy && <span>Updated by: {note.updatedBy} â€” {note.updatedAt ? new Date(note.updatedAt).toLocaleString() : ''}</span>}
@@ -3488,6 +3799,542 @@ const PatientDetails = () => {
                             >
                                 Save Operation Note
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Surgical Consent Form Modal */}
+            {showConsentModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-y-auto flex flex-col">
+                        {/* Modal Header */}
+                        <div className="bg-indigo-700 text-white px-6 py-4 flex justify-between items-center rounded-t-xl sticky top-0 z-20 shadow-md">
+                            <h3 className="text-xl font-bold flex items-center gap-2">
+                                <FaFileAlt /> Surgical Consent Registry
+                            </h3>
+                            <button 
+                                onClick={() => { setShowConsentModal(false); setConsentActiveNote(null); }} 
+                                className="hover:text-indigo-200 p-1"
+                            >
+                                <FaTimes size={24} />
+                            </button>
+                        </div>
+
+                        {/* Modal Controls / Tabs */}
+                        <div className="bg-gray-50 border-b px-6 py-3 flex flex-wrap justify-between items-center gap-4 sticky top-[60px] z-10">
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setConsentTab('digital')}
+                                    className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
+                                        consentTab === 'digital' 
+                                            ? 'bg-indigo-600 text-white shadow-sm' 
+                                            : 'bg-white border text-gray-700 hover:bg-gray-100'
+                                    }`}
+                                >
+                                    Digital Consent Form
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setConsentTab('upload')}
+                                    className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
+                                        consentTab === 'upload' 
+                                            ? 'bg-indigo-600 text-white shadow-sm' 
+                                            : 'bg-white border text-gray-700 hover:bg-gray-100'
+                                    }`}
+                                >
+                                    Upload Filled Form (PDF/Image)
+                                </button>
+                            </div>
+
+                            <div className="flex gap-2">
+                                {isConsentViewing && (
+                                    <>
+                                        {consentTab === 'digital' && (consentForm.patientSignatureName || consentForm.surgeonSignatureName || consentForm.guardianSignatureName || consentForm.anaesthetistSignatureName) && (
+                                            <button
+                                                type="button"
+                                                onClick={handlePrintConsent}
+                                                className="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-1.5 transition"
+                                            >
+                                                <FaPrint /> Print Form
+                                            </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsConsentViewing(false)}
+                                            className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-1.5 transition"
+                                        >
+                                            <FaEdit /> Edit Consent
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="p-6 flex-1 overflow-y-auto">
+                            {isConsentViewing ? (
+                                /* --- VIEW MODE --- */
+                                <div className="space-y-6">
+                                    {consentTab === 'digital' ? (
+                                        /* Digital View (Structured layout resembling paper form) */
+                                        (consentForm.patientSignatureName || consentForm.surgeonSignatureName || consentForm.guardianSignatureName || consentForm.anaesthetistSignatureName) ? (
+                                            <div className="border p-8 rounded-xl bg-gray-50 shadow-inner max-w-3xl mx-auto space-y-6 text-gray-800">
+                                                {/* Printed Header */}
+                                                <div className="text-center border-b pb-4">
+                                                    {hospitalSettings?.hospitalLogo && (
+                                                        <img 
+                                                            src={hospitalSettings.hospitalLogo.startsWith('data:') || hospitalSettings.hospitalLogo.startsWith('http') ? hospitalSettings.hospitalLogo : `${backendUrl}/uploads/${hospitalSettings.hospitalLogo}`} 
+                                                            alt="Logo" 
+                                                            className="max-h-20 max-w-[150px] mx-auto object-contain mb-3" 
+                                                        />
+                                                    )}
+                                                    <h2 className="text-xl font-bold uppercase tracking-wider">{hospitalSettings?.hospitalName || 'Hospital Consent Registry'}</h2>
+                                                    <p className="text-sm text-gray-500">{hospitalSettings?.address || ''}</p>
+                                                    {hospitalSettings?.phone && <p className="text-xs text-gray-400">Phone: {hospitalSettings.phone}</p>}
+                                                </div>
+
+                                                <h3 className="text-center text-lg font-bold uppercase underline">Consent for Surgery/Procedures</h3>
+
+                                                <div className="space-y-4 text-base leading-relaxed">
+                                                    <p>
+                                                        I, <span className="font-bold underline px-1">{consentForm.patientName || 'N/A'}</span>,
+                                                    </p>
+                                                    <p>
+                                                        of <span className="font-bold underline px-1">{consentForm.patientAddress || 'N/A'}</span>,
+                                                    </p>
+                                                    <p>
+                                                        Hereby, after detailed explanation of the risks and benefits to me by Dr. <span className="font-bold underline px-1">{consentForm.physicianName || 'N/A'}</span>,
+                                                    </p>
+                                                    <p>
+                                                        Willingly consent to the procedure of <span className="font-bold underline px-1">{consentForm.procedureName || 'N/A'}</span> on <span className="font-bold underline px-1">{consentForm.consentDate ? new Date(consentForm.consentDate).toLocaleDateString() : 'N/A'}</span>.
+                                                    </p>
+                                                    <p>
+                                                        Relationship to Patient: <span className="font-bold underline px-1">{consentForm.relationship || 'N/A'}</span>.
+                                                    </p>
+                                                    <p className="pt-2">
+                                                        I affirm that I clearly understand the language of presentation. The option to think over the procedure for a period before assenting was also presented to me.
+                                                    </p>
+                                                    <div className="pt-2">
+                                                        <p className="font-bold">I further affirm:</p>
+                                                        <ul className="list-disc pl-5 space-y-1">
+                                                            <li>That explanation about this Surgery/procedure was first given to me at presentation date <span className="font-bold underline px-1">{consentForm.explanationDate ? new Date(consentForm.explanationDate).toLocaleDateString() : 'N/A'}</span>.</li>
+                                                            <li>That the extent of the procedure and mode of Anaesthesia are left to the discretion of the Physician, including the use of blood and/or its product.</li>
+                                                            <li>That any additional surgery or procedure to that described above will only be carried out if necessary and in my best interest and can be justified for medical reasons.</li>
+                                                            <li>I understand that an assurance has not been given that the operation will be performed by a particular surgeon.</li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
+
+                                                {/* Signatures Display Grid */}
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t mt-6">
+                                                    <div className="bg-white p-4 rounded border">
+                                                        <p className="text-xs text-gray-500 uppercase font-bold mb-1">Patient</p>
+                                                        <p className="font-semibold text-sm">{consentForm.patientSignatureName || 'Not signed'}</p>
+                                                        <p className="text-xs text-gray-400">Date: {consentForm.patientSignatureDate ? new Date(consentForm.patientSignatureDate).toLocaleDateString() : 'N/A'}</p>
+                                                    </div>
+                                                    <div className="bg-white p-4 rounded border">
+                                                        <p className="text-xs text-gray-500 uppercase font-bold mb-1">Surgeon</p>
+                                                        <p className="font-semibold text-sm">{consentForm.surgeonSignatureName || 'Not signed'}</p>
+                                                        <p className="text-xs text-gray-400">Date: {consentForm.surgeonSignatureDate ? new Date(consentForm.surgeonSignatureDate).toLocaleDateString() : 'N/A'}</p>
+                                                    </div>
+                                                    <div className="bg-white p-4 rounded border">
+                                                        <p className="text-xs text-gray-500 uppercase font-bold mb-1">Guardian/Witness</p>
+                                                        <p className="font-semibold text-sm">{consentForm.guardianSignatureName || 'Not signed'}</p>
+                                                        {consentForm.relationshipWithPatient && <p className="text-xs text-gray-600">Relationship: {consentForm.relationshipWithPatient}</p>}
+                                                        <p className="text-xs text-gray-400">Date: {consentForm.guardianSignatureDate ? new Date(consentForm.guardianSignatureDate).toLocaleDateString() : 'N/A'}</p>
+                                                    </div>
+                                                    <div className="bg-white p-4 rounded border">
+                                                        <p className="text-xs text-gray-500 uppercase font-bold mb-1">Anaesthetist</p>
+                                                        <p className="font-semibold text-sm">{consentForm.anaesthetistSignatureName || 'Not signed'}</p>
+                                                        <p className="text-xs text-gray-400">Date: {consentForm.anaesthetistSignatureDate ? new Date(consentForm.anaesthetistSignatureDate).toLocaleDateString() : 'N/A'}</p>
+                                                    </div>
+                                                </div>
+
+                                                {/* Thumbprints Display Grid */}
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+                                                    <div className="bg-white p-4 rounded border">
+                                                        <p className="text-xs text-gray-500 uppercase font-bold mb-1">Patient Thumbprint Confirmation</p>
+                                                        <p className="font-semibold text-sm text-green-700">{consentForm.patientThumbprint ? 'Confirmed' : 'No thumbprint recorded'}</p>
+                                                        {consentForm.patientThumbprintDate && <p className="text-xs text-gray-400">Date: {new Date(consentForm.patientThumbprintDate).toLocaleDateString()}</p>}
+                                                    </div>
+                                                    <div className="bg-white p-4 rounded border">
+                                                        <p className="text-xs text-gray-500 uppercase font-bold mb-1">Witness/Guardian Thumbprint Confirmation</p>
+                                                        <p className="font-semibold text-sm text-green-700">{consentForm.witnessThumbprint ? 'Confirmed' : 'No thumbprint recorded'}</p>
+                                                        {consentForm.witnessThumbprintDate && <p className="text-xs text-gray-400">Date: {new Date(consentForm.witnessThumbprintDate).toLocaleDateString()}</p>}
+                                                    </div>
+                                                </div>
+
+                                                <div className="bg-gray-100 p-3 rounded text-center text-xs text-gray-500 mt-6 border">
+                                                    Filled at: {consentActiveNote.consent?.filledAt ? new Date(consentActiveNote.consent.filledAt).toLocaleString() : ''} by {consentActiveNote.consent?.filledBy || ''}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="text-center py-16 px-4 bg-gray-50 border border-dashed rounded-xl max-w-md mx-auto my-8">
+                                                <FaFileMedical className="mx-auto text-5xl text-gray-300 mb-4" />
+                                                <h4 className="text-base font-bold text-gray-700">No Digital Form Recorded</h4>
+                                                <p className="text-xs text-gray-400 mt-2">
+                                                    Only the physical uploaded document was saved for this operation note.
+                                                </p>
+                                                {consentActiveNote.consent?.uploadedFile && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setConsentTab('upload')}
+                                                        className="mt-5 inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition shadow-sm"
+                                                    >
+                                                        <FaEye /> View Uploaded Form
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )
+                                    ) : (
+                                        /* Upload File View */
+                                        <div className="flex flex-col items-center justify-center space-y-4 max-w-4xl mx-auto">
+                                            <p className="text-sm text-gray-600 font-semibold">Consent Document Preview:</p>
+                                            {consentActiveNote.consent?.uploadedFile ? (
+                                                <div className="border w-full rounded-xl overflow-hidden shadow-lg bg-gray-50 flex flex-col items-center p-4">
+                                                    {consentActiveNote.consent.uploadedFile.toLowerCase().endsWith('.pdf') ? (
+                                                        <div className="w-full flex flex-col items-center space-y-4">
+                                                            <div className="w-full h-[600px] border rounded bg-white relative">
+                                                                <iframe 
+                                                                    src={`${backendUrl}/${consentActiveNote.consent.uploadedFile}`} 
+                                                                    className="w-full h-full"
+                                                                    title="Uploaded Consent PDF"
+                                                                />
+                                                            </div>
+                                                            <a 
+                                                                href={`${backendUrl}/${consentActiveNote.consent.uploadedFile}`}
+                                                                target="_blank" 
+                                                                rel="noopener noreferrer"
+                                                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 shadow-md transition"
+                                                            >
+                                                                <FaDownload /> Open PDF in New Tab
+                                                            </a>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="w-full flex flex-col items-center space-y-4">
+                                                            <img 
+                                                                src={`${backendUrl}/${consentActiveNote.consent.uploadedFile}`} 
+                                                                alt="Uploaded Consent" 
+                                                                className="max-w-full max-h-[600px] rounded-lg object-contain shadow-md"
+                                                            />
+                                                            <a 
+                                                                href={`${backendUrl}/${consentActiveNote.consent.uploadedFile}`}
+                                                                download
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 shadow-md transition"
+                                                            >
+                                                                <FaDownload /> Download Image
+                                                            </a>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="text-gray-400 italic">No file uploaded.</div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                /* --- EDIT / FILL MODE --- */
+                                <div className="space-y-6">
+                                    {consentTab === 'digital' ? (
+                                        /* Digital Fill Form */
+                                        <div className="border p-8 rounded-xl bg-white shadow-sm max-w-4xl mx-auto space-y-8 text-gray-800">
+                                            {/* Logo and Header Details */}
+                                            <div className="text-center border-b pb-4">
+                                                {hospitalSettings?.hospitalLogo && (
+                                                    <img 
+                                                        src={hospitalSettings.hospitalLogo.startsWith('data:') || hospitalSettings.hospitalLogo.startsWith('http') ? hospitalSettings.hospitalLogo : `${backendUrl}/uploads/${hospitalSettings.hospitalLogo}`} 
+                                                        alt="Logo" 
+                                                        className="max-h-20 max-w-[150px] mx-auto object-contain mb-3" 
+                                                    />
+                                                )}
+                                                <h2 className="text-xl font-bold uppercase tracking-wider">{hospitalSettings?.hospitalName || 'Hospital Consent Registry'}</h2>
+                                                <p className="text-sm text-gray-500">{hospitalSettings?.address || ''}</p>
+                                                {hospitalSettings?.phone && <p className="text-xs text-gray-400">Phone: {hospitalSettings.phone}</p>}
+                                            </div>
+
+                                            <h3 className="text-center text-lg font-bold uppercase underline">Consent for Surgery/Procedures</h3>
+
+                                            {/* Digital Form Fields */}
+                                            <div className="space-y-6">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Full Name of Patient (Surname first)</label>
+                                                        <input 
+                                                            type="text" 
+                                                            className="w-full border rounded p-2 text-sm bg-gray-50"
+                                                            placeholder="Patient Name"
+                                                            value={consentForm.patientName} 
+                                                            onChange={e => setConsentForm(p => ({ ...p, patientName: e.target.value }))}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Full Address of Patient (Not P.O. Box)</label>
+                                                        <input 
+                                                            type="text" 
+                                                            className="w-full border rounded p-2 text-sm"
+                                                            placeholder="Patient Address"
+                                                            value={consentForm.patientAddress} 
+                                                            onChange={e => setConsentForm(p => ({ ...p, patientAddress: e.target.value }))}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="text-sm font-semibold text-gray-700 italic border-l-4 border-indigo-500 pl-3 py-1.5 bg-indigo-50/50 rounded-r">
+                                                    Hereby, after detailed explanation of the risks and benefits to me by:
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Full Name of Physician (Surname first)</label>
+                                                        <input 
+                                                            type="text" 
+                                                            className="w-full border rounded p-2 text-sm"
+                                                            placeholder="Dr. Surname First"
+                                                            value={consentForm.physicianName} 
+                                                            onChange={e => setConsentForm(p => ({ ...p, physicianName: e.target.value }))}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="text-sm font-semibold text-gray-700 italic border-l-4 border-indigo-500 pl-3 py-1.5 bg-indigo-50/50 rounded-r">
+                                                    willingly consent to the procedure of:
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Procedure</label>
+                                                        <input 
+                                                            type="text" 
+                                                            className="w-full border rounded p-2 text-sm bg-gray-50"
+                                                            placeholder="Procedure Name"
+                                                            value={consentForm.procedureName} 
+                                                            onChange={e => setConsentForm(p => ({ ...p, procedureName: e.target.value }))}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Consent Date</label>
+                                                        <input 
+                                                            type="date" 
+                                                            className="w-full border rounded p-2 text-sm"
+                                                            value={consentForm.consentDate} 
+                                                            onChange={e => setConsentForm(p => ({ ...p, consentDate: e.target.value }))}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Relationship to Patient (e.g. self/child/spouse/etc.)</label>
+                                                        <select 
+                                                            className="w-full border rounded p-2 text-sm"
+                                                            value={consentForm.relationship} 
+                                                            onChange={e => setConsentForm(p => ({ ...p, relationship: e.target.value }))}
+                                                        >
+                                                            <option value="self">Self</option>
+                                                            <option value="child">Child</option>
+                                                            <option value="spouse">Spouse</option>
+                                                            <option value="mother">Mother</option>
+                                                            <option value="father">Father</option>
+                                                            <option value="other">Other</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Explanation Date (Presentation Date)</label>
+                                                        <input 
+                                                            type="date" 
+                                                            className="w-full border rounded p-2 text-sm"
+                                                            value={consentForm.explanationDate} 
+                                                            onChange={e => setConsentForm(p => ({ ...p, explanationDate: e.target.value }))}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                {/* Affirmations */}
+                                                <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4 text-xs space-y-2 text-indigo-900">
+                                                    <p className="font-semibold text-sm">Patient Affirmation & Disclaimer Statement:</p>
+                                                    <p>I affirm that I clearly understand the language of presentation. The option to think over the procedure for a period before assenting was also presented to me.</p>
+                                                    <ul className="list-disc pl-5 space-y-1 mt-2">
+                                                        <li>That explanation about this Surgery/procedure was first given to me at presentation date.</li>
+                                                        <li>That the extent of the procedure and mode of Anaesthesia are left to the discretion of the Physician, including the use of blood and/or its product.</li>
+                                                        <li>That any additional surgery or procedure to that described above will only be carried out if necessary and in my best interest and can be justified for medical reasons.</li>
+                                                        <li>I understand that an assurance has not been given that the operation will be performed by a particular surgeon.</li>
+                                                    </ul>
+                                                </div>
+
+                                                {/* Signatures Fields */}
+                                                <h4 className="text-sm font-bold text-gray-700 border-b pb-1 mt-6">Signatures & Approvals</h4>
+                                                
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                    {/* Patient Signature */}
+                                                    <div className="border p-4 rounded bg-gray-50 space-y-3">
+                                                        <h5 className="text-xs font-bold text-gray-600 uppercase">Patient Signature</h5>
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Name / Signature text</label>
+                                                            <input type="text" className="w-full border rounded p-2 text-xs bg-white" placeholder="Type name to sign"
+                                                                value={consentForm.patientSignatureName} onChange={e => setConsentForm(p => ({ ...p, patientSignatureName: e.target.value }))} />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Date</label>
+                                                            <input type="date" className="w-full border rounded p-2 text-xs bg-white"
+                                                                value={consentForm.patientSignatureDate} onChange={e => setConsentForm(p => ({ ...p, patientSignatureDate: e.target.value }))} />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Surgeon Signature */}
+                                                    <div className="border p-4 rounded bg-gray-50 space-y-3">
+                                                        <h5 className="text-xs font-bold text-gray-600 uppercase">Surgeon Signature</h5>
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Name / Signature text</label>
+                                                            <input type="text" className="w-full border rounded p-2 text-xs bg-white" placeholder="Type surgeon name"
+                                                                value={consentForm.surgeonSignatureName} onChange={e => setConsentForm(p => ({ ...p, surgeonSignatureName: e.target.value }))} />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Date</label>
+                                                            <input type="date" className="w-full border rounded p-2 text-xs bg-white"
+                                                                value={consentForm.surgeonSignatureDate} onChange={e => setConsentForm(p => ({ ...p, surgeonSignatureDate: e.target.value }))} />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Guardian/Witness Signature */}
+                                                    <div className="border p-4 rounded bg-gray-50 space-y-3">
+                                                        <h5 className="text-xs font-bold text-gray-600 uppercase">Guardian / Witness Signature</h5>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <div>
+                                                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Name / Signature</label>
+                                                                <input type="text" className="w-full border rounded p-2 text-xs bg-white" placeholder="Type witness name"
+                                                                    value={consentForm.guardianSignatureName} onChange={e => setConsentForm(p => ({ ...p, guardianSignatureName: e.target.value }))} />
+                                                            </div>
+                                                            <div>
+                                                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Relationship</label>
+                                                                <input type="text" className="w-full border rounded p-2 text-xs bg-white" placeholder="e.g. Brother, Friend"
+                                                                    value={consentForm.relationshipWithPatient} onChange={e => setConsentForm(p => ({ ...p, relationshipWithPatient: e.target.value }))} />
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Date</label>
+                                                            <input type="date" className="w-full border rounded p-2 text-xs bg-white"
+                                                                value={consentForm.guardianSignatureDate} onChange={e => setConsentForm(p => ({ ...p, guardianSignatureDate: e.target.value }))} />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Anaesthetist Signature */}
+                                                    <div className="border p-4 rounded bg-gray-50 space-y-3">
+                                                        <h5 className="text-xs font-bold text-gray-600 uppercase">Anaesthetist Signature</h5>
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Name / Signature text</label>
+                                                            <input type="text" className="w-full border rounded p-2 text-xs bg-white" placeholder="Type anaesthetist name"
+                                                                value={consentForm.anaesthetistSignatureName} onChange={e => setConsentForm(p => ({ ...p, anaesthetistSignatureName: e.target.value }))} />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Date</label>
+                                                            <input type="date" className="w-full border rounded p-2 text-xs bg-white"
+                                                                value={consentForm.anaesthetistSignatureDate} onChange={e => setConsentForm(p => ({ ...p, anaesthetistSignatureDate: e.target.value }))} />
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Thumbprints */}
+                                                <h4 className="text-sm font-bold text-gray-700 border-b pb-1 mt-6">Thumbprints (Confirmation)</h4>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                    <div className="border p-4 rounded bg-gray-50 space-y-2">
+                                                        <label className="flex items-center gap-2 cursor-pointer">
+                                                            <input type="checkbox" className="rounded text-indigo-600 focus:ring-indigo-500"
+                                                                checked={consentForm.patientThumbprint === 'Yes'} onChange={e => setConsentForm(p => ({ ...p, patientThumbprint: e.target.checked ? 'Yes' : '' }))} />
+                                                            <span className="text-xs font-bold text-gray-600 uppercase">Patient Thumbprint Assent</span>
+                                                        </label>
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Assent Date</label>
+                                                            <input type="date" className="w-full border rounded p-2 text-xs bg-white"
+                                                                value={consentForm.patientThumbprintDate} onChange={e => setConsentForm(p => ({ ...p, patientThumbprintDate: e.target.value }))} />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="border p-4 rounded bg-gray-50 space-y-2">
+                                                        <label className="flex items-center gap-2 cursor-pointer">
+                                                            <input type="checkbox" className="rounded text-indigo-600 focus:ring-indigo-500"
+                                                                checked={consentForm.witnessThumbprint === 'Yes'} onChange={e => setConsentForm(p => ({ ...p, witnessThumbprint: e.target.checked ? 'Yes' : '' }))} />
+                                                            <span className="text-xs font-bold text-gray-600 uppercase">Witness / Guardian Thumbprint Assent</span>
+                                                        </label>
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Assent Date</label>
+                                                            <input type="date" className="w-full border rounded p-2 text-xs bg-white"
+                                                                value={consentForm.witnessThumbprintDate} onChange={e => setConsentForm(p => ({ ...p, witnessThumbprintDate: e.target.value }))} />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        /* Upload File Interface */
+                                        <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 bg-white max-w-xl mx-auto flex flex-col items-center justify-center space-y-4">
+                                            <div className="p-4 bg-indigo-50 rounded-full text-indigo-600">
+                                                <FaUpload size={32} />
+                                            </div>
+                                            <div className="text-center">
+                                                <p className="text-sm font-semibold text-gray-700">Upload Consent Document</p>
+                                                <p className="text-xs text-gray-400 mt-1">Accepts PDF or Image (JPG, PNG, WebP) files up to 10MB</p>
+                                            </div>
+
+                                            <div className="w-full max-w-xs">
+                                                <input 
+                                                    type="file" 
+                                                    id="consent-file-upload" 
+                                                    accept=".pdf,image/*" 
+                                                    className="hidden" 
+                                                    onChange={e => setConsentFile(e.target.files[0])}
+                                                />
+                                                <label 
+                                                    htmlFor="consent-file-upload"
+                                                    className="block text-center cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-2 px-4 rounded-lg shadow transition"
+                                                >
+                                                    Select File
+                                                </label>
+                                            </div>
+
+                                            {consentFile ? (
+                                                <div className="bg-green-50 border border-green-200 text-green-800 text-xs px-3 py-2 rounded-lg w-full flex justify-between items-center">
+                                                    <span className="truncate max-w-[80%] font-semibold">{consentFile.name}</span>
+                                                    <button 
+                                                        onClick={() => setConsentFile(null)} 
+                                                        className="text-red-500 hover:text-red-700 font-bold ml-2 text-sm"
+                                                    >
+                                                        Remove
+                                                    </button>
+                                                </div>
+                                            ) : consentActiveNote.consent?.uploadedFile ? (
+                                                <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs px-3 py-2 rounded-lg w-full text-center">
+                                                    Current File: <span className="font-semibold truncate max-w-[70%] inline-block align-bottom">{consentActiveNote.consent.uploadedFile.split('/').pop()}</span>
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Modal Footer Actions */}
+                        <div className="bg-gray-50 border-t px-6 py-4 flex justify-end gap-3 rounded-b-xl sticky bottom-0 z-20 shadow-md">
+                            <button
+                                type="button"
+                                onClick={() => { setShowConsentModal(false); setConsentActiveNote(null); }}
+                                className="bg-gray-200 text-gray-700 px-5 py-2 rounded-lg font-semibold hover:bg-gray-300 transition"
+                            >
+                                Close
+                            </button>
+                            {!isConsentViewing && (
+                                <button
+                                    type="button"
+                                    onClick={handleSaveConsent}
+                                    className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-indigo-700 shadow-md hover:shadow-lg transition"
+                                >
+                                    Save Consent
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>

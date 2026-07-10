@@ -1003,6 +1003,49 @@ const saveTheatreNote = async (req, res) => {
     }
 };
 
+// @desc    Save/update consent data or file upload for a specific theatre note
+// @route   POST /api/visits/:id/theatre-notes/:noteId/consent
+// @access  Private (Doctor/User)
+const saveConsentNote = async (req, res) => {
+    try {
+        const visit = await Visit.findById(req.params.id);
+        if (!visit) return res.status(404).json({ message: 'Visit not found' });
+
+        const { noteId } = req.params;
+        const noteIdx = visit.theatreNotes.findIndex(n => n._id.toString() === noteId);
+        if (noteIdx === -1) {
+            return res.status(404).json({ message: 'Theatre note not found' });
+        }
+
+        let consentData = {};
+        
+        if (req.body.consentData) {
+            try {
+                consentData = JSON.parse(req.body.consentData);
+            } catch (err) {
+                return res.status(400).json({ message: 'Invalid consentData format' });
+            }
+        } else {
+            consentData = { ...req.body };
+        }
+
+        if (req.file) {
+            consentData.uploadedFile = req.file.path.replace(/\\/g, '/');
+        }
+
+        consentData.filledAt = new Date();
+        consentData.filledBy = req.user.name;
+
+        visit.theatreNotes[noteIdx].consent = consentData;
+
+        await visit.save();
+        res.status(200).json(visit.theatreNotes);
+    } catch (error) {
+        console.error('saveConsentNote error:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // @desc    Save (add or edit) a structured clinical note for a visit
 // @route   POST /api/visits/:id/clinical-notes
 // @access  Private (Doctor)
@@ -1119,6 +1162,7 @@ module.exports = {
     addNote,
     addWardRoundNote,
     saveTheatreNote,
+    saveConsentNote,
     convertToInpatient,
     changeEncounterType,
     saveClinicalNote

@@ -173,6 +173,36 @@ const visitSchema = mongoose.Schema({
         updatedBy: String,
         updatedAt: Date,
         digitalSignature: String,
+        // Consent Form Data & Uploads
+        consent: {
+            patientName: String,
+            patientAddress: String,
+            physicianName: String,
+            procedureName: String,
+            consentDate: Date,
+            relationship: String,
+            explanationDate: Date,
+
+            patientSignatureName: String,
+            patientSignatureDate: Date,
+            surgeonSignatureName: String,
+            surgeonSignatureDate: Date,
+            guardianSignatureName: String,
+            guardianSignatureDate: Date,
+            anaesthetistSignatureName: String,
+            anaesthetistSignatureDate: Date,
+            relationshipWithPatient: String,
+
+            patientThumbprint: String,
+            patientThumbprintDate: Date,
+            witnessThumbprint: String,
+            witnessThumbprintDate: Date,
+
+            uploadedFile: String, // URL/Path to PDF or Image file
+            
+            filledAt: Date,
+            filledBy: String
+        }
     }],
 
     // Clinic and Encounter Type

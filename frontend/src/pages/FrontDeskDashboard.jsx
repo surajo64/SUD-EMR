@@ -7,7 +7,8 @@ import { toast } from 'react-toastify';
 import LoadingOverlay from '../components/loadingOverlay';
 import { formatAge } from '../utils/patientUtils';
 import { formatCompactNumber } from '../utils/formatters';
-import { FaUserPlus, FaCalendarCheck, FaDollarSign, FaSearch, FaFileAlt, FaPlus, FaTimes, FaClock, FaCalendarAlt, FaBed, FaUserCheck, FaNotesMedical } from 'react-icons/fa';
+import { FaUserPlus, FaCalendarCheck, FaDollarSign, FaSearch, FaFileAlt, FaPlus, FaTimes, FaClock, FaCalendarAlt, FaBed, FaUserCheck, FaNotesMedical, FaPrint } from 'react-icons/fa';
+import useHospitalSettings from '../hooks/useHospitalSettings';
 
 const FrontDeskDashboard = () => {
     const [loading, setLoading] = useState(false);
@@ -62,6 +63,7 @@ const FrontDeskDashboard = () => {
 
     const { user } = useContext(AuthContext);
     const { backendUrl } = useContext(AppContext);
+    const { settings: hospitalSettings } = useHospitalSettings();
 
     const [stats, setStats] = useState({ registeredToday: 0, encountersCreated: 0 });
 
@@ -77,6 +79,140 @@ const FrontDeskDashboard = () => {
         } catch (error) {
             console.error('Error fetching user stats:', error);
         }
+    };
+
+    const handlePrintBlankConsent = () => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            alert('Please allow popups for this website to print.');
+            return;
+        }
+
+        const logoHtml = hospitalSettings?.hospitalLogo 
+            ? `<img src="${hospitalSettings.hospitalLogo.startsWith('data:') || hospitalSettings.hospitalLogo.startsWith('http') ? hospitalSettings.hospitalLogo : `${backendUrl}/uploads/${hospitalSettings.hospitalLogo}`}" alt="Logo" style="max-height: 80px; max-width: 150px; object-fit: contain; display: block; margin: 0 auto 10px;" />` 
+            : '';
+
+        const phoneHtml = hospitalSettings?.phone 
+            ? `<p>Phone: ${hospitalSettings.phone} ${hospitalSettings.email ? ` | Email: ${hospitalSettings.email}` : ''}</p>` 
+            : '';
+
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Consent Form Template</title>
+                    <style>
+                        @page {
+                            size: A4;
+                            margin: 10mm 15mm;
+                        }
+                        body { font-family: 'Times New Roman', serif; padding: 0; margin: 0; color: #000; line-height: 1.35; font-size: 13px; }
+                        .header { text-align: center; margin-bottom: 12px; border-bottom: 2px double #000; padding-bottom: 6px; position: relative; }
+                        .header h1 { font-size: 18px; text-transform: uppercase; margin: 2px 0; font-weight: bold; letter-spacing: 0.5px; }
+                        .header p { font-size: 12px; margin: 1px 0; }
+                        .title { text-align: center; font-size: 14px; font-weight: bold; text-transform: uppercase; text-decoration: underline; margin: 10px 0; letter-spacing: 0.5px; }
+                        .paragraph { margin: 6px 0; text-align: justify; }
+                        .line-fill { border-bottom: 1px dotted #000; display: inline-block; padding: 0 5px; font-weight: bold; font-style: italic; min-width: 120px; text-align: center; }
+                        .grid-signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 25px; margin-top: 12px; }
+                        .signature-box { border-top: 1px solid #000; margin-top: 15px; padding-top: 2px; font-size: 11px; line-height: 1.35; }
+                        .footer { text-align: center; font-size: 9px; margin-top: 15px; color: #555; border-top: 1px solid #ddd; padding-top: 4px; }
+                        @media print {
+                            body { padding: 0; margin: 0; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        ${logoHtml}
+                        <h1>${hospitalSettings?.hospitalName || 'HOSPITAL CONSENT'}</h1>
+                        <p>${hospitalSettings?.address || ''}</p>
+                        ${phoneHtml}
+                    </div>
+                    <div class="title">Consent for Surgery/Procedures</div>
+                    
+                    <div class="paragraph">
+                        I, <span class="line-fill" style="min-width: 300px;">&nbsp;</span> (Full names of the patient, surname first),
+                    </div>
+                    <div class="paragraph">
+                        of <span class="line-fill" style="min-width: 450px;">&nbsp;</span> (Full address of the Patient not P.O.Box),
+                    </div>
+                    <div class="paragraph">
+                        Hereby, after detailed explanation of the risks and benefits to me by
+                    </div>
+                    <div class="paragraph">
+                        Dr. <span class="line-fill" style="min-width: 300px;">&nbsp;</span> (Full names of the physician, surname first),
+                    </div>
+                    <div class="paragraph">
+                        Willingly consent to the procedure of <span class="line-fill" style="min-width: 300px;">&nbsp;</span> 
+                        on <span class="line-fill" style="min-width: 150px;">&nbsp;</span>.
+                    </div>
+                    <div class="paragraph">
+                        Relationship to Patient: <span class="line-fill" style="min-width: 250px;">&nbsp;</span>.
+                    </div>
+                    
+                    <div class="paragraph" style="margin-top: 25px;">
+                        I affirm that I clearly understand the language of presentation. The option to think over the procedure for a period before assenting was also presented to me.
+                    </div>
+                    
+                    <div class="paragraph">
+                        <strong>I further affirm:</strong>
+                        <ul style="margin-top: 5px; padding-left: 20px;">
+                            <li>That explanation about this Surgery/procedure was first given to me at presentation date <span class="line-fill" style="min-width: 150px;">&nbsp;</span></li>
+                            <li>That the extent of the procedure and mode of Anaesthesia are left to the discretion of the Physician, including the use of blood and/or its product.</li>
+                            <li>That any additional surgery or procedure to that described above will only be carried out if necessary and in my best interest and can be justified for medical reasons.</li>
+                            <li>I understand that an assurance has not been given that the operation will be performed by a particular surgeon.</li>
+                        </ul>
+                    </div>
+
+                    <div class="grid-signatures">
+                        <div class="signature-box">
+                            <strong>Name and Signature of Patient:</strong><br/>
+                            Name: ______________________<br/>
+                            Date: __________
+                        </div>
+                        <div class="signature-box">
+                            <strong>Name and Signature of Surgeon:</strong><br/>
+                            Name: ______________________<br/>
+                            Date: __________
+                        </div>
+                        <div class="signature-box">
+                            <strong>Name and Signature of Guardian/Witness:</strong><br/>
+                            Name: ______________________<br/>
+                            Relationship: ______________________<br/>
+                            Date: __________
+                        </div>
+                        <div class="signature-box">
+                            <strong>Name and Signature of Anaesthetist:</strong><br/>
+                            Name: ______________________<br/>
+                            Date: __________
+                        </div>
+                    </div>
+
+                    <div class="grid-signatures" style="margin-top: 30px;">
+                        <div class="signature-box">
+                            <strong>Thumb print of Patient:</strong><br/>
+                            Confirm: ______________________<br/>
+                            Date: __________
+                        </div>
+                        <div class="signature-box">
+                            <strong>Thumb print of Witness/Guardian:</strong><br/>
+                            Confirm: ______________________<br/>
+                            Date: __________
+                        </div>
+                    </div>
+
+                    <div class="footer">
+                        Blank Surgical Consent Form | MedKare360 EMR Consent Registry
+                    </div>
+                    
+                    <script>
+                        window.onload = function() {
+                            window.print();
+                        }
+                    </script>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
     };
 
     // New Patient Form
@@ -923,9 +1059,18 @@ const FrontDeskDashboard = () => {
 
             {/* Search Patients */}
             <div className="bg-white p-6 rounded shadow mb-6">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                    <FaSearch className="text-purple-600" /> Search Patients
-                </h3>
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xl font-bold flex items-center gap-2">
+                        <FaSearch className="text-purple-600" /> Search Patients
+                    </h3>
+                    <button
+                        type="button"
+                        onClick={handlePrintBlankConsent}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm transition"
+                    >
+                        <FaPrint /> Print Consent Form
+                    </button>
+                </div>
                 <div className="mb-4 relative">
                     <FaSearch className="absolute left-3 top-3 text-gray-400" />
                     <input

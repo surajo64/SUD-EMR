@@ -18,6 +18,7 @@ router.route('/:id')
 router.route('/:id/notes').post(protect, require('../controllers/visitController').addNote);
 router.route('/:id/ward-round-notes').post(protect, require('../controllers/visitController').addWardRoundNote);
 router.route('/:id/theatre-notes').post(protect, require('../controllers/visitController').saveTheatreNote);
+router.route('/:id/theatre-notes/:noteId/consent').post(protect, require('../config/consentMulterConfig').single('consentFile'), require('../controllers/visitController').saveConsentNote);
 router.route('/:id/clinical-notes').post(protect, require('../controllers/visitController').saveClinicalNote);
 router.route('/:id/convert-to-inpatient').put(protect, require('../controllers/visitController').convertToInpatient);
 router.route('/:id/change-type').put(protect, require('../controllers/visitController').changeEncounterType);
