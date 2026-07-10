@@ -9,7 +9,11 @@ const runDailyWardChargesJob = async () => {
     try {
         // Find all currently admitted patients
         const admittedVisits = await Visit.find({
-            encounterStatus: { $in: ['admitted', 'in_ward'] },
+            $or: [
+                { type: 'Inpatient' },
+                { encounterType: 'Inpatient' }
+            ],
+            encounterStatus: { $nin: ['discharged', 'cancelled', 'completed'] },
             ward: { $exists: true, $ne: null }
         });
 

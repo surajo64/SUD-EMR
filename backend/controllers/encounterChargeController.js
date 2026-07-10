@@ -360,9 +360,13 @@ const triggerDailyWardCharges = async (req, res) => {
         console.log('Manually triggering daily ward charges at:', new Date().toLocaleString());
         console.log('========================================');
 
-        // Find all currently admitted patients (check both 'admitted' and 'in_ward' statuses)
+        // Find all currently admitted patients (not discharged, cancelled, or completed)
         const admittedVisits = await Visit.find({
-            encounterStatus: { $in: ['admitted', 'in_ward'] },
+            $or: [
+                { type: 'Inpatient' },
+                { encounterType: 'Inpatient' }
+            ],
+            encounterStatus: { $nin: ['discharged', 'cancelled', 'completed'] },
             ward: { $exists: true, $ne: null }
         });
 
