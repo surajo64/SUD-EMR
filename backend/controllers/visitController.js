@@ -1041,19 +1041,13 @@ const saveTheatreNote = async (req, res) => {
     }
 };
 
-// @desc    Save/update consent data or file upload for a specific theatre note
-// @route   POST /api/visits/:id/theatre-notes/:noteId/consent
+// @desc    Save/update consent data or file upload for a specific theatre note or visit
+// @route   POST /api/visits/:id/theatre-notes/:noteId/consent OR /api/visits/:id/consents
 // @access  Private (Doctor/User)
 const saveConsentNote = async (req, res) => {
     try {
         const visit = await Visit.findById(req.params.id);
         if (!visit) return res.status(404).json({ message: 'Visit not found' });
-
-        const { noteId } = req.params;
-        const noteIdx = visit.theatreNotes.findIndex(n => n._id.toString() === noteId);
-        if (noteIdx === -1) {
-            return res.status(404).json({ message: 'Theatre note not found' });
-        }
 
         let consentData = {};
         
@@ -1074,10 +1068,35 @@ const saveConsentNote = async (req, res) => {
         consentData.filledAt = new Date();
         consentData.filledBy = req.user.name;
 
-        visit.theatreNotes[noteIdx].consent = consentData;
+        const { noteId } = req.params;
+        if (noteId) {
+            // Legacy / nested consent
+            const noteIdx = visit.theatreNotes.findIndex(n => n._id.toString() === noteId);
+            if (noteIdx !== -1) {
+                visit.theatreNotes[noteIdx].consent = consentData;
+            }
+        } else {
+            // Detached consent
+            if (!visit.consents) {
+                visit.consents = [];
+            }
+            const consentId = consentData._id;
+            if (consentId) {
+                const idx = visit.consents.findIndex(c => c._id.toString() === consentId);
+                if (idx >= 0) {
+                    Object.assign(visit.consents[idx], consentData);
+                } else {
+                    consentData.createdAt = new Date();
+                    visit.consents.push(consentData);
+                }
+            } else {
+                consentData.createdAt = new Date();
+                visit.consents.push(consentData);
+            }
+        }
 
         await visit.save();
-        res.status(200).json(visit.theatreNotes);
+        res.status(200).json({ theatreNotes: visit.theatreNotes, consents: visit.consents || [] });
     } catch (error) {
         console.error('saveConsentNote error:', error);
         res.status(500).json({ message: error.message });

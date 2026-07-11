@@ -205,6 +205,38 @@ const visitSchema = mongoose.Schema({
         }
     }],
 
+    // Detached Consent Forms
+    consents: [{
+        patientName: String,
+        patientAddress: String,
+        physicianName: String,
+        procedureName: String,
+        consentDate: Date,
+        relationship: String,
+        explanationDate: Date,
+
+        patientSignatureName: String,
+        patientSignatureDate: Date,
+        surgeonSignatureName: String,
+        surgeonSignatureDate: Date,
+        guardianSignatureName: String,
+        guardianSignatureDate: Date,
+        anaesthetistSignatureName: String,
+        anaesthetistSignatureDate: Date,
+        relationshipWithPatient: String,
+
+        patientThumbprint: String,
+        patientThumbprintDate: Date,
+        witnessThumbprint: String,
+        witnessThumbprintDate: Date,
+
+        uploadedFile: String, // URL/Path to PDF or Image file
+        
+        filledAt: Date,
+        filledBy: String,
+        createdAt: { type: Date, default: Date.now }
+    }],
+
     // Clinic and Encounter Type
     clinic: { type: mongoose.Schema.Types.ObjectId, ref: 'Clinic' },
     encounterType: {
