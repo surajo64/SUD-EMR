@@ -798,6 +798,12 @@ const NurseTriage = () => {
         const created = new Date(encounter.createdAt);
         const inactiveStatuses = ['completed', 'cancelled', 'discharged'];
 
+        if (inactiveStatuses.includes(encounter.encounterStatus)) {
+            return false;
+        }
+        if (encounter.isActive === false) return false;
+        if (encounter.isActive === true) return true;
+
         if (encounter.type === 'Inpatient') {
             return !inactiveStatuses.includes(encounter.encounterStatus);
         } else {
@@ -805,7 +811,7 @@ const NurseTriage = () => {
             if (encounter.encounterStatus === 'awaiting_services') return true;
             const oneDay = 24 * 60 * 60 * 1000;
             const isActiveTime = (now - created) < oneDay;
-            return isActiveTime && !inactiveStatuses.includes(encounter.encounterStatus);
+            return isActiveTime;
         }
     };
 

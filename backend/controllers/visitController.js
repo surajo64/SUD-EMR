@@ -90,7 +90,9 @@ const createVisit = async (req, res) => {
 
     const existingVisit = await Visit.findOne({
         patient: patientId,
-        createdAt: { $gte: startOfDay, $lte: endOfDay }
+        createdAt: { $gte: startOfDay, $lte: endOfDay },
+        encounterStatus: { $nin: ['completed', 'discharged', 'cancelled'] },
+        isActive: { $ne: false }
     });
 
     if (existingVisit) {
@@ -203,7 +205,11 @@ const getVisits = async (req, res) => {
         startOfDay.setHours(0, 0, 0, 0);
         const endOfDay = new Date();
         endOfDay.setHours(23, 59, 59, 999);
-        query.createdAt = { $gte: startOfDay, $lte: endOfDay };
+        
+        query.$or = [
+            { createdAt: { $gte: startOfDay, $lte: endOfDay } },
+            { isActive: true }
+        ];
         
         // When asking for today's patients, usually we mean active ones
         // Exclude terminal statuses unless explicitly requested
@@ -367,7 +373,27 @@ const updateVisit = async (req, res) => {
                     }
                 }
             }
+
+            // Determine if the encounter was expired or inactive before this update
+            const oneDay = 24 * 60 * 60 * 1000;
+            const wasExpired = (Date.now() - new Date(visit.createdAt).getTime()) >= oneDay;
+            const inactiveStatuses = ['completed', 'cancelled', 'discharged'];
+            const wasInactive = inactiveStatuses.includes(visit.encounterStatus) || visit.isActive === false || wasExpired;
+
+            const activeStatuses = ['registered', 'payment_pending', 'in_nursing', 'with_doctor', 'awaiting_services', 'in_pharmacy', 'in_lab', 'in_radiology', 'in_ward', 'admitted'];
+            if (activeStatuses.includes(encounterStatus)) {
+                if (wasInactive) {
+                    visit.isActive = true;
+                }
+            } else if (inactiveStatuses.includes(encounterStatus)) {
+                visit.isActive = false;
+            }
+
             visit.encounterStatus = encounterStatus;
+        }
+
+        if (req.body.isActive !== undefined) {
+            visit.isActive = req.body.isActive;
         }
 
         if (paymentValidated !== undefined) visit.paymentValidated = paymentValidated;
@@ -645,6 +671,7 @@ const convertToInpatient = async (req, res) => {
         visit.bed = bed;
         visit.admissionDate = new Date();
         visit.encounterStatus = 'admitted';
+        visit.isActive = true;
 
         const updatedVisit = await visit.save();
 
@@ -930,6 +957,17 @@ const changeEncounterType = async (req, res) => {
                         visit.encounterStatus = 'in_nursing';
                     }
                 }
+            }
+        }
+
+        // Update isActive based on modified status in changeEncounterType
+        if (visit.isModified('encounterStatus')) {
+            const activeStatuses = ['registered', 'payment_pending', 'in_nursing', 'with_doctor', 'awaiting_services', 'in_pharmacy', 'in_lab', 'in_radiology', 'in_ward', 'admitted'];
+            const inactiveStatuses = ['completed', 'cancelled', 'discharged'];
+            if (activeStatuses.includes(visit.encounterStatus)) {
+                visit.isActive = true;
+            } else if (inactiveStatuses.includes(visit.encounterStatus)) {
+                visit.isActive = false;
             }
         }
 

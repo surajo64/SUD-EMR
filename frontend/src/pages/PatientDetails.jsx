@@ -822,20 +822,27 @@ const PatientDetails = () => {
     // 2. Outpatient: Active for 24 hours from creation
     const isEncounterActive = () => {
         if (!encounter) {
-            console.log('ðŸ” isEncounterActive: No encounter');
+            console.log('🔍 isEncounterActive: No encounter');
             return false;
         }
         if (viewingPastEncounter) {
-            console.log('ðŸ” isEncounterActive: Viewing past encounter');
+            console.log('🔍 isEncounterActive: Viewing past encounter');
             return false;
         }
+
+        const inactiveStatuses = ['completed', 'cancelled', 'discharged'];
+        if (inactiveStatuses.includes(encounter.encounterStatus)) {
+            return false;
+        }
+        if (encounter.isActive === false) return false;
+        if (encounter.isActive === true) return true;
 
         if (encounter.type === 'Inpatient') {
             // Inpatient encounters are active until discharged
             // Active statuses: admitted, in_progress, with_doctor, in_nursing, in_lab, in_radiology, in_pharmacy, in_ward, awaiting_services
             const activeStatuses = ['admitted', 'in_progress', 'with_doctor', 'in_nursing', 'in_lab', 'in_radiology', 'in_pharmacy', 'in_ward', 'awaiting_services', 'registered', 'payment_pending'];
             const isActive = activeStatuses.includes(encounter.encounterStatus);
-            console.log('ðŸ” isEncounterActive: Inpatient encounter', {
+            console.log('🔍 isEncounterActive: Inpatient encounter', {
                 encounterStatus: encounter.encounterStatus,
                 isActive,
                 ward: encounter.ward,
@@ -849,7 +856,7 @@ const PatientDetails = () => {
             const now = new Date().getTime();
             const isActive = (now - created) < oneDay;
             const hoursOld = Math.floor((now - created) / (60 * 60 * 1000));
-            console.log('ðŸ” isEncounterActive: Non-inpatient encounter', {
+            console.log('🔍 isEncounterActive: Non-inpatient encounter', {
                 type: encounter.type,
                 createdAt: encounter.createdAt,
                 hoursOld,

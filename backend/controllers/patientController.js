@@ -147,10 +147,21 @@ const getPatients = async (req, res) => {
 
             // Find any active encounters today that this doctor is NOT permitted to see
             const restrictedVisits = await Visit.find({
-                createdAt: { $gte: startOfDay, $lte: endOfDay },
-                $or: [
-                    { needSpeciality: true, specialityClinic: { $ne: doctorClinicId } },
-                    { needSpecificDoctor: true, specificDoctor: { $ne: doctorId } }
+                encounterStatus: { $nin: ['completed', 'cancelled', 'discharged'] },
+                isActive: { $ne: false },
+                $and: [
+                    {
+                        $or: [
+                            { createdAt: { $gte: startOfDay, $lte: endOfDay } },
+                            { isActive: true }
+                        ]
+                    },
+                    {
+                        $or: [
+                            { needSpeciality: true, specialityClinic: { $ne: doctorClinicId } },
+                            { needSpecificDoctor: true, specificDoctor: { $ne: doctorId } }
+                        ]
+                    }
                 ]
             }).select('patient');
 
@@ -412,10 +423,21 @@ const getPatientById = async (req, res) => {
                     // Check if patient has any active restricted encounters today that this doctor cannot see
                     const restrictedVisit = await Visit.findOne({
                         patient: patient._id,
-                        createdAt: { $gte: startOfDay, $lte: endOfDay },
-                        $or: [
-                            { needSpeciality: true, specialityClinic: { $ne: doctorClinicId } },
-                            { needSpecificDoctor: true, specificDoctor: { $ne: doctorId } }
+                        encounterStatus: { $nin: ['completed', 'cancelled', 'discharged'] },
+                        isActive: { $ne: false },
+                        $and: [
+                            {
+                                $or: [
+                                    { createdAt: { $gte: startOfDay, $lte: endOfDay } },
+                                    { isActive: true }
+                                ]
+                            },
+                            {
+                                $or: [
+                                    { needSpeciality: true, specialityClinic: { $ne: doctorClinicId } },
+                                    { needSpecificDoctor: true, specificDoctor: { $ne: doctorId } }
+                                ]
+                            }
                         ]
                     });
 

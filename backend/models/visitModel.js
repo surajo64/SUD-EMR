@@ -221,6 +221,7 @@ const visitSchema = mongoose.Schema({
     seen: { type: Boolean, default: false },
     seenBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     seenAt: { type: Date },
+    isActive: { type: Boolean },
 }, {
     timestamps: true,
 });
