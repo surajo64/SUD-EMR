@@ -3937,46 +3937,7 @@ const PatientDetails = () => {
                                                     )}
                                                 </div>
 
-                                                {/* Referral Letters Section */}
-                                                <div className="mb-8 font-sans">
-                                                    <div className="flex items-center gap-2 mb-3">
-                                                        <FaFileMedical className="text-orange-600" />
-                                                        <h4 className="text-base font-bold text-orange-700">Referral Letters</h4>
-                                                        <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-semibold">{referrals.length}</span>
-                                                    </div>
-                                                    {referrals.length === 0 ? (
-                                                        <p className="text-gray-500 italic text-sm">No referrals created for this visit.</p>
-                                                    ) : (
-                                                        <div className="space-y-3">
-                                                            {referrals.map(ref => (
-                                                                <div key={ref._id} className="border p-4 rounded bg-gray-50 flex justify-between items-start">
-                                                                    <div className="flex-1">
-                                                                        <p className="font-semibold text-lg">{ref.referredTo}</p>
-                                                                        <p className="text-sm text-gray-600 mt-1"><strong>Diagnosis:</strong> {ref.diagnosis}</p>
-                                                                        <p className="text-sm text-gray-600 mt-1"><strong>Reason:</strong> {ref.reason}</p>
-                                                                        <p className="text-xs text-gray-500 mt-2">Created: {new Date(ref.createdAt).toLocaleDateString()} by Dr. {ref.doctor?.name || 'Unknown'}</p>
-                                                                    </div>
-                                                                    <div className="flex gap-2 ml-4">
-                                                                        {ref.doctor?._id === user._id && user.role === 'doctor' && (
-                                                                            <button
-                                                                                onClick={() => handleEditClick(ref)}
-                                                                                className="text-green-600 hover:text-green-800 flex items-center gap-1 px-3 py-2 border border-green-600 rounded hover:bg-green-50"
-                                                                            >
-                                                                                <FaEdit /> Edit
-                                                                            </button>
-                                                                        )}
-                                                                        <button
-                                                                            onClick={() => printReferral(ref)}
-                                                                            className="text-blue-600 hover:text-blue-800 flex items-center gap-1 px-3 py-2 border border-blue-600 rounded hover:bg-blue-50"
-                                                                        >
-                                                                            <FaFileMedical /> Print
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
+
                                             </div>
                                         )}
 
@@ -4547,7 +4508,7 @@ const PatientDetails = () => {
                                 <label className="block text-sm font-semibold text-orange-700 mb-1">Antibiotic plan</label>
                                 <textarea rows={3} value={postoperativeHandoverForm.antibioticPlan || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, antibioticPlan: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 resize-y" />
                             </div>
-                            
+
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-semibold text-gray-600 mb-1">Consultant Anaesthesiologist First Name</label>
