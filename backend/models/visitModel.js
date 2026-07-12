@@ -237,6 +237,34 @@ const visitSchema = mongoose.Schema({
         createdAt: { type: Date, default: Date.now }
     }],
 
+    // Anaesthetic Machine/Medication & Equipment Checklists
+    checklists: [{
+        primaryOxygenChecked: String,
+        backupOxygenAvailable: String,
+        oxygenAlarmWorking: String,
+        flowmetersWorking: String,
+        vaporiserAttachedFull: String,
+        leakTestPassed: String,
+        scavengingChecked: String,
+        monitoringEquipmentFunctioning: String,
+        halothaneIsofluraneAvailable: String,
+
+        emergencyEquipmentChecked: String,
+        endotrachealTubesChecked: String,
+        airwayAidsChecked: String,
+        selfInflatingBagChecked: String,
+        intravenousCannulaeChecked: String,
+        fluidAdministrationSetChecked: String,
+        isotonicCrystalloidChecked: String,
+        epinephrineChecked: String,
+        atropineChecked: String,
+        antagonistsChecked: String,
+
+        filledAt: Date,
+        filledBy: String,
+        createdAt: { type: Date, default: Date.now }
+    }],
+
     // Clinic and Encounter Type
     clinic: { type: mongoose.Schema.Types.ObjectId, ref: 'Clinic' },
     encounterType: {

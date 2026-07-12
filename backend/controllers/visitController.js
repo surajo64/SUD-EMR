@@ -1209,6 +1209,50 @@ const saveClinicalNote = async (req, res) => {
     }
 };
 
+// @desc    Save/update an anaesthetic machine/medication & equipment checklist
+// @route   POST /api/visits/:id/checklists
+// @access  Private (Doctor/User)
+const saveChecklist = async (req, res) => {
+    try {
+        const visit = await Visit.findById(req.params.id);
+        if (!visit) return res.status(404).json({ message: 'Visit not found' });
+
+        const checklistData = {
+            ...req.body,
+            filledAt: new Date(),
+            filledBy: req.user.name
+        };
+
+        if (!visit.checklists) {
+            visit.checklists = [];
+        }
+
+        const checklistId = checklistData._id;
+        if (checklistId) {
+            const idx = visit.checklists.findIndex(c => c._id.toString() === checklistId);
+            if (idx >= 0) {
+                Object.assign(visit.checklists[idx], checklistData);
+            } else {
+                checklistData.createdAt = new Date();
+                visit.checklists.push(checklistData);
+            }
+        } else {
+            checklistData.createdAt = new Date();
+            visit.checklists.push(checklistData);
+        }
+
+        await visit.save();
+        res.status(200).json({
+            theatreNotes: visit.theatreNotes || [],
+            consents: visit.consents || [],
+            checklists: visit.checklists || []
+        });
+    } catch (error) {
+        console.error('saveChecklist error:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     createVisit,
     getVisits,
@@ -1220,6 +1264,7 @@ module.exports = {
     addWardRoundNote,
     saveTheatreNote,
     saveConsentNote,
+    saveChecklist,
     convertToInpatient,
     changeEncounterType,
     saveClinicalNote

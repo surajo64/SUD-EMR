@@ -25,6 +25,31 @@ const getNurseFirstName = (fullName) => {
     return parts[0];
 };
 
+const anaestheticMachineItems = [
+    { key: 'primaryOxygenChecked', label: 'PRIMARY OXYGEN source checked' },
+    { key: 'backupOxygenAvailable', label: 'BACK-UP OXYGEN available' },
+    { key: 'oxygenAlarmWorking', label: 'OXYGEN ALARM working (if present)' },
+    { key: 'flowmetersWorking', label: 'FLOWMETERS working' },
+    { key: 'vaporiserAttachedFull', label: 'VAPORISER attached and full' },
+    { key: 'leakTestPassed', label: 'Anaesthetic machine passes LEAK TEST' },
+    { key: 'scavengingChecked', label: 'SCAVENGING checked' },
+    { key: 'monitoringEquipmentFunctioning', label: 'Available MONITORING equipment functioning' },
+    { key: 'halothaneIsofluraneAvailable', label: 'Sufficient Halothane & Isoflurane available' }
+];
+
+const medicationsEquipmentItems = [
+    { key: 'emergencyEquipmentChecked', label: 'EMERGENCY equipment and medications checked' },
+    { key: 'endotrachealTubesChecked', label: 'Endotracheal tubes (cuffs checked)' },
+    { key: 'airwayAidsChecked', label: 'Airway aids (e.g. laryngoscope, urinary catheter, lidocaine spray, suction, guide-wire/stylet)' },
+    { key: 'selfInflatingBagChecked', label: 'Self-inflating bag (or demand valve for equine anaesthetics)' },
+    { key: 'intravenousCannulaeChecked', label: 'Intravenous cannulae' },
+    { key: 'fluidAdministrationSetChecked', label: 'Fluid administration set' },
+    { key: 'isotonicCrystalloidChecked', label: 'Isotonic crystalloid solution ie. normal saline' },
+    { key: 'epinephrineChecked', label: 'Epinephrine/adrenaline' },
+    { key: 'atropineChecked', label: 'Atropine' },
+    { key: 'antagonistsChecked', label: 'Antagonists (e.g. atipamezole, naloxone/butorphanol)' }
+];
+
 const PatientDetails = () => {
     const { id } = useParams();
     const { user } = useContext(AuthContext);
@@ -424,6 +449,57 @@ const PatientDetails = () => {
     const [dispensedPrescriptions, setDispensedPrescriptions] = useState([]);
     const [administrationHistory, setAdministrationHistory] = useState([]);
 
+    // Checklist States
+    const [checklists, setChecklists] = useState([]);
+    const [showChecklistModal, setShowChecklistModal] = useState(false);
+    const [editingChecklist, setEditingChecklist] = useState(null);
+    const emptyChecklistForm = {
+        filledBy: '',
+        // Anaesthetic Machine
+        primaryOxygenChecked: '', backupOxygenAvailable: '', oxygenAlarmWorking: '',
+        flowmetersWorking: '', vaporiserAttachedFull: '', leakTestPassed: '',
+        scavengingChecked: '', monitoringEquipmentFunctioning: '', halothaneIsofluraneAvailable: '',
+        // Medications/Equipment
+        emergencyEquipmentChecked: '', endotrachealTubesChecked: '', airwayAidsChecked: '',
+        selfInflatingBagChecked: '', intravenousCannulaeChecked: '', fluidAdministrationSetChecked: '',
+        isotonicCrystalloidChecked: '', epinephrineChecked: '', atropineChecked: '', antagonistsChecked: ''
+    };
+    const [checklistForm, setChecklistForm] = useState({ ...emptyChecklistForm });
+
+    const handleSaveChecklist = async () => {
+        try {
+            const payload = { ...checklistForm, filledAt: new Date().toISOString() };
+            const url = editingChecklist
+                ? `${backendUrl}/api/visits/${encounter._id}/checklists/${editingChecklist}`
+                : `${backendUrl}/api/visits/${encounter._id}/checklists`;
+            const method = editingChecklist ? 'put' : 'post';
+            const { data } = await axios[method](url, payload, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+            setChecklists(data.checklists || []);
+            setShowChecklistModal(false);
+            setEditingChecklist(null);
+            setChecklistForm({ ...emptyChecklistForm });
+        } catch (err) {
+            alert(err?.response?.data?.message || 'Failed to save checklist');
+        }
+    };
+
+    const printChecklistFromData = (chk) => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) { alert('Please allow popups to print.'); return; }
+        const radioVal = (val) => val === 'yes' ? '☑ Yes  ☐ No  ☐ N/A' : val === 'no' ? '☐ Yes  ☑ No  ☐ N/A' : val === 'na' ? '☐ Yes  ☐ No  ☑ N/A' : '☐ Yes  ☐ No  ☐ N/A';
+        const rows = (items) => items.map(it => `<tr><td style="padding:6px 10px;border:1px solid #ccc;">${it.label}</td><td style="padding:6px 10px;border:1px solid #ccc;font-family:monospace;">${radioVal(chk[it.key])}</td></tr>`).join('');
+        printWindow.document.write(`<!DOCTYPE html><html><head><title>Anaesthetic Checklist</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#111}h2{text-align:center}table{width:100%;border-collapse:collapse;margin-bottom:20px}th{background:#e8e8e8;padding:8px 10px;border:1px solid #ccc;text-align:left}p{font-size:13px}@media print{}</style></head><body>
+            <h2>Anaesthetic Machine / Medication & Equipment Checklist</h2>
+            <p><strong>Patient:</strong> ${patient?.name || ''} &nbsp;&nbsp; <strong>MRN:</strong> ${patient?.mrn || ''}</p>
+            <p><strong>Filled by:</strong> ${chk.filledBy || ''} &nbsp;&nbsp; <strong>Date:</strong> ${chk.filledAt ? new Date(chk.filledAt).toLocaleString() : 'N/A'}</p>
+            <h3>Section 1: Anaesthetic Machine</h3>
+            <table><thead><tr><th>Item</th><th>Response</th></tr></thead><tbody>${rows(anaestheticMachineItems)}</tbody></table>
+            <h3>Section 2: Medications / Equipment</h3>
+            <table><thead><tr><th>Item</th><th>Response</th></tr></thead><tbody>${rows(medicationsEquipmentItems)}</tbody></table>
+            <script>window.onload=()=>{window.print();}<\/script></body></html>`);
+        printWindow.document.close();
+    };
+
     // Modal States
     const [showLabModal, setShowLabModal] = useState(false);
     const [showRadModal, setShowRadModal] = useState(false);
@@ -759,6 +835,8 @@ const PatientDetails = () => {
             setTheatreNotes(visitRes.data.theatreNotes || []);
             // Consents
             setConsents(visitRes.data.consents || []);
+            // Checklists
+            setChecklists(visitRes.data.checklists || []);
 
             // Update encounter with fully-populated data (so consultingPhysician.name is available)
             setEncounter(visitRes.data);
@@ -3337,6 +3415,16 @@ const PatientDetails = () => {
                                                                 <FaPlus /> Consent note
                                                             </button>
                                                         )}
+                                                        {['doctor', 'nurse'].includes(user.role) && (
+                                                            <button
+                                                                onClick={() => { setChecklistForm({ ...emptyChecklistForm }); setEditingChecklist(null); setShowChecklistModal(true); }}
+                                                                disabled={!canEdit}
+                                                                className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                                                    }`}
+                                                            >
+                                                                <FaPlus /> Checklist
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </div>
 
@@ -3473,6 +3561,50 @@ const PatientDetails = () => {
                                                         </div>
                                                     ) : (
                                                         <p className="text-sm text-gray-400 italic mb-6">No surgical consents recorded yet.</p>
+                                                    )}
+                                                </div>
+
+                                                {/* Equipment & Anaesthesia Checklists Section */}
+                                                <div className="mb-8 font-sans">
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <FaCheckCircle className="text-indigo-600" />
+                                                        <h4 className="text-base font-bold text-indigo-700">Anaesthetic & Equipment Checklists</h4>
+                                                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-semibold">{checklists.length}</span>
+                                                    </div>
+                                                    {checklists.length > 0 ? (
+                                                        <div className="space-y-3">
+                                                            {checklists.map((chk) => (
+                                                                <div key={chk._id} className="border border-indigo-200 rounded-lg overflow-hidden bg-white p-4 flex justify-between items-center shadow-sm hover:shadow transition">
+                                                                    <div>
+                                                                        <p className="font-bold text-gray-800 text-sm">Anaesthetic Machine/Medication & Equipment Checklist</p>
+                                                                        <p className="text-xs text-gray-600 mt-1">
+                                                                            Filled by: <span className="font-semibold">{chk.filledBy}</span> |
+                                                                            Date: <span className="font-semibold">{chk.filledAt ? new Date(chk.filledAt).toLocaleString() : 'N/A'}</span>
+                                                                        </p>
+                                                                    </div>
+                                                                    <div className="flex gap-2">
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setChecklistForm({ ...chk });
+                                                                                setEditingChecklist(chk._id);
+                                                                                setShowChecklistModal(true);
+                                                                            }}
+                                                                            className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1 px-3 py-2 border border-indigo-600 rounded hover:bg-indigo-50 text-xs font-semibold"
+                                                                        >
+                                                                            <FaEdit /> Edit / View
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => printChecklistFromData(chk)}
+                                                                            className="text-blue-600 hover:text-blue-800 flex items-center gap-1 px-3 py-2 border border-blue-600 rounded hover:bg-blue-50 text-xs font-semibold"
+                                                                        >
+                                                                            <FaPrint /> Print
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-sm text-gray-400 italic mb-6">No checklists recorded yet.</p>
                                                     )}
                                                 </div>
                                             </div>
@@ -3892,6 +4024,86 @@ const PatientDetails = () => {
                             >
                                 Save Operation Note
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Anaesthetic Machine / Medication & Equipment Checklist Modal */}
+            {showChecklistModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[95vh] overflow-y-auto flex flex-col">
+                        <div className="bg-indigo-700 text-white px-6 py-4 flex justify-between items-center rounded-t-xl sticky top-0 z-20 shadow-md">
+                            <h3 className="text-xl font-bold flex items-center gap-2">
+                                <FaCheckCircle /> Anaesthetic Machine / Medication &amp; Equipment Checklist
+                            </h3>
+                            <button onClick={() => { setShowChecklistModal(false); setEditingChecklist(null); }} className="text-white hover:text-red-300 text-2xl font-bold">&times;</button>
+                        </div>
+                        <div className="p-6 space-y-6">
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Filled by (Name)</label>
+                                <input
+                                    type="text"
+                                    value={checklistForm.filledBy || ''}
+                                    onChange={e => setChecklistForm(f => ({ ...f, filledBy: e.target.value }))}
+                                    className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                    placeholder="Enter name of person filling this form"
+                                />
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-indigo-700 text-base mb-3 border-b border-indigo-200 pb-1">Section 1: Anaesthetic Machine</h4>
+                                <table className="w-full text-sm border-collapse">
+                                    <thead>
+                                        <tr className="bg-indigo-50">
+                                            <th className="text-left px-3 py-2 border border-gray-200 font-semibold text-gray-700">Item</th>
+                                            <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 text-center w-20">Yes</th>
+                                            <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 text-center w-20">No</th>
+                                            <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 text-center w-32">Not Applicable</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {anaestheticMachineItems.map((item, i) => (
+                                            <tr key={item.key} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                                <td className="px-3 py-2 border border-gray-200 text-gray-800">{item.label}</td>
+                                                {['yes', 'no', 'na'].map(val => (
+                                                    <td key={val} className="px-3 py-2 border border-gray-200 text-center">
+                                                        <input type="radio" name={item.key} value={val} checked={checklistForm[item.key] === val} onChange={() => setChecklistForm(f => ({ ...f, [item.key]: val }))} className="w-4 h-4 accent-indigo-600" />
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-indigo-700 text-base mb-3 border-b border-indigo-200 pb-1">Section 2: Medications / Equipment</h4>
+                                <table className="w-full text-sm border-collapse">
+                                    <thead>
+                                        <tr className="bg-indigo-50">
+                                            <th className="text-left px-3 py-2 border border-gray-200 font-semibold text-gray-700">Item</th>
+                                            <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 text-center w-20">Yes</th>
+                                            <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 text-center w-20">No</th>
+                                            <th className="px-3 py-2 border border-gray-200 font-semibold text-gray-700 text-center w-32">Not Applicable</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {medicationsEquipmentItems.map((item, i) => (
+                                            <tr key={item.key} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                                <td className="px-3 py-2 border border-gray-200 text-gray-800">{item.label}</td>
+                                                {['yes', 'no', 'na'].map(val => (
+                                                    <td key={val} className="px-3 py-2 border border-gray-200 text-center">
+                                                        <input type="radio" name={item.key} value={val} checked={checklistForm[item.key] === val} onChange={() => setChecklistForm(f => ({ ...f, [item.key]: val }))} className="w-4 h-4 accent-indigo-600" />
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-3 rounded-b-xl sticky bottom-0">
+                            <button onClick={() => { setShowChecklistModal(false); setEditingChecklist(null); }} className="px-5 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 text-sm font-semibold">Cancel</button>
+                            <button onClick={handleSaveChecklist} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-semibold">Save Checklist</button>
                         </div>
                     </div>
                 </div>
