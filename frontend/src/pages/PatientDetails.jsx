@@ -9,7 +9,7 @@ import { checkRange, getRangeColorClass } from '../utils/labUtils';
 import Layout from '../components/Layout';
 import LoadingOverlay from '../components/loadingOverlay';
 import AppointmentModal from '../components/AppointmentModal';
-import { FaTimes, FaFileMedical, FaPills, FaChevronDown, FaChevronUp, FaHeartbeat, FaNotesMedical, FaProcedures, FaXRay, FaVial, FaUserMd, FaCalendarPlus, FaPlus, FaTrash, FaEdit, FaSearch, FaClock, FaChevronRight, FaFileAlt, FaCheckCircle, FaInfoCircle, FaDollarSign, FaPrint, FaUpload, FaEye, FaDownload } from 'react-icons/fa';
+import { FaTimes, FaFileMedical, FaPills, FaChevronDown, FaChevronUp, FaHeartbeat, FaNotesMedical, FaProcedures, FaXRay, FaVial, FaUserMd, FaCalendarPlus, FaPlus, FaTrash, FaEdit, FaSearch, FaClock, FaChevronRight, FaFileAlt, FaCheckCircle, FaInfoCircle, FaDollarSign, FaPrint, FaUpload, FaEye, FaDownload, FaStethoscope } from 'react-icons/fa';
 import icd11Data from '../data/icd11.json';
 import useHospitalSettings from '../hooks/useHospitalSettings';
 
@@ -59,6 +59,7 @@ const PatientDetails = () => {
     const [patient, setPatient] = useState(null);
     const [encounter, setEncounter] = useState(null);
     const [vitals, setVitals] = useState(null);
+    const [vitalsList, setVitalsList] = useState([]);
     const [labCharges, setLabCharges] = useState([]);
     const [radiologyCharges, setRadiologyCharges] = useState([]);
     const [inventoryDrugs, setInventoryDrugs] = useState([]);
@@ -964,8 +965,12 @@ const PatientDetails = () => {
             ]);
 
             // Vitals
-            if (vitalsRes.data.length > 0) setVitals(vitalsRes.data[0]);
-            else setVitals(null);
+            setVitalsList(vitalsRes.data);
+            if (vitalsRes.data.length > 0) {
+                setVitals(vitalsRes.data[vitalsRes.data.length - 1]);
+            } else {
+                setVitals(null);
+            }
 
             // Lab Orders
             setCurrentLabOrders(labRes.data);
@@ -2731,6 +2736,79 @@ const PatientDetails = () => {
                                                             <p className="text-xs text-gray-500 mt-2 italic">
                                                                 Recorded by: {vitals.nurse.name}
                                                             </p>
+                                                        )}
+
+                                                        {/* Previous Vitals History */}
+                                                        {vitalsList && vitalsList.length > 0 && (
+                                                            <div className="bg-blue-50 p-4 rounded mt-4 border border-blue-200">
+                                                                <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                                                                    <FaStethoscope className="text-blue-600" /> Previous Vitals for this Visit:
+                                                                </h4>
+                                                                <div className="overflow-x-auto">
+                                                                    <table className="w-full border-collapse border text-xs bg-white text-left">
+                                                                        <thead className="bg-gray-100">
+                                                                            <tr>
+                                                                                <th className="p-2 border">Time</th>
+                                                                                <th className="p-2 border">BP (mmHg)</th>
+                                                                                <th className="p-2 border">Temp (&deg;C)</th>
+                                                                                <th className="p-2 border">HR (bpm)</th>
+                                                                                <th className="p-2 border">RR (/min)</th>
+                                                                                <th className="p-2 border">SpO2 (%)</th>
+                                                                                <th className="p-2 border">Wt (kg)</th>
+                                                                                <th className="p-2 border">Ht (cm)</th>
+                                                                                <th className="p-2 border">BMI (kg/m&sup2;)</th>
+                                                                                <th className="p-2 border">Nurse</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            {vitalsList.map((v, idx) => {
+                                                                                const bmiValue = v.bmi || (v.weight && v.height ? (v.weight / Math.pow(v.height / 100, 2)) : null);
+                                                                                const bmi = bmiValue ? parseFloat(bmiValue).toFixed(1) : null;
+                                                                                return (
+                                                                                    <tr key={v._id || idx} className="border-b hover:bg-gray-50">
+                                                                                        <td className="p-2 border">{new Date(v.createdAt).toLocaleString()}</td>
+                                                                                        <td className={`p-2 border ${getVitalColorClass('bloodPressure', v.bloodPressure)}`}>
+                                                                                            {v.bloodPressure || '-'}
+                                                                                        </td>
+                                                                                        <td className={`p-2 border ${getVitalColorClass('temperature', v.temperature)}`}>
+                                                                                            {v.temperature || '-'}
+                                                                                        </td>
+                                                                                        <td className={`p-2 border ${getVitalColorClass('heartRate', v.pulseRate || v.heartRate)}`}>
+                                                                                            {v.pulseRate || v.heartRate || '-'}
+                                                                                        </td>
+                                                                                        <td className={`p-2 border ${getVitalColorClass('respiratoryRate', v.respiratoryRate)}`}>
+                                                                                            {v.respiratoryRate || '-'}
+                                                                                        </td>
+                                                                                        <td className={`p-2 border ${getVitalColorClass('spo2', v.spo2)}`}>
+                                                                                            {v.spo2 || '-'}
+                                                                                        </td>
+                                                                                        <td className="p-2 border">{v.weight || '-'}</td>
+                                                                                        <td className="p-2 border">{v.height || '-'}</td>
+                                                                                        <td className={`p-2 border font-semibold ${bmi ? (
+                                                                                            parseFloat(bmi) < 18.5 ? 'text-yellow-600' :
+                                                                                                parseFloat(bmi) < 25 ? 'text-green-600' :
+                                                                                                    parseFloat(bmi) < 30 ? 'text-orange-500' :
+                                                                                                        parseFloat(bmi) < 35 ? 'text-orange-700' :
+                                                                                                            parseFloat(bmi) < 40 ? 'text-red-500' :
+                                                                                                                parseFloat(bmi) < 50 ? 'text-red-700' :
+                                                                                                                    'text-purple-700'
+                                                                                        ) : ''}`}>
+                                                                                            {bmi ? `${bmi} ${parseFloat(bmi) < 18.5 ? '(Underweight)' :
+                                                                                                parseFloat(bmi) < 25 ? '(Normal)' :
+                                                                                                    parseFloat(bmi) < 30 ? '(Overweight)' :
+                                                                                                        parseFloat(bmi) < 35 ? '(Grade I Obese)' :
+                                                                                                            parseFloat(bmi) < 40 ? '(Grade II Obese)' :
+                                                                                                                parseFloat(bmi) < 50 ? '(Morbidly Obese)' :
+                                                                                                                    '(Super Obese)'}` : '-'}
+                                                                                        </td>
+                                                                                        <td className="p-2 border text-gray-600">{v.nurse?.name || 'Unknown'}</td>
+                                                                                    </tr>
+                                                                                );
+                                                                            })}
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                            </div>
                                                         )}
                                                     </div>
                                                 ) : (
