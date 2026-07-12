@@ -265,6 +265,31 @@ const visitSchema = mongoose.Schema({
         createdAt: { type: Date, default: Date.now }
     }],
 
+    // Pre-Anaesthesia Checklists
+    preAnaesthesiaChecklists: [{
+        firstName: String,
+        lastName: String,
+        patientMRN: String,
+        historyClinicalExamSignificant: String,
+        historyClinicalExamDetails: String,
+        abnormalitiesWarrantInvestigation: String,
+        specificInvestigationsDetails: String,
+        abnormalitiesCanBeStabilised: String,
+        anticipatedComplications: String,
+        complicationManagement: String,
+        premedication: String,
+        painManagement: String,
+        anaesthesiaInductionMaintenance: String,
+        patientMonitoring: String,
+        bodyTemperatureMaintenance: String,
+        postAnaestheticManagement: String,
+        facilitiesAvailable: String,
+        unavailableResourcesDetails: String,
+        filledAt: Date,
+        filledBy: String,
+        createdAt: { type: Date, default: Date.now }
+    }],
+
     // Clinic and Encounter Type
     clinic: { type: mongoose.Schema.Types.ObjectId, ref: 'Clinic' },
     encounterType: {

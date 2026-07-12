@@ -469,15 +469,11 @@ const PatientDetails = () => {
     const handleSaveChecklist = async () => {
         try {
             const payload = { ...checklistForm, filledAt: new Date().toISOString() };
-            const url = editingChecklist
-                ? `${backendUrl}/api/visits/${encounter._id}/checklists/${editingChecklist}`
-                : `${backendUrl}/api/visits/${encounter._id}/checklists`;
-            const method = editingChecklist ? 'put' : 'post';
-            const { data } = await axios[method](url, payload, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+            const { data } = await axios.post(`${backendUrl}/api/visits/${encounter._id}/checklists`, payload, { headers: { Authorization: `Bearer ${user.token}` } });
             setChecklists(data.checklists || []);
             setShowChecklistModal(false);
             setEditingChecklist(null);
-            setChecklistForm({ ...emptyChecklistForm });
+            setChecklistForm({ ...emptyChecklistForm, filledBy: user.name || '' });
         } catch (err) {
             alert(err?.response?.data?.message || 'Failed to save checklist');
         }
@@ -496,6 +492,73 @@ const PatientDetails = () => {
             <table><thead><tr><th>Item</th><th>Response</th></tr></thead><tbody>${rows(anaestheticMachineItems)}</tbody></table>
             <h3>Section 2: Medications / Equipment</h3>
             <table><thead><tr><th>Item</th><th>Response</th></tr></thead><tbody>${rows(medicationsEquipmentItems)}</tbody></table>
+            <script>window.onload=()=>{window.print();}<\/script></body></html>`);
+        printWindow.document.close();
+    };
+
+    // Pre-Anaesthesia Checklist States
+    const [preAnaesthesiaChecklists, setPreAnaesthesiaChecklists] = useState([]);
+    const [showPreAnaesthesiaModal, setShowPreAnaesthesiaModal] = useState(false);
+    const [editingPreAnaesthesiaChecklist, setEditingPreAnaesthesiaChecklist] = useState(null);
+    const emptyPreAnaesthesiaForm = {
+        firstName: '', lastName: '', patientMRN: '',
+        historyClinicalExamSignificant: '', historyClinicalExamDetails: '',
+        abnormalitiesWarrantInvestigation: '', specificInvestigationsDetails: '',
+        abnormalitiesCanBeStabilised: '',
+        anticipatedComplications: '', complicationManagement: '',
+        premedication: '',
+        painManagement: '', anaesthesiaInductionMaintenance: '',
+        patientMonitoring: '', bodyTemperatureMaintenance: '',
+        postAnaestheticManagement: '',
+        facilitiesAvailable: '', unavailableResourcesDetails: '',
+        filledBy: ''
+    };
+    const [preAnaesthesiaForm, setPreAnaesthesiaForm] = useState({ ...emptyPreAnaesthesiaForm });
+
+    const handleSavePreAnaesthesiaChecklist = async () => {
+        try {
+            const payload = { ...preAnaesthesiaForm, filledAt: new Date().toISOString() };
+            if (editingPreAnaesthesiaChecklist) payload._id = editingPreAnaesthesiaChecklist;
+            const { data } = await axios.post(
+                `${backendUrl}/api/visits/${encounter._id}/pre-anaesthesia-checklists`,
+                payload,
+                { headers: { Authorization: `Bearer ${user.token}` } }
+            );
+            setPreAnaesthesiaChecklists(data.preAnaesthesiaChecklists || []);
+            setShowPreAnaesthesiaModal(false);
+            setEditingPreAnaesthesiaChecklist(null);
+            setPreAnaesthesiaForm({ ...emptyPreAnaesthesiaForm, filledBy: user.name || '' });
+        } catch (err) {
+            alert(err?.response?.data?.message || 'Failed to save pre-anaesthesia checklist');
+        }
+    };
+
+    const printPreAnaesthesiaChecklist = (chk) => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) { alert('Please allow popups to print.'); return; }
+        const selVal = (val) => val === 'yes' ? 'Yes' : val === 'no' ? 'No' : val || 'N/A';
+        const row = (label, val) => `<tr><td style="padding:6px 10px;border:1px solid #ccc;font-weight:bold;width:50%;">${label}</td><td style="padding:6px 10px;border:1px solid #ccc;">${val || 'N/A'}</td></tr>`;
+        printWindow.document.write(`<!DOCTYPE html><html><head><title>Pre-Anaesthesia Checklist</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#111}h2{text-align:center}table{width:100%;border-collapse:collapse;margin-bottom:20px}@media print{}</style></head><body>
+            <h2>Pre-Anaesthesia Checklist</h2>
+            <p><strong>Patient:</strong> ${chk.firstName || ''} ${chk.lastName || ''} &nbsp;&nbsp; <strong>MRN:</strong> ${chk.patientMRN || ''}</p>
+            <p><strong>Filled by:</strong> ${chk.filledBy || ''} &nbsp;&nbsp; <strong>Date:</strong> ${chk.filledAt ? new Date(chk.filledAt).toLocaleString() : 'N/A'}</p>
+            <table>
+                ${row('Has anything significant been identified in the history and/or clinical examination?', selVal(chk.historyClinicalExamSignificant))}
+                ${row('If yes, explain exactly what was identified', chk.historyClinicalExamDetails)}
+                ${row('Do any abnormalities warrant further investigation?', selVal(chk.abnormalitiesWarrantInvestigation))}
+                ${row('If yes, which specific investigations need to be requested?', chk.specificInvestigationsDetails)}
+                ${row('Can any abnormalities be stabilised prior to anaesthesia?', selVal(chk.abnormalitiesCanBeStabilised))}
+                ${row('What complications are anticipated during anaesthesia?', chk.anticipatedComplications)}
+                ${row('How can these complications be managed?', chk.complicationManagement)}
+                ${row('Would the patient benefit from premedication?', selVal(chk.premedication))}
+                ${row('How will any pain associated with the procedure be managed?', chk.painManagement)}
+                ${row('How will anaesthesia be induced & maintained?', chk.anaesthesiaInductionMaintenance)}
+                ${row('How will the patient be monitored?', chk.patientMonitoring)}
+                ${row("How will the patient's body temperature be maintained?", chk.bodyTemperatureMaintenance)}
+                ${row('How will the patient be managed in the post-anaesthetic period?', chk.postAnaestheticManagement)}
+                ${row('Are the required facilities, personnel & medications available?', selVal(chk.facilitiesAvailable))}
+                ${row('If not, list what/who is currently unavailable', chk.unavailableResourcesDetails)}
+            </table>
             <script>window.onload=()=>{window.print();}<\/script></body></html>`);
         printWindow.document.close();
     };
@@ -837,6 +900,7 @@ const PatientDetails = () => {
             setConsents(visitRes.data.consents || []);
             // Checklists
             setChecklists(visitRes.data.checklists || []);
+            setPreAnaesthesiaChecklists(visitRes.data.preAnaesthesiaChecklists || []);
 
             // Update encounter with fully-populated data (so consultingPhysician.name is available)
             setEncounter(visitRes.data);
@@ -2434,7 +2498,7 @@ const PatientDetails = () => {
                                             onClick={() => setActiveTab('referrals')}
                                             className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'referrals' ? 'border-b-2 border-orange-600 text-orange-600' : 'text-gray-600 hover:text-gray-800'}`}
                                         >
-                                            <FaFileMedical /> Theatre Notes ({referrals.length})
+                                            <FaFileMedical /> Theatre Notes ({theatreNotes.length})
                                         </button>
 
                                         {/* Inpatient Notes Tab - formerly Other Notes, Ward Round, Theatre */}
@@ -3395,35 +3459,67 @@ const PatientDetails = () => {
                                                 <div className="flex flex-wrap justify-between items-center mb-5 gap-3">
                                                     <h3 className="text-xl font-bold text-gray-800">Operation / Theater</h3>
                                                     <div className="flex flex-wrap gap-2">
-                                                        {user.role === 'doctor' && (
-                                                            <button
-                                                                onClick={() => { setTheatreNoteForm({ ...emptyTheatreNote }); setEditingTheatreNote(null); setShowTheatreModal(true); }}
-                                                                disabled={!canEdit}
-                                                                className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-red-700 text-white hover:bg-red-800'
-                                                                    }`}
-                                                            >
-                                                                <FaPlus /> Add Theatre Note
-                                                            </button>
-                                                        )}
+                                                        {user.role === 'doctor' && (() => {
+                                                            const prereqsMet = consents.length > 0 && checklists.length > 0 && preAnaesthesiaChecklists.length > 0;
+                                                            const isDisabled = !canEdit || !prereqsMet;
+                                                            const title = !prereqsMet
+                                                                ? `Required before adding operation note:\n${consents.length === 0 ? '• Consent note\n' : ''}${checklists.length === 0 ? '• Anes. Med. Equip checklist\n' : ''}${preAnaesthesiaChecklists.length === 0 ? '• Pre-Anaesthesia checklist' : ''}`
+                                                                : '';
+                                                            return (
+                                                                <button
+                                                                    onClick={() => { setTheatreNoteForm({ ...emptyTheatreNote }); setEditingTheatreNote(null); setShowTheatreModal(true); }}
+                                                                    disabled={isDisabled}
+                                                                    title={title}
+                                                                    className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${isDisabled ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-red-700 text-white hover:bg-red-800'}`}
+                                                                >
+                                                                    <FaPlus /> Add Theatre Note
+                                                                </button>
+                                                            );
+                                                        })()}
                                                         {['doctor', 'nurse', 'receptionist', 'admin'].includes(user.role) && (
-                                                            <button
-                                                                onClick={() => handleOpenConsentModal(null)}
-                                                                disabled={!canEdit}
-                                                                className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                                                                    }`}
-                                                            >
-                                                                <FaPlus /> Consent note
-                                                            </button>
+                                                            consents.length > 0 ? (
+                                                                <span className="px-4 py-2 rounded flex items-center gap-2 text-sm bg-green-100 text-green-700 border border-green-400 font-semibold cursor-default">
+                                                                    <FaCheckCircle /> Consent note ✓
+                                                                </span>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => handleOpenConsentModal(null)}
+                                                                    disabled={!canEdit}
+                                                                    className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}
+                                                                >
+                                                                    <FaPlus /> Consent note
+                                                                </button>
+                                                            )
                                                         )}
                                                         {['doctor', 'nurse'].includes(user.role) && (
-                                                            <button
-                                                                onClick={() => { setChecklistForm({ ...emptyChecklistForm }); setEditingChecklist(null); setShowChecklistModal(true); }}
-                                                                disabled={!canEdit}
-                                                                className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                                                                    }`}
-                                                            >
-                                                                <FaPlus /> Checklist
-                                                            </button>
+                                                            checklists.length > 0 ? (
+                                                                <span className="px-4 py-2 rounded flex items-center gap-2 text-sm bg-green-100 text-green-700 border border-green-400 font-semibold cursor-default">
+                                                                    <FaCheckCircle /> Anes. Med. Equip ✓
+                                                                </span>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => { setChecklistForm({ ...emptyChecklistForm, filledBy: user.name || '' }); setEditingChecklist(null); setShowChecklistModal(true); }}
+                                                                    disabled={!canEdit}
+                                                                    className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+                                                                >
+                                                                    <FaPlus /> Anes. Med. Equip
+                                                                </button>
+                                                            )
+                                                        )}
+                                                        {['doctor', 'nurse'].includes(user.role) && (
+                                                            preAnaesthesiaChecklists.length > 0 ? (
+                                                                <span className="px-4 py-2 rounded flex items-center gap-2 text-sm bg-green-100 text-green-700 border border-green-400 font-semibold cursor-default">
+                                                                    <FaCheckCircle /> Pre-Anaes. ✓
+                                                                </span>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => { setPreAnaesthesiaForm({ ...emptyPreAnaesthesiaForm, firstName: patient?.name?.split(' ')[0] || '', lastName: patient?.name?.split(' ').slice(1).join(' ') || '', patientMRN: patient?.mrn || '', filledBy: user.name || '' }); setEditingPreAnaesthesiaChecklist(null); setShowPreAnaesthesiaModal(true); }}
+                                                                    disabled={!canEdit}
+                                                                    className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-teal-600 text-white hover:bg-teal-700'}`}
+                                                                >
+                                                                    <FaPlus /> Pre-Anaes.
+                                                                </button>
+                                                            )
                                                         )}
                                                     </div>
                                                 </div>
@@ -3605,6 +3701,47 @@ const PatientDetails = () => {
                                                         </div>
                                                     ) : (
                                                         <p className="text-sm text-gray-400 italic mb-6">No checklists recorded yet.</p>
+                                                    )}
+                                                </div>
+
+                                                {/* Pre-Anaesthesia Checklists Section */}
+                                                <div className="mb-8 font-sans">
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <FaCheckCircle className="text-teal-600" />
+                                                        <h4 className="text-base font-bold text-teal-700">Pre-Anaesthesia Checklists</h4>
+                                                        <span className="text-xs bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-semibold">{preAnaesthesiaChecklists.length}</span>
+                                                    </div>
+                                                    {preAnaesthesiaChecklists.length > 0 ? (
+                                                        <div className="space-y-3">
+                                                            {preAnaesthesiaChecklists.map((chk) => (
+                                                                <div key={chk._id} className="border border-teal-200 rounded-lg bg-white p-4 flex justify-between items-center shadow-sm hover:shadow transition">
+                                                                    <div>
+                                                                        <p className="font-bold text-gray-800 text-sm">Pre-Anaesthesia Checklist</p>
+                                                                        <p className="text-xs text-gray-600 mt-1">
+                                                                            Patient: <span className="font-semibold">{chk.firstName} {chk.lastName}</span> |
+                                                                            Filled by: <span className="font-semibold">{chk.filledBy}</span> |
+                                                                            Date: <span className="font-semibold">{chk.filledAt ? new Date(chk.filledAt).toLocaleString() : 'N/A'}</span>
+                                                                        </p>
+                                                                    </div>
+                                                                    <div className="flex gap-2">
+                                                                        <button
+                                                                            onClick={() => { setPreAnaesthesiaForm({ ...chk }); setEditingPreAnaesthesiaChecklist(chk._id); setShowPreAnaesthesiaModal(true); }}
+                                                                            className="text-teal-600 hover:text-teal-800 flex items-center gap-1 px-3 py-2 border border-teal-600 rounded hover:bg-teal-50 text-xs font-semibold"
+                                                                        >
+                                                                            <FaEdit /> Edit / View
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => printPreAnaesthesiaChecklist(chk)}
+                                                                            className="text-blue-600 hover:text-blue-800 flex items-center gap-1 px-3 py-2 border border-blue-600 rounded hover:bg-blue-50 text-xs font-semibold"
+                                                                        >
+                                                                            <FaPrint /> Print
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-sm text-gray-400 italic mb-6">No pre-anaesthesia checklists recorded yet.</p>
                                                     )}
                                                 </div>
                                             </div>
@@ -4024,6 +4161,82 @@ const PatientDetails = () => {
                             >
                                 Save Operation Note
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Pre-Anaesthesia Checklist Modal */}
+            {showPreAnaesthesiaModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[95vh] overflow-y-auto flex flex-col">
+                        <div className="bg-teal-700 text-white px-6 py-4 flex justify-between items-center rounded-t-xl sticky top-0 z-20 shadow-md">
+                            <h3 className="text-xl font-bold flex items-center gap-2"><FaCheckCircle /> Pre-Anaesthesia Checklist</h3>
+                            <button onClick={() => { setShowPreAnaesthesiaModal(false); setEditingPreAnaesthesiaChecklist(null); }} className="text-white hover:text-red-300 text-2xl font-bold">&times;</button>
+                        </div>
+                        <div className="p-6 space-y-5">
+                            {/* Name + MRN */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">First Name</label>
+                                    <input type="text" value={preAnaesthesiaForm.firstName || ''} onChange={e => setPreAnaesthesiaForm(f => ({ ...f, firstName: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Last Name</label>
+                                    <input type="text" value={preAnaesthesiaForm.lastName || ''} onChange={e => setPreAnaesthesiaForm(f => ({ ...f, lastName: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Patient Number (MRN)</label>
+                                    <input type="text" value={preAnaesthesiaForm.patientMRN || ''} onChange={e => setPreAnaesthesiaForm(f => ({ ...f, patientMRN: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Filled by</label>
+                                    <input type="text" value={preAnaesthesiaForm.filledBy || ''} onChange={e => setPreAnaesthesiaForm(f => ({ ...f, filledBy: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" />
+                                </div>
+                            </div>
+
+                            {/* Dropdown fields helper */}
+                            {[
+                                { key: 'historyClinicalExamSignificant', label: 'Has anything significant been identified in the history and/or clinical examination?' },
+                                { key: 'abnormalitiesWarrantInvestigation', label: 'Do any abnormalities warrant further investigation?' },
+                                { key: 'abnormalitiesCanBeStabilised', label: 'Can any abnormalities be stabilised prior to anaesthesia?' },
+                                { key: 'premedication', label: 'Would the patient benefit from premedication?' },
+                                { key: 'facilitiesAvailable', label: 'Are the required facilities, personnel & medications available?' },
+                            ].map(({ key, label }) => (
+                                <div key={key}>
+                                    <label className="block text-sm font-semibold text-orange-700 mb-1">{label}</label>
+                                    <select value={preAnaesthesiaForm[key] || ''} onChange={e => setPreAnaesthesiaForm(f => ({ ...f, [key]: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+                                        <option value="">Please Select</option>
+                                        <option value="yes">Yes</option>
+                                        <option value="no">No</option>
+                                    </select>
+                                </div>
+                            ))}
+
+                            {/* Textarea fields */}
+                            {[
+                                { key: 'historyClinicalExamDetails', label: 'If yes, then explain exactly what was identified' },
+                                { key: 'specificInvestigationsDetails', label: 'If yes, then which specific investigations need to be requested?' },
+                                { key: 'anticipatedComplications', label: 'What complications are anticipated during anaesthesia?' },
+                                { key: 'complicationManagement', label: 'How can these complications be managed?' },
+                                { key: 'painManagement', label: 'How will any pain associated with the procedure be managed?' },
+                                { key: 'anaesthesiaInductionMaintenance', label: 'How will anaesthesia be induced & maintained?' },
+                                { key: 'patientMonitoring', label: 'How will the patient be monitored?' },
+                                { key: 'bodyTemperatureMaintenance', label: "How will the patient's body temperature be maintained?" },
+                                { key: 'postAnaestheticManagement', label: 'How will the patient be managed in the post-anaesthetic period?' },
+                                { key: 'unavailableResourcesDetails', label: 'If not, then list what or who is currently unavailable and whether it is appropriate to proceed with the surgery' },
+                            ].map(({ key, label }) => (
+                                <div key={key}>
+                                    <label className="block text-sm font-semibold text-orange-700 mb-1">{label}</label>
+                                    <textarea rows={3} value={preAnaesthesiaForm[key] || ''} onChange={e => setPreAnaesthesiaForm(f => ({ ...f, [key]: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 resize-y" />
+                                </div>
+                            ))}
+                        </div>
+                        <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-3 rounded-b-xl sticky bottom-0">
+                            <button onClick={() => { setShowPreAnaesthesiaModal(false); setEditingPreAnaesthesiaChecklist(null); }} className="px-5 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 text-sm font-semibold">Cancel</button>
+                            <button onClick={handleSavePreAnaesthesiaChecklist} className="px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 text-sm font-semibold">Save Checklist</button>
                         </div>
                     </div>
                 </div>
