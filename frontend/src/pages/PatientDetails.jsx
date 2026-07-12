@@ -2416,7 +2416,7 @@ const PatientDetails = () => {
                                 <FaCalendarPlus /> Schedule Follow-up
                             </button>
                         )}
-                        {['doctor', 'receptionist'].includes(user.role) && (
+                        {(['doctor', 'receptionist'].includes(user.role) || (user.role === 'nurse' && referrals.length > 0)) && (
                             referrals.length > 0 ? (
                                 <div className="flex flex-col gap-2">
                                     {referrals.map(ref => (
