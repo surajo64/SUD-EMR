@@ -290,6 +290,48 @@ const visitSchema = mongoose.Schema({
         createdAt: { type: Date, default: Date.now }
     }],
 
+    // Postoperative Handover Checklists
+    postoperativeHandoverChecklists: [{
+        patientNumber: String,
+        firstName: String,
+        lastName: String,
+        age: String,
+        allergyStatus: String,
+        diagnosis: String,
+        procedure: String,
+        currentPatientStatusSelect: String,
+        currentPatientStatusDetails: String,
+        vitalsRecordedInEmr: String,
+        
+        anaesthesiaType: String,
+        intraoperativeAnaestheticCourse: String,
+        postoperativeBloodTransfusionRequired: String,
+        medicationsGivenInTheatre: String,
+        planForMonitoring: String,
+        planForIntravenousFluids: String,
+        planForPainRelief: String,
+        planForLines: String,
+        postoperativeInvestigationsRequired: String,
+        
+        consultantSurgeon: String,
+        durationOfSurgery: String,
+        intraoperativeSurgicalCourse: String,
+        bloodLossTransfusions: String,
+        planForNasogastricTube: String,
+        dvtProphylaxisPlan: String,
+        antibioticPlan: String,
+        consultantAnaesthesiologistFirstName: String,
+        consultantAnaesthesiologistLastName: String,
+        nurseAnaesthetistFirstName: String,
+        nurseAnaesthetistLastName: String,
+        zonalWardNurseFirstName: String,
+        zonalWardNurseLastName: String,
+        
+        filledAt: Date,
+        filledBy: String,
+        createdAt: { type: Date, default: Date.now }
+    }],
+
     // Clinic and Encounter Type
     clinic: { type: mongoose.Schema.Types.ObjectId, ref: 'Clinic' },
     encounterType: {

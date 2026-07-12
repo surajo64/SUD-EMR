@@ -3460,6 +3460,13 @@ const PatientDetails = () => {
                                                     <h3 className="text-xl font-bold text-gray-800">Operation / Theater</h3>
                                                     <div className="flex flex-wrap gap-2">
                                                         {user.role === 'doctor' && (() => {
+                                                            if (theatreNotes.length > 0) {
+                                                                return (
+                                                                    <span className="px-4 py-2 rounded flex items-center gap-2 text-sm bg-green-100 text-green-700 border border-green-400 font-semibold cursor-default">
+                                                                        <FaCheckCircle /> Theatre Note ✓
+                                                                    </span>
+                                                                );
+                                                            }
                                                             const prereqsMet = consents.length > 0 && checklists.length > 0 && preAnaesthesiaChecklists.length > 0;
                                                             const isDisabled = !canEdit || !prereqsMet;
                                                             const title = !prereqsMet

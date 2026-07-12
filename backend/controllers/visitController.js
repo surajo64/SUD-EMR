@@ -1245,7 +1245,8 @@ const saveChecklist = async (req, res) => {
         res.status(200).json({
             theatreNotes: visit.theatreNotes || [],
             consents: visit.consents || [],
-            checklists: visit.checklists || []
+            checklists: visit.checklists || [],
+            postoperativeHandoverChecklists: visit.postoperativeHandoverChecklists || []
         });
     } catch (error) {
         console.error('saveChecklist error:', error);
@@ -1287,10 +1288,54 @@ const savePreAnaesthesiaChecklist = async (req, res) => {
             preAnaesthesiaChecklists: visit.preAnaesthesiaChecklists || [],
             checklists: visit.checklists || [],
             consents: visit.consents || [],
-            theatreNotes: visit.theatreNotes || []
+            theatreNotes: visit.theatreNotes || [],
+            postoperativeHandoverChecklists: visit.postoperativeHandoverChecklists || []
         });
     } catch (error) {
         console.error('savePreAnaesthesiaChecklist error:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+const savePostoperativeHandoverChecklist = async (req, res) => {
+    try {
+        const visit = await Visit.findById(req.params.id);
+        if (!visit) return res.status(404).json({ message: 'Visit not found' });
+
+        // Initialize the array if it doesn't exist on older visit documents
+        if (!visit.postoperativeHandoverChecklists) {
+            visit.postoperativeHandoverChecklists = [];
+        }
+
+        const checklistData = {
+            ...req.body,
+            filledAt: new Date(),
+        };
+
+        const checklistId = checklistData._id;
+        if (checklistId) {
+            const idx = visit.postoperativeHandoverChecklists.findIndex(c => c._id.toString() === checklistId);
+            if (idx >= 0) {
+                Object.assign(visit.postoperativeHandoverChecklists[idx], checklistData);
+            } else {
+                checklistData.createdAt = new Date();
+                visit.postoperativeHandoverChecklists.push(checklistData);
+            }
+        } else {
+            checklistData.createdAt = new Date();
+            visit.postoperativeHandoverChecklists.push(checklistData);
+        }
+
+        await visit.save();
+        res.status(200).json({
+            preAnaesthesiaChecklists: visit.preAnaesthesiaChecklists || [],
+            checklists: visit.checklists || [],
+            consents: visit.consents || [],
+            theatreNotes: visit.theatreNotes || [],
+            postoperativeHandoverChecklists: visit.postoperativeHandoverChecklists || []
+        });
+    } catch (error) {
+        console.error('savePostoperativeHandoverChecklist error:', error);
         res.status(500).json({ message: error.message });
     }
 };
@@ -1308,6 +1353,7 @@ module.exports = {
     saveConsentNote,
     saveChecklist,
     savePreAnaesthesiaChecklist,
+    savePostoperativeHandoverChecklist,
     convertToInpatient,
     changeEncounterType,
     saveClinicalNote
