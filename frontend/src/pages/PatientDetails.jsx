@@ -563,6 +563,92 @@ const PatientDetails = () => {
         printWindow.document.close();
     };
 
+    // Postoperative Handover Checklist States
+    const [postoperativeHandoverChecklists, setPostoperativeHandoverChecklists] = useState([]);
+    const [showPostoperativeHandoverModal, setShowPostoperativeHandoverModal] = useState(false);
+    const [editingPostoperativeHandoverChecklist, setEditingPostoperativeHandoverChecklist] = useState(null);
+    const emptyPostoperativeHandoverForm = {
+        patientNumber: '', firstName: '', lastName: '', age: '', allergyStatus: '', diagnosis: '', procedure: '',
+        currentPatientStatusSelect: '', currentPatientStatusDetails: '', vitalsRecordedInEmr: '',
+        anaesthesiaType: '', intraoperativeAnaestheticCourse: '', postoperativeBloodTransfusionRequired: '',
+        medicationsGivenInTheatre: '', planForMonitoring: '', planForIntravenousFluids: '', planForPainRelief: '',
+        planForLines: '', postoperativeInvestigationsRequired: '',
+        consultantSurgeon: '', durationOfSurgery: '', intraoperativeSurgicalCourse: '', bloodLossTransfusions: '',
+        planForNasogastricTube: '', dvtProphylaxisPlan: '', antibioticPlan: '',
+        consultantAnaesthesiologistFirstName: '', consultantAnaesthesiologistLastName: '',
+        nurseAnaesthetistFirstName: '', nurseAnaesthetistLastName: '',
+        zonalWardNurseFirstName: '', zonalWardNurseLastName: '',
+        filledBy: ''
+    };
+    const [postoperativeHandoverForm, setPostoperativeHandoverForm] = useState({ ...emptyPostoperativeHandoverForm });
+
+    const handleSavePostoperativeHandoverChecklist = async () => {
+        try {
+            const payload = { ...postoperativeHandoverForm, filledAt: new Date().toISOString() };
+            if (editingPostoperativeHandoverChecklist) payload._id = editingPostoperativeHandoverChecklist;
+            const { data } = await axios.post(
+                `${backendUrl}/api/visits/${encounter._id}/postoperative-handover-checklists`,
+                payload,
+                { headers: { Authorization: `Bearer ${user.token}` } }
+            );
+            setPostoperativeHandoverChecklists(data.postoperativeHandoverChecklists || []);
+            setShowPostoperativeHandoverModal(false);
+            setEditingPostoperativeHandoverChecklist(null);
+            setPostoperativeHandoverForm({ ...emptyPostoperativeHandoverForm, filledBy: user.name || '' });
+        } catch (err) {
+            alert(err?.response?.data?.message || 'Failed to save postoperative handover checklist');
+        }
+    };
+
+    const printPostoperativeHandoverChecklist = (chk) => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) { alert('Please allow popups to print.'); return; }
+        const row = (label, val) => `<tr><td style="padding:6px 10px;border:1px solid #ccc;font-weight:bold;width:50%;">${label}</td><td style="padding:6px 10px;border:1px solid #ccc;">${val || 'N/A'}</td></tr>`;
+        printWindow.document.write(`<!DOCTYPE html><html><head><title>Postoperative Handover Checklist</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#111}h2{text-align:center}table{width:100%;border-collapse:collapse;margin-bottom:20px}@media print{}</style></head><body>
+            <h2>Postoperative Handover Checklist</h2>
+            <p><strong>Patient Name:</strong> ${chk.firstName || ''} ${chk.lastName || ''} &nbsp;&nbsp; <strong>Patient No:</strong> ${chk.patientNumber || 'N/A'} &nbsp;&nbsp; <strong>Age:</strong> ${chk.age || 'N/A'}</p>
+            <p><strong>Filled by:</strong> ${chk.filledBy || ''} &nbsp;&nbsp; <strong>Date:</strong> ${chk.filledAt ? new Date(chk.filledAt).toLocaleString() : 'N/A'}</p>
+            
+            <h3>1. Patient Specific Information</h3>
+            <table>
+                ${row('Allergy Status', chk.allergyStatus)}
+                ${row('Diagnosis', chk.diagnosis)}
+                ${row('Procedure', chk.procedure)}
+                ${row('Current Patient Status (Select)', chk.currentPatientStatusSelect)}
+                ${row('Current Patient Status (Details)', chk.currentPatientStatusDetails)}
+                ${row('Has the zonal/ward nurse recorded the vital signs of the patient in the EMR?', chk.vitalsRecordedInEmr)}
+            </table>
+
+            <h3>2. Anaesthetic Information</h3>
+            <table>
+                ${row('Anaesthesia Type', chk.anaesthesiaType)}
+                ${row('Intraoperative anaesthetic course and any complications', chk.intraoperativeAnaestheticCourse)}
+                ${row('Is a postoperative blood transfusion required?', chk.postoperativeBloodTransfusionRequired)}
+                ${row('Medications given in theatre', chk.medicationsGivenInTheatre)}
+                ${row('Plan for monitoring (Vitals parameter range and action)', chk.planForMonitoring)}
+                ${row('Plan for intravenous fluids', chk.planForIntravenousFluids)}
+                ${row('Plan for pain relief', chk.planForPainRelief)}
+                ${row('Plan for lines, eg- central venous, arterial', chk.planForLines)}
+                ${row('Any postoperative investigations required?', chk.postoperativeInvestigationsRequired)}
+            </table>
+
+            <h3>3. Surgical Information</h3>
+            <table>
+                ${row('Consultant Surgeon', chk.consultantSurgeon)}
+                ${row('Duration of Surgery', chk.durationOfSurgery)}
+                ${row('Intraoperative surgical course and any complications', chk.intraoperativeSurgicalCourse)}
+                ${row('How much blood was lost (if any)? Any blood transfusions during surgery? If so, how many pints?', chk.bloodLossTransfusions)}
+                ${row('Plan for nasogastric tube/feeding', chk.planForNasogastricTube)}
+                ${row('DVT prophylaxis plan', chk.dvtProphylaxisPlan)}
+                ${row('Antibiotic plan', chk.antibioticPlan)}
+                ${row('Consultant Anaesthesiologist', `${chk.consultantAnaesthesiologistFirstName || ''} ${chk.consultantAnaesthesiologistLastName || ''}`.trim())}
+                ${row('Nurse Anaesthetist', `${chk.nurseAnaesthetistFirstName || ''} ${chk.nurseAnaesthetistLastName || ''}`.trim())}
+                ${row('Zonal/Ward Nurse', `${chk.zonalWardNurseFirstName || ''} ${chk.zonalWardNurseLastName || ''}`.trim())}
+            </table>
+            <script>window.onload=()=>{window.print();}<\/script></body></html>`);
+        printWindow.document.close();
+    };
+
     // Modal States
     const [showLabModal, setShowLabModal] = useState(false);
     const [showRadModal, setShowRadModal] = useState(false);
@@ -901,6 +987,7 @@ const PatientDetails = () => {
             // Checklists
             setChecklists(visitRes.data.checklists || []);
             setPreAnaesthesiaChecklists(visitRes.data.preAnaesthesiaChecklists || []);
+            setPostoperativeHandoverChecklists(visitRes.data.postoperativeHandoverChecklists || []);
 
             // Update encounter with fully-populated data (so consultingPhysician.name is available)
             setEncounter(visitRes.data);
@@ -1013,6 +1100,8 @@ const PatientDetails = () => {
 
     // Determine if user can edit (read-only for receptionists, viewing past encounters, or inactive encounters)
     const canEdit = ['doctor', 'admin'].includes(user?.role) && !viewingPastEncounter && isEncounterActive();
+    // Nurses can also record theater forms (except Theatre Note which is doctor/admin only)
+    const canEditNurse = ['doctor', 'admin', 'nurse'].includes(user?.role) && !viewingPastEncounter && isEncounterActive();
 
     const fetchCharges = async () => {
         try {
@@ -1906,11 +1995,6 @@ const PatientDetails = () => {
     };
 
     // Referral Functions
-    useEffect(() => {
-        if (showReferralModal && encounter) {
-            fetchReferrals();
-        }
-    }, [showReferralModal, encounter]);
 
     const fetchReferrals = async () => {
         try {
@@ -2333,56 +2417,89 @@ const PatientDetails = () => {
                             </button>
                         )}
                         {['doctor', 'receptionist'].includes(user.role) && (
-                            <button
-                                onClick={() => {
-                                    if (user.role === 'receptionist') {
-                                        setActiveTab('referrals');
-                                        document.getElementById('visit-sections')?.scrollIntoView({ behavior: 'smooth' });
-                                        return;
-                                    }
-                                    if (encounter) {
-                                        const diagStr = (encounter.diagnosis || []).map(d => `${d.code}: ${d.description}`).join(', ');
+                            referrals.length > 0 ? (
+                                <div className="flex flex-col gap-2">
+                                    {referrals.map(ref => (
+                                        <div key={ref._id} className="ml-2 bg-orange-50 border border-orange-200 px-3 py-1.5 rounded flex items-center gap-3 shadow-sm font-sans text-xs">
+                                            <div className="flex items-center gap-1">
+                                                <FaFileMedical className="text-orange-600 shrink-0" />
+                                                <span className="font-bold text-orange-700 shrink-0">Referral:</span>
+                                                <span className="font-semibold text-gray-800 truncate max-w-[120px]">{ref.referredTo}</span>
+                                            </div>
+                                            <span className="text-[10px] text-gray-500 shrink-0">
+                                                by Dr. {ref.doctor?.name || 'Unknown'}
+                                            </span>
+                                            <div className="flex gap-1 shrink-0">
+                                                {ref.doctor?._id === user._id && user.role === 'doctor' && (
+                                                    <button
+                                                        onClick={() => handleEditClick(ref)}
+                                                        className="text-green-600 hover:text-green-800 flex items-center gap-0.5 px-2 py-0.5 border border-green-600 rounded bg-white font-semibold text-[10px] transition"
+                                                    >
+                                                        <FaEdit /> Edit
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={() => printReferral(ref)}
+                                                    className="text-blue-600 hover:text-blue-800 flex items-center gap-0.5 px-2 py-0.5 border border-blue-600 rounded bg-white font-semibold text-[10px] transition"
+                                                >
+                                                    <FaFileMedical /> Print
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={() => {
+                                        if (user.role === 'receptionist') {
+                                            setActiveTab('referrals');
+                                            document.getElementById('visit-sections')?.scrollIntoView({ behavior: 'smooth' });
+                                            return;
+                                        }
+                                        if (encounter) {
+                                            const diagStr = (encounter.diagnosis || []).map(d => `${d.code}: ${d.description}`).join(', ');
 
-                                        const historyParts = [];
+                                            const historyParts = [];
 
-                                        // Encounter (SOAP) Details
-                                        if (encounter.presentingComplaints) historyParts.push(`Presenting Complaints: ${encounter.presentingComplaints}`);
-                                        if (encounter.historyOfPresentingComplaint) historyParts.push(`HPC: ${encounter.historyOfPresentingComplaint}`);
-                                        if (encounter.pastMedicalSurgicalHistory) historyParts.push(`PMH: ${encounter.pastMedicalSurgicalHistory}`);
-                                        if (encounter.socialFamilyHistory) historyParts.push(`Social/Family: ${encounter.socialFamilyHistory}`);
-                                        if (encounter.drugsHistory) historyParts.push(`Drug History: ${encounter.drugsHistory}`);
+                                            // Encounter (SOAP) Details
+                                            if (encounter.presentingComplaints) historyParts.push(`Presenting Complaints: ${encounter.presentingComplaints}`);
+                                            if (encounter.historyOfPresentingComplaint) historyParts.push(`HPC: ${encounter.historyOfPresentingComplaint}`);
+                                            if (encounter.pastMedicalSurgicalHistory) historyParts.push(`PMH: ${encounter.pastMedicalSurgicalHistory}`);
+                                            if (encounter.socialFamilyHistory) historyParts.push(`Social/Family: ${encounter.socialFamilyHistory}`);
+                                            if (encounter.drugsHistory) historyParts.push(`Drug History: ${encounter.drugsHistory}`);
 
-                                        // Add all clinical notes
-                                        if (clinicalNotes && clinicalNotes.length > 0) {
-                                            historyParts.push('\n--- Clinical Notes ---');
-                                            clinicalNotes.forEach(note => {
-                                                historyParts.push(`- ${note.text}`);
+                                            // Add all clinical notes
+                                            if (clinicalNotes && clinicalNotes.length > 0) {
+                                                historyParts.push('\n--- Clinical Notes ---');
+                                                clinicalNotes.forEach(note => {
+                                                    historyParts.push(`- ${note.text}`);
+                                                });
+                                            }
+
+                                            // Add Vitals
+                                            if (vitals) {
+                                                historyParts.push('\n--- Recent Vitals ---');
+                                                if (vitals.bloodPressure) historyParts.push(`BP: ${vitals.bloodPressure}`);
+                                                if (vitals.heartRate) historyParts.push(`HR: ${vitals.heartRate} bpm`);
+                                                if (vitals.temperature) historyParts.push(`Temp: ${vitals.temperature} °C`);
+                                                if (vitals.weight) historyParts.push(`Weight: ${vitals.weight} kg`);
+                                                if (vitals.respiratoryRate) historyParts.push(`RR: ${vitals.respiratoryRate} resp/min`);
+                                                if (vitals.spo2) historyParts.push(`SpO2: ${vitals.spo2}%`);
+                                            }
+
+                                            setReferralData({
+                                                ...referralData,
+                                                diagnosis: diagStr || '',
+                                                medicalHistory: historyParts.join('\n')
                                             });
                                         }
-
-                                        // Add Vitals
-                                        if (vitals) {
-                                            historyParts.push('\n--- Recent Vitals ---');
-                                            if (vitals.bloodPressure) historyParts.push(`BP: ${vitals.bloodPressure}`);
-                                            if (vitals.heartRate) historyParts.push(`HR: ${vitals.heartRate} bpm`);
-                                            if (vitals.temperature) historyParts.push(`Temp: ${vitals.temperature} Â°C`);
-                                            if (vitals.weight) historyParts.push(`Weight: ${vitals.weight} kg`);
-                                            if (vitals.respiratoryRate) historyParts.push(`RR: ${vitals.respiratoryRate} resp/min`);
-                                            if (vitals.spo2) historyParts.push(`SpO2: ${vitals.spo2}%`);
-                                        }
-
-                                        setReferralData({
-                                            ...referralData,
-                                            diagnosis: diagStr || '',
-                                            medicalHistory: historyParts.join('\n')
-                                        });
-                                    }
-                                    setShowReferralModal(true);
-                                }}
-                                className="bg-purple-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-purple-700 ml-2 transition shadow-sm font-semibold text-sm"
-                            >
-                                <FaFileMedical /> {user.role === 'receptionist' ? 'View Referrals' : 'Referral'}
-                            </button>
+                                        setShowReferralModal(true);
+                                    }}
+                                    className="bg-purple-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-purple-700 ml-2 transition shadow-sm font-semibold text-sm"
+                                >
+                                    <FaFileMedical /> {user.role === 'receptionist' ? 'View Referrals' : 'Referral'}
+                                </button>
+                            )
                         )}
                         {['doctor', 'nurse', 'receptionist', 'admin'].includes(user.role) &&
                             ['Outpatient', 'Emergency'].includes(encounter?.type) &&
@@ -3491,8 +3608,8 @@ const PatientDetails = () => {
                                                             ) : (
                                                                 <button
                                                                     onClick={() => handleOpenConsentModal(null)}
-                                                                    disabled={!canEdit}
-                                                                    className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}
+                                                                    disabled={!canEditNurse}
+                                                                    className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${!canEditNurse ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}
                                                                 >
                                                                     <FaPlus /> Consent note
                                                                 </button>
@@ -3506,8 +3623,8 @@ const PatientDetails = () => {
                                                             ) : (
                                                                 <button
                                                                     onClick={() => { setChecklistForm({ ...emptyChecklistForm, filledBy: user.name || '' }); setEditingChecklist(null); setShowChecklistModal(true); }}
-                                                                    disabled={!canEdit}
-                                                                    className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+                                                                    disabled={!canEditNurse}
+                                                                    className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${!canEditNurse ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
                                                                 >
                                                                     <FaPlus /> Anes. Med. Equip
                                                                 </button>
@@ -3521,10 +3638,37 @@ const PatientDetails = () => {
                                                             ) : (
                                                                 <button
                                                                     onClick={() => { setPreAnaesthesiaForm({ ...emptyPreAnaesthesiaForm, firstName: patient?.name?.split(' ')[0] || '', lastName: patient?.name?.split(' ').slice(1).join(' ') || '', patientMRN: patient?.mrn || '', filledBy: user.name || '' }); setEditingPreAnaesthesiaChecklist(null); setShowPreAnaesthesiaModal(true); }}
-                                                                    disabled={!canEdit}
-                                                                    className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${!canEdit ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-teal-600 text-white hover:bg-teal-700'}`}
+                                                                    disabled={!canEditNurse}
+                                                                    className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${!canEditNurse ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-teal-600 text-white hover:bg-teal-700'}`}
                                                                 >
                                                                     <FaPlus /> Pre-Anaes.
+                                                                </button>
+                                                            )
+                                                        )}
+                                                        {['doctor', 'nurse'].includes(user.role) && (
+                                                            postoperativeHandoverChecklists.length > 0 ? (
+                                                                <span className="px-4 py-2 rounded flex items-center gap-2 text-sm bg-green-100 text-green-700 border border-green-400 font-semibold cursor-default">
+                                                                    <FaCheckCircle /> Post-Op Handover ✓
+                                                                </span>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setPostoperativeHandoverForm({
+                                                                            ...emptyPostoperativeHandoverForm,
+                                                                            patientNumber: patient?.mrn || '',
+                                                                            firstName: patient?.name?.split(' ')[0] || '',
+                                                                            lastName: patient?.name?.split(' ').slice(1).join(' ') || '',
+                                                                            age: patient?.age || '',
+                                                                            filledBy: user.name || ''
+                                                                        });
+                                                                        setEditingPostoperativeHandoverChecklist(null);
+                                                                        setShowPostoperativeHandoverModal(true);
+                                                                    }}
+                                                                    disabled={!canEditNurse || theatreNotes.length === 0}
+                                                                    title={theatreNotes.length === 0 ? 'Required before adding postoperative handover:\n• Theatre Note' : ''}
+                                                                    className={`px-4 py-2 rounded flex items-center gap-2 text-sm ${(!canEditNurse || theatreNotes.length === 0) ? 'bg-gray-300 cursor-not-allowed text-gray-500' : 'bg-purple-600 text-white hover:bg-purple-700'}`}
+                                                                >
+                                                                    <FaPlus /> Post-Op Handover
                                                                 </button>
                                                             )
                                                         )}
@@ -3749,6 +3893,88 @@ const PatientDetails = () => {
                                                         </div>
                                                     ) : (
                                                         <p className="text-sm text-gray-400 italic mb-6">No pre-anaesthesia checklists recorded yet.</p>
+                                                    )}
+                                                </div>
+
+                                                {/* Postoperative Handover Checklists Section */}
+                                                <div className="mb-8 font-sans">
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <FaCheckCircle className="text-purple-600" />
+                                                        <h4 className="text-base font-bold text-purple-700">Postoperative Handover Checklists</h4>
+                                                        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-semibold">{postoperativeHandoverChecklists.length}</span>
+                                                    </div>
+                                                    {postoperativeHandoverChecklists.length > 0 ? (
+                                                        <div className="space-y-3">
+                                                            {postoperativeHandoverChecklists.map((chk) => (
+                                                                <div key={chk._id} className="border border-purple-200 rounded-lg bg-white p-4 flex justify-between items-center shadow-sm hover:shadow transition">
+                                                                    <div>
+                                                                        <p className="font-bold text-gray-800 text-sm">Postoperative Handover Checklist</p>
+                                                                        <p className="text-xs text-gray-600 mt-1">
+                                                                            Patient: <span className="font-semibold">{chk.firstName} {chk.lastName}</span> |
+                                                                            Filled by: <span className="font-semibold">{chk.filledBy}</span> |
+                                                                            Date: <span className="font-semibold">{chk.filledAt ? new Date(chk.filledAt).toLocaleString() : 'N/A'}</span>
+                                                                        </p>
+                                                                    </div>
+                                                                    <div className="flex gap-2">
+                                                                        <button
+                                                                            onClick={() => { setPostoperativeHandoverForm({ ...chk }); setEditingPostoperativeHandoverChecklist(chk._id); setShowPostoperativeHandoverModal(true); }}
+                                                                            className="text-purple-600 hover:text-purple-800 flex items-center gap-1 px-3 py-2 border border-purple-600 rounded hover:bg-purple-50 text-xs font-semibold"
+                                                                        >
+                                                                            <FaEdit /> Edit / View
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => printPostoperativeHandoverChecklist(chk)}
+                                                                            className="text-blue-600 hover:text-blue-800 flex items-center gap-1 px-3 py-2 border border-blue-600 rounded hover:bg-blue-50 text-xs font-semibold"
+                                                                        >
+                                                                            <FaPrint /> Print
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-sm text-gray-400 italic mb-6">No postoperative handover checklists recorded yet.</p>
+                                                    )}
+                                                </div>
+
+                                                {/* Referral Letters Section */}
+                                                <div className="mb-8 font-sans">
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <FaFileMedical className="text-orange-600" />
+                                                        <h4 className="text-base font-bold text-orange-700">Referral Letters</h4>
+                                                        <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-semibold">{referrals.length}</span>
+                                                    </div>
+                                                    {referrals.length === 0 ? (
+                                                        <p className="text-gray-500 italic text-sm">No referrals created for this visit.</p>
+                                                    ) : (
+                                                        <div className="space-y-3">
+                                                            {referrals.map(ref => (
+                                                                <div key={ref._id} className="border p-4 rounded bg-gray-50 flex justify-between items-start">
+                                                                    <div className="flex-1">
+                                                                        <p className="font-semibold text-lg">{ref.referredTo}</p>
+                                                                        <p className="text-sm text-gray-600 mt-1"><strong>Diagnosis:</strong> {ref.diagnosis}</p>
+                                                                        <p className="text-sm text-gray-600 mt-1"><strong>Reason:</strong> {ref.reason}</p>
+                                                                        <p className="text-xs text-gray-500 mt-2">Created: {new Date(ref.createdAt).toLocaleDateString()} by Dr. {ref.doctor?.name || 'Unknown'}</p>
+                                                                    </div>
+                                                                    <div className="flex gap-2 ml-4">
+                                                                        {ref.doctor?._id === user._id && user.role === 'doctor' && (
+                                                                            <button
+                                                                                onClick={() => handleEditClick(ref)}
+                                                                                className="text-green-600 hover:text-green-800 flex items-center gap-1 px-3 py-2 border border-green-600 rounded hover:bg-green-50"
+                                                                            >
+                                                                                <FaEdit /> Edit
+                                                                            </button>
+                                                                        )}
+                                                                        <button
+                                                                            onClick={() => printReferral(ref)}
+                                                                            className="text-blue-600 hover:text-blue-800 flex items-center gap-1 px-3 py-2 border border-blue-600 rounded hover:bg-blue-50"
+                                                                        >
+                                                                            <FaFileMedical /> Print
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>
@@ -4168,6 +4394,198 @@ const PatientDetails = () => {
                             >
                                 Save Operation Note
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Postoperative Handover Checklist Modal */}
+            {showPostoperativeHandoverModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[95vh] overflow-y-auto flex flex-col">
+                        <div className="bg-purple-700 text-white px-6 py-4 flex justify-between items-center rounded-t-xl sticky top-0 z-20 shadow-md">
+                            <h3 className="text-xl font-bold flex items-center gap-2"><FaCheckCircle /> Postoperative Handover Checklist</h3>
+                            <button onClick={() => { setShowPostoperativeHandoverModal(false); setEditingPostoperativeHandoverChecklist(null); }} className="text-white hover:text-red-300 text-2xl font-bold">&times;</button>
+                        </div>
+                        <div className="p-6 space-y-5">
+                            {/* Section 1 */}
+                            <h4 className="text-md font-bold text-purple-700 border-b pb-1">1. Patient Specific Information</h4>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Patient Number</label>
+                                    <input type="text" value={postoperativeHandoverForm.patientNumber || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, patientNumber: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Age</label>
+                                    <input type="text" value={postoperativeHandoverForm.age || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, age: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">First Name</label>
+                                    <input type="text" value={postoperativeHandoverForm.firstName || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, firstName: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Last Name</label>
+                                    <input type="text" value={postoperativeHandoverForm.lastName || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, lastName: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Allergy Status</label>
+                                    <input type="text" value={postoperativeHandoverForm.allergyStatus || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, allergyStatus: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Diagnosis</label>
+                                    <input type="text" value={postoperativeHandoverForm.diagnosis || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, diagnosis: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1">Procedure</label>
+                                <input type="text" value={postoperativeHandoverForm.procedure || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, procedure: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Current Patient Status</label>
+                                    <select value={postoperativeHandoverForm.currentPatientStatusSelect || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, currentPatientStatusSelect: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400">
+                                        <option value="">Please Select</option>
+                                        <option value="Drowsy">Drowsy</option>
+                                        <option value="Unconscious">Unconscious</option>
+                                        <option value="In serious pain">In serious pain</option>
+                                        <option value="Fully awake, conscious and doing well">Fully awake, conscious and doing well</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Current Patient Status (Details)</label>
+                                    <input type="text" value={postoperativeHandoverForm.currentPatientStatusDetails || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, currentPatientStatusDetails: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-orange-700 mb-1">Has the zonal/ward nurse recorded the vital signs of the patient in the EMR?</label>
+                                <select value={postoperativeHandoverForm.vitalsRecordedInEmr || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, vitalsRecordedInEmr: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400">
+                                    <option value="">Please Select</option>
+                                    <option value="yes">Yes</option>
+                                    <option value="no">No</option>
+                                </select>
+                            </div>
+
+                            {/* Section 2 */}
+                            <h4 className="text-md font-bold text-purple-700 border-b pb-1 pt-3">2. Anaesthetic Information</h4>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1">Anaesthesia Type</label>
+                                <select value={postoperativeHandoverForm.anaesthesiaType || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, anaesthesiaType: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400">
+                                    <option value="">Please Select</option>
+                                    <option value="GA (General Anaesthesia)">GA (General Anaesthesia)</option>
+                                    <option value="LA (Local Anaesthesia)">LA (Local Anaesthesia)</option>
+                                    <option value="Spinal">Spinal</option>
+                                    <option value="Epidural">Epidural</option>
+                                    <option value="CSE (Combined Spinal and Epidural)">CSE (Combined Spinal and Epidural)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-orange-700 mb-1">Intraoperative anaesthetic course and any complications</label>
+                                <textarea rows={3} value={postoperativeHandoverForm.intraoperativeAnaestheticCourse || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, intraoperativeAnaestheticCourse: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 resize-y" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Is a postoperative blood transfusion required?</label>
+                                <input type="text" value={postoperativeHandoverForm.postoperativeBloodTransfusionRequired || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, postoperativeBloodTransfusionRequired: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-orange-700 mb-1">Medications given in theatre</label>
+                                <textarea rows={3} value={postoperativeHandoverForm.medicationsGivenInTheatre || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, medicationsGivenInTheatre: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 resize-y" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-orange-700 mb-1">Plan for monitoring (Vitals parameter range and action)</label>
+                                <textarea rows={3} value={postoperativeHandoverForm.planForMonitoring || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, planForMonitoring: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 resize-y" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-orange-700 mb-1">Plan for intravenous fluids</label>
+                                <textarea rows={3} value={postoperativeHandoverForm.planForIntravenousFluids || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, planForIntravenousFluids: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 resize-y" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-orange-700 mb-1">Plan for pain relief</label>
+                                <textarea rows={3} value={postoperativeHandoverForm.planForPainRelief || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, planForPainRelief: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 resize-y" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-orange-700 mb-1">Plan for lines, eg- central venous, arterial</label>
+                                <textarea rows={3} value={postoperativeHandoverForm.planForLines || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, planForLines: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 resize-y" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-orange-700 mb-1">Any postoperative investigations required?</label>
+                                <textarea rows={3} value={postoperativeHandoverForm.postoperativeInvestigationsRequired || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, postoperativeInvestigationsRequired: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 resize-y" />
+                            </div>
+
+                            {/* Section 3 */}
+                            <h4 className="text-md font-bold text-purple-700 border-b pb-1 pt-3">3. Surgical Information</h4>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Consultant Surgeon</label>
+                                    <input type="text" value={postoperativeHandoverForm.consultantSurgeon || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, consultantSurgeon: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Duration of Surgery</label>
+                                    <input type="text" value={postoperativeHandoverForm.durationOfSurgery || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, durationOfSurgery: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-orange-700 mb-1">Intraoperative surgical course and any complications</label>
+                                <textarea rows={3} value={postoperativeHandoverForm.intraoperativeSurgicalCourse || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, intraoperativeSurgicalCourse: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 resize-y" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-orange-700 mb-1">How much blood was lost (if any)? Any blood transfusions during surgery? If so, how many pints?</label>
+                                <textarea rows={3} value={postoperativeHandoverForm.bloodLossTransfusions || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, bloodLossTransfusions: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 resize-y" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-orange-700 mb-1">Plan for nasogastric tube/feeding</label>
+                                <textarea rows={3} value={postoperativeHandoverForm.planForNasogastricTube || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, planForNasogastricTube: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 resize-y" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-orange-700 mb-1">DVT prophylaxis plan</label>
+                                <textarea rows={3} value={postoperativeHandoverForm.dvtProphylaxisPlan || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, dvtProphylaxisPlan: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 resize-y" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-orange-700 mb-1">Antibiotic plan</label>
+                                <textarea rows={3} value={postoperativeHandoverForm.antibioticPlan || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, antibioticPlan: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 resize-y" />
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Consultant Anaesthesiologist First Name</label>
+                                    <input type="text" value={postoperativeHandoverForm.consultantAnaesthesiologistFirstName || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, consultantAnaesthesiologistFirstName: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Consultant Anaesthesiologist Last Name</label>
+                                    <input type="text" value={postoperativeHandoverForm.consultantAnaesthesiologistLastName || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, consultantAnaesthesiologistLastName: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Nurse Anaesthetist First Name</label>
+                                    <input type="text" value={postoperativeHandoverForm.nurseAnaesthetistFirstName || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, nurseAnaesthetistFirstName: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Nurse Anaesthetist Last Name</label>
+                                    <input type="text" value={postoperativeHandoverForm.nurseAnaesthetistLastName || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, nurseAnaesthetistLastName: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Zonal/Ward Nurse First Name</label>
+                                    <input type="text" value={postoperativeHandoverForm.zonalWardNurseFirstName || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, zonalWardNurseFirstName: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-600 mb-1">Zonal/Ward Nurse Last Name</label>
+                                    <input type="text" value={postoperativeHandoverForm.zonalWardNurseLastName || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, zonalWardNurseLastName: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1">Filled by</label>
+                                <input type="text" value={postoperativeHandoverForm.filledBy || ''} onChange={e => setPostoperativeHandoverForm(f => ({ ...f, filledBy: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" />
+                            </div>
+                        </div>
+                        <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-3 rounded-b-xl sticky bottom-0">
+                            <button onClick={() => { setShowPostoperativeHandoverModal(false); setEditingPostoperativeHandoverChecklist(null); }} className="px-5 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 text-sm font-semibold">Cancel</button>
+                            <button onClick={handleSavePostoperativeHandoverChecklist} className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-semibold">Save Checklist</button>
                         </div>
                     </div>
                 </div>
