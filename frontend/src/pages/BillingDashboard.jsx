@@ -291,6 +291,7 @@ const BillingDashboard = () => {
             setDepositPaymentMethod('cash');
             setSelectedPatient(null);
             fetchPatients();
+            fetchReceipts();
         } catch (error) {
             console.error(error);
             toast.error(error.response?.data?.message || 'Error adding deposit');
@@ -1211,49 +1212,136 @@ const BillingDashboard = () => {
                                     </div>
                                 </div>
 
-                                <div className="bg-blue-50 p-4 rounded mb-4">
-                                    <div className="flex justify-between items-center">
-                                        <div>
-                                            <p className="text-sm text-blue-600">Deposit Balance</p>
-                                            <p className="text-3xl font-bold text-blue-800">
-                                                ₦{(viewingPatient.depositBalance || 0).toLocaleString()}
-                                            </p>
-                                        </div>
-                                        {(viewingPatient.depositBalance || 0) < (viewingPatient.lowDepositThreshold || 5000) && (
-                                            <div className="text-yellow-600 flex items-center gap-2">
-                                                <FaExclamationTriangle />
-                                                <span className="text-sm">Low Balance</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
+                                {(() => {
+                                    const patientReceipts = receipts.filter(r => r.patient?._id === viewingPatient._id);
+                                    
+                                    const totalDeposits = patientReceipts
+                                        .filter(r => r.receiptNumber?.startsWith('DEP-'))
+                                        .reduce((sum, r) => sum + r.amountPaid, 0);
 
-                                <div className="mb-4">
-                                    <h4 className="font-bold mb-2">Transaction Summary</h4>
-                                    <div className="grid grid-cols-3 gap-3">
-                                        <div className="bg-green-50 p-3 rounded">
-                                            <p className="text-xs text-green-600">Paid</p>
-                                            <p className="text-lg font-bold text-green-700">
-                                                ₦{receipts
-                                                    .filter(r => r.patient?._id === viewingPatient._id)
-                                                    .reduce((sum, r) => sum + r.amountPaid, 0)
-                                                    .toLocaleString()}
-                                            </p>
-                                        </div>
-                                        <div className="bg-yellow-50 p-3 rounded">
-                                            <p className="text-xs text-yellow-600">Pending</p>
-                                            <p className="text-lg font-bold text-yellow-700">
-                                                ₦0
-                                            </p>
-                                        </div>
-                                        <div className="bg-gray-50 p-3 rounded">
-                                            <p className="text-xs text-gray-600">Total Receipts</p>
-                                            <p className="text-lg font-bold text-gray-700">
-                                                {receipts.filter(r => r.patient?._id === viewingPatient._id).length}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
+                                    const totalUtilized = patientReceipts
+                                        .filter(r => r.paymentMethod === 'deposit')
+                                        .reduce((sum, r) => sum + r.amountPaid, 0);
+
+                                    const currentBalance = viewingPatient.depositBalance || 0;
+
+                                    const walletTransactions = receipts
+                                        .filter(r => r.patient?._id === viewingPatient._id && (
+                                            r.receiptNumber?.startsWith('DEP-') || 
+                                            r.paymentMethod === 'deposit' || 
+                                            r.paymentMethod === 'refund'
+                                        ))
+                                        .map(r => {
+                                            let type = 'Deposit';
+                                            let amountClass = 'text-green-600 font-semibold text-right';
+                                            let displayAmount = `+₦${r.amountPaid.toLocaleString()}`;
+                                            let desc = `Deposit added via ${r.paymentMethod || 'cash'}`;
+
+                                            if (r.paymentMethod === 'deposit') {
+                                                type = 'Utilization';
+                                                amountClass = 'text-red-600 font-semibold text-right';
+                                                displayAmount = `-₦${r.amountPaid.toLocaleString()}`;
+                                                const serviceNames = r.charges && r.charges.length > 0 
+                                                    ? r.charges.map(c => c.itemName || c.charge?.name).filter(Boolean).join(', ')
+                                                    : '';
+                                                desc = serviceNames || r.notes || 'Payment for services';
+                                            } else if (r.paymentMethod === 'refund') {
+                                                type = 'Refund';
+                                                amountClass = 'text-orange-600 font-semibold text-right';
+                                                displayAmount = `-₦${Math.abs(r.amountPaid).toLocaleString()}`;
+                                                desc = r.notes || 'Deposit refunded';
+                                            }
+
+                                            return {
+                                                id: r._id,
+                                                date: r.createdAt || r.paymentDate,
+                                                type,
+                                                description: desc,
+                                                amount: displayAmount,
+                                                amountClass,
+                                                cashier: r.cashier?.name || 'N/A'
+                                            };
+                                        })
+                                        .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+                                    const last5Transactions = walletTransactions.slice(0, 5);
+
+                                    return (
+                                        <>
+                                            {/* Wallet Balance Cards (3-column layout matching retainership style) */}
+                                            <div className="grid grid-cols-3 gap-3 mb-5">
+                                                <div className="bg-green-50 border border-green-200 p-4 rounded-lg shadow-sm">
+                                                    <p className="text-[10px] font-bold text-green-700 uppercase tracking-wider mb-1">Total Deposits</p>
+                                                    <p className="text-xl font-bold text-green-800">
+                                                        ₦{totalDeposits.toLocaleString()}
+                                                    </p>
+                                                </div>
+                                                <div className="bg-red-50 border border-red-200 p-4 rounded-lg shadow-sm">
+                                                    <p className="text-[10px] font-bold text-red-700 uppercase tracking-wider mb-1">Total Utilized</p>
+                                                    <p className="text-xl font-bold text-red-800">
+                                                        ₦{totalUtilized.toLocaleString()}
+                                                    </p>
+                                                </div>
+                                                <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg shadow-sm relative">
+                                                    <p className="text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">Current Balance</p>
+                                                    <div className="flex justify-between items-center">
+                                                        <p className="text-xl font-bold text-blue-800">
+                                                            ₦{currentBalance.toLocaleString()}
+                                                        </p>
+                                                        {currentBalance < (viewingPatient.lowDepositThreshold || 5000) && (
+                                                            <span className="text-yellow-600 text-[10px] flex items-center gap-1 font-bold animate-pulse">
+                                                                <FaExclamationTriangle /> Low
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Wallet Transaction History Table */}
+                                            <div className="mb-5 bg-white p-4 border rounded-lg shadow-sm">
+                                                <h4 className="font-bold text-sm text-gray-700 mb-3 flex items-center gap-2">
+                                                    <FaHistory className="text-blue-600" /> Wallet Transaction History (Last 5)
+                                                </h4>
+                                                {last5Transactions.length === 0 ? (
+                                                    <p className="text-xs text-gray-500 bg-gray-50 p-4 rounded border text-center font-medium">No wallet activity recorded yet.</p>
+                                                ) : (
+                                                    <div className="overflow-x-auto border rounded-md">
+                                                        <table className="w-full text-xs text-left text-gray-600 border-collapse">
+                                                            <thead className="bg-gray-50 text-gray-700 border-b uppercase text-[9px] tracking-wider font-semibold">
+                                                                <tr>
+                                                                    <th className="p-2 border-r font-semibold">Date</th>
+                                                                    <th className="p-2 border-r font-semibold">Type</th>
+                                                                    <th className="p-2 border-r font-semibold">Description</th>
+                                                                    <th className="p-2 border-r font-semibold">Cashier</th>
+                                                                    <th className="p-2 text-right font-semibold">Amount</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {last5Transactions.map((tx) => (
+                                                                    <tr key={tx.id} className="border-b hover:bg-gray-50 bg-white">
+                                                                        <td className="p-2 border-r text-gray-500">{new Date(tx.date).toLocaleDateString()}</td>
+                                                                        <td className="p-2 border-r">
+                                                                            <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                                                                tx.type === 'Deposit' ? 'bg-green-100 text-green-800' :
+                                                                                tx.type === 'Utilization' ? 'bg-red-100 text-red-800' :
+                                                                                'bg-orange-100 text-orange-800'
+                                                                            }`}>
+                                                                                {tx.type}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="p-2 border-r truncate max-w-[200px]" title={tx.description}>{tx.description}</td>
+                                                                        <td className="p-2 border-r text-gray-500">{tx.cashier}</td>
+                                                                        <td className={`p-2 ${tx.amountClass}`}>{tx.amount}</td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </>
+                                    );
+                                })()}
 
                                 <div class="bg-gray-50 p-4 rounded mb-4 border border-gray-200">
                                     <h4 className="font-bold mb-3 text-sm text-gray-700 uppercase tracking-wider">Statement Date Range (Optional)</h4>

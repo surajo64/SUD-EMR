@@ -41,7 +41,7 @@ const NurseTriage = () => {
     const [selectedSpecificDoctor, setSelectedSpecificDoctor] = useState('');
     const [nursingNotesList, setNursingNotesList] = useState([]);
     const [noteForm, setNoteForm] = useState({
-        selectedServiceId: '',
+        category: '',
         comment: '',
         editingNoteId: null
     });
@@ -727,12 +727,11 @@ const NurseTriage = () => {
 
     // Nursing Notes CRUD Functions
     const handleAddNote = async () => {
-        if (!noteForm.selectedServiceId || !noteForm.comment.trim()) {
-            toast.error('Please select a service and add a comment');
+        if (!noteForm.category?.trim() || !noteForm.comment.trim()) {
+            toast.error('Please enter a category and add a comment');
             return;
         }
 
-        const selectedService = nursingCharges.find(c => c._id === noteForm.selectedServiceId);
         let updatedNotesList;
 
         if (noteForm.editingNoteId) {
@@ -741,7 +740,8 @@ const NurseTriage = () => {
                 note.id === noteForm.editingNoteId
                     ? {
                         ...note,
-                        service: { _id: selectedService._id, name: selectedService.name },
+                        service: { _id: note.service?._id || '', name: noteForm.category },
+                        category: noteForm.category,
                         comment: noteForm.comment,
                         updatedAt: new Date().toISOString()
                     }
@@ -752,7 +752,8 @@ const NurseTriage = () => {
             // Add new note
             const newNote = {
                 id: Date.now().toString(), // Temporary ID
-                service: { _id: selectedService._id, name: selectedService.name },
+                service: { _id: '', name: noteForm.category },
+                category: noteForm.category,
                 comment: noteForm.comment,
                 nurse: { _id: user._id, name: user.name },
                 createdAt: new Date().toISOString()
@@ -765,13 +766,13 @@ const NurseTriage = () => {
         await saveNotesToBackend(updatedNotesList);
 
         // Reset form and close modal
-        setNoteForm({ selectedServiceId: '', comment: '', editingNoteId: null });
+        setNoteForm({ category: '', comment: '', editingNoteId: null });
         setShowNurseNoteModal(false);
     };
 
     const handleEditNote = (note) => {
         setNoteForm({
-            selectedServiceId: note.service._id,
+            category: note.category || note.service?.name || '',
             comment: note.comment,
             editingNoteId: note.id
         });
@@ -787,7 +788,7 @@ const NurseTriage = () => {
     };
 
     const handleCancelNoteEdit = () => {
-        setNoteForm({ selectedServiceId: '', comment: '', editingNoteId: null });
+        setNoteForm({ category: '', comment: '', editingNoteId: null });
     };
 
     // Helper to check if an encounter is active (for Outpatients, check 24h window; for Inpatients, check status)
@@ -861,7 +862,7 @@ const NurseTriage = () => {
             });
             setNursingNotesList([]);
             setNoteForm({
-                selectedServiceId: '',
+                category: '',
                 comment: '',
                 editingNoteId: null
             });
@@ -1650,7 +1651,7 @@ const NurseTriage = () => {
                                         <table className="w-full border-collapse border text-sm bg-white">
                                             <thead className="bg-gray-100">
                                                 <tr>
-                                                    <th className="p-2 text-left border">Service</th>
+                                                     <th className="p-2 text-left border">Category</th>
                                                     <th className="p-2 text-left border">Comment</th>
                                                     <th className="p-2 text-left border">Nurse</th>
                                                     <th className="p-2 text-left border">Time</th>
@@ -1660,7 +1661,7 @@ const NurseTriage = () => {
                                             <tbody>
                                                 {nursingNotesList.map((note) => (
                                                     <tr key={note.id} className="border-b hover:bg-gray-50">
-                                                        <td className="p-2 border font-semibold text-blue-700">{note.service.name}</td>
+                                                         <td className="p-2 border font-semibold text-blue-700">{note.category || note.service?.name}</td>
                                                         <td className="p-2 border text-gray-700">{note.comment}</td>
                                                         <td className="p-2 border text-gray-600">{note.nurse?.name || 'Unknown'}</td>
                                                         <td className="p-2 border text-gray-600 text-xs">
@@ -1899,7 +1900,7 @@ const NurseTriage = () => {
                                     onClick={() => setShowNurseNoteModal(false)}
                                     className="text-white hover:text-gray-200 text-2xl"
                                 >
-                                    Ãƒâ€”
+                                    &times;
                                 </button>
                             </div>
 
@@ -1908,20 +1909,15 @@ const NurseTriage = () => {
                                 <div className="bg-gray-50 p-4 rounded mb-4 border">
                                     <div className="mb-4">
                                         <label className="block text-sm text-gray-700 mb-2 font-semibold">
-                                            Nursing Service *
+                                            Category *
                                         </label>
-                                        <select
-                                            className="w-full border p-3 rounded"
-                                            value={noteForm.selectedServiceId}
-                                            onChange={(e) => setNoteForm({ ...noteForm, selectedServiceId: e.target.value })}
-                                        >
-                                            <option value="">-- Select Service --</option>
-                                            {nursingCharges.map(charge => (
-                                                <option key={charge._id} value={charge._id}>
-                                                    {charge.name}
-                                                </option>
-                                            ))}
-                                        </select>
+                                        <input
+                                            type="text"
+                                            className="w-full border p-3 rounded text-sm text-gray-800"
+                                            placeholder="e.g. Handing Over note, Vital Signs, etc..."
+                                            value={noteForm.category || ''}
+                                            onChange={(e) => setNoteForm({ ...noteForm, category: e.target.value })}
+                                        />
                                     </div>
                                     <div>
                                         <label className="block text-sm text-gray-700 mb-2 font-semibold">
@@ -1952,7 +1948,7 @@ const NurseTriage = () => {
                                 <button
                                     onClick={handleAddNote}
                                     className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 flex items-center gap-2 font-semibold"
-                                    disabled={!noteForm.selectedServiceId || !noteForm.comment.trim()}
+                                    disabled={!noteForm.category?.trim() || !noteForm.comment.trim()}
                                 >
                                     <FaNotesMedical /> {noteForm.editingNoteId ? 'Update Note' : 'Add Note'}
                                 </button>

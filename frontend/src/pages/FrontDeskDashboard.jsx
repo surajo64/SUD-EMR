@@ -1093,62 +1093,74 @@ const FrontDeskDashboard = () => {
                                     className="flex justify-between items-center border p-3 rounded hover:bg-gray-50"
                                 >
                                     <div>
-                                        <p className="font-semibold">{patient.name}</p>
+                                        <div className="flex items-center gap-2">
+                                            <p className="font-semibold">{patient.name}</p>
+                                            {hasActiveInpatientEncounter(patient._id) && (
+                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200 shadow-sm">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping"></span>
+                                                    Admitted
+                                                </span>
+                                            )}
+                                        </div>
                                         <p className="text-sm text-gray-600">
                                             MRN: {patient.mrn} | Age: {formatAge(patient.age)} | {patient.gender}
                                         </p>
-                                        {hasTodayEncounter && (
+                                        {hasTodayEncounter && !hasActiveInpatientEncounter(patient._id) && (
                                             <p className="text-xs text-orange-600 mt-1">
                                                 ⚠ Already has an encounter today
                                             </p>
                                         )}
                                     </div>
-                                    <button
-                                        onClick={() => !hasTodayEncounter && openEncounterModal(patient)}
-                                        disabled={hasTodayEncounter}
-                                        className={`px-4 py-2 rounded flex items-center gap-2 ${hasTodayEncounter
-                                            ? 'hidden'
-                                            : 'bg-blue-600 text-white hover:bg-blue-700'
-                                            }`}
-                                        title={hasTodayEncounter ? 'Patient already has an encounter today' : 'Create new encounter'}
-                                    >
-                                        <FaCalendarCheck /> Create Encounter
-                                    </button>
-                                    {hasTodayEncounter && (
+                                    {hasActiveInpatientEncounter(patient._id) ? (
                                         <div className="flex gap-2">
-                                            {getActiveExternalEncounter(patient._id) ? (
-                                                <button
-                                                    onClick={() => openChangeEncounterModal(patient)}
-                                                    className="bg-orange-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-orange-700"
-                                                >
-                                                    <FaCalendarAlt /> Change Encounter Type
-                                                </button>
-                                            ) : (
-                                                <>
-                                                    <button
-                                                        onClick={() => handleAddChargesClick(patient)}
-                                                        className="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-green-700 text-sm"
-                                                    >
-                                                        <FaDollarSign /> Add Charges
-                                                    </button>
-                                                    {hasActiveInpatientEncounter(patient._id) ? (
+                                            <button
+                                                onClick={() => handleAddChargesClick(patient)}
+                                                className="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-green-700 text-sm transition-all"
+                                            >
+                                                <FaDollarSign /> Add Charges
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <button
+                                                onClick={() => !hasTodayEncounter && openEncounterModal(patient)}
+                                                disabled={hasTodayEncounter}
+                                                className={`px-4 py-2 rounded flex items-center gap-2 ${hasTodayEncounter
+                                                    ? 'hidden'
+                                                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                                                    }`}
+                                                title={hasTodayEncounter ? 'Patient already has an encounter today' : 'Create new encounter'}
+                                            >
+                                                <FaCalendarCheck /> Create Encounter
+                                            </button>
+                                            {hasTodayEncounter && (
+                                                <div className="flex gap-2">
+                                                    {getActiveExternalEncounter(patient._id) ? (
                                                         <button
-                                                            onClick={() => window.location.href = `/patient/${patient._id}`}
-                                                            className="bg-red-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-red-700"
+                                                            onClick={() => openChangeEncounterModal(patient)}
+                                                            className="bg-orange-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-orange-700"
                                                         >
-                                                            <FaBed /> Discharge
+                                                            <FaCalendarAlt /> Change Encounter Type
                                                         </button>
                                                     ) : (
-                                                        <button
-                                                            onClick={() => handleEditClick(patient)}
-                                                            className="bg-purple-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-purple-700"
-                                                        >
-                                                            <FaBed /> Edit / Admit
-                                                        </button>
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleAddChargesClick(patient)}
+                                                                className="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-green-700 text-sm"
+                                                            >
+                                                                <FaDollarSign /> Add Charges
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleEditClick(patient)}
+                                                                className="bg-purple-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-purple-700"
+                                                            >
+                                                                <FaBed /> Edit / Admit
+                                                            </button>
+                                                        </>
                                                     )}
-                                                </>
+                                                </div>
                                             )}
-                                        </div>
+                                        </>
                                     )}
                                 </div>
                             );
@@ -1177,62 +1189,74 @@ const FrontDeskDashboard = () => {
                                     className="flex justify-between items-center border p-3 rounded hover:bg-gray-50"
                                 >
                                     <div>
-                                        <p className="font-semibold">{patient.name}</p>
+                                        <div className="flex items-center gap-2">
+                                            <p className="font-semibold">{patient.name}</p>
+                                            {hasActiveInpatientEncounter(patient._id) && (
+                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200 shadow-sm">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping"></span>
+                                                    Admitted
+                                                </span>
+                                            )}
+                                        </div>
                                         <p className="text-sm text-gray-600">
                                             MRN: {patient.mrn} | Age: {formatAge(patient.age)} | {patient.gender}
                                         </p>
-                                        {hasTodayEncounter && (
+                                        {hasTodayEncounter && !hasActiveInpatientEncounter(patient._id) && (
                                             <p className="text-xs text-orange-600 mt-1">
                                                 ⚠ Already has an encounter today
                                             </p>
                                         )}
                                     </div>
-                                    <button
-                                        onClick={() => !hasTodayEncounter && openEncounterModal(patient)}
-                                        disabled={hasTodayEncounter}
-                                        className={`px-4 py-2 rounded flex items-center gap-2 ${hasTodayEncounter
-                                            ? 'hidden'
-                                            : 'bg-blue-600 text-white hover:bg-blue-700'
-                                            }`}
-                                        title={hasTodayEncounter ? 'Patient already has an encounter today' : 'Create new encounter'}
-                                    >
-                                        <FaCalendarCheck /> Create Encounter
-                                    </button>
-                                    {hasTodayEncounter && (
+                                    {hasActiveInpatientEncounter(patient._id) ? (
                                         <div className="flex gap-2">
-                                            {getActiveExternalEncounter(patient._id) ? (
-                                                <button
-                                                    onClick={() => openChangeEncounterModal(patient)}
-                                                    className="bg-orange-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-orange-700"
-                                                >
-                                                    <FaCalendarAlt /> Change Encounter Type
-                                                </button>
-                                            ) : (
-                                                <>
-                                                    <button
-                                                        onClick={() => handleAddChargesClick(patient)}
-                                                        className="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-green-700 text-sm"
-                                                    >
-                                                        <FaDollarSign /> Add Charges
-                                                    </button>
-                                                    {hasActiveInpatientEncounter(patient._id) ? (
+                                            <button
+                                                onClick={() => handleAddChargesClick(patient)}
+                                                className="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-green-700 text-sm transition-all"
+                                            >
+                                                <FaDollarSign /> Add Charges
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <button
+                                                onClick={() => !hasTodayEncounter && openEncounterModal(patient)}
+                                                disabled={hasTodayEncounter}
+                                                className={`px-4 py-2 rounded flex items-center gap-2 ${hasTodayEncounter
+                                                    ? 'hidden'
+                                                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                                                    }`}
+                                                title={hasTodayEncounter ? 'Patient already has an encounter today' : 'Create new encounter'}
+                                            >
+                                                <FaCalendarCheck /> Create Encounter
+                                            </button>
+                                            {hasTodayEncounter && (
+                                                <div className="flex gap-2">
+                                                    {getActiveExternalEncounter(patient._id) ? (
                                                         <button
-                                                            onClick={() => window.location.href = `/patient/${patient._id}`}
-                                                            className="bg-red-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-red-700"
+                                                            onClick={() => openChangeEncounterModal(patient)}
+                                                            className="bg-orange-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-orange-700"
                                                         >
-                                                            <FaBed /> Discharge
+                                                            <FaCalendarAlt /> Change Encounter Type
                                                         </button>
                                                     ) : (
-                                                        <button
-                                                            onClick={() => handleEditClick(patient)}
-                                                            className="bg-purple-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-purple-700"
-                                                        >
-                                                            <FaBed /> Edit / Admit
-                                                        </button>
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleAddChargesClick(patient)}
+                                                                className="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-green-700 text-sm"
+                                                            >
+                                                                <FaDollarSign /> Add Charges
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleEditClick(patient)}
+                                                                className="bg-purple-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-purple-700"
+                                                            >
+                                                                <FaBed /> Edit / Admit
+                                                            </button>
+                                                        </>
                                                     )}
-                                                </>
+                                                </div>
                                             )}
-                                        </div>
+                                        </>
                                     )}
                                 </div>
                             );

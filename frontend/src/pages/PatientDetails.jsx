@@ -2827,7 +2827,7 @@ const PatientDetails = () => {
                                                                         <table className="w-full border-collapse border text-xs bg-white">
                                                                             <thead className="bg-gray-100">
                                                                                 <tr>
-                                                                                    <th className="p-2 text-left border">Service</th>
+                                                                                    <th className="p-2 text-left border">Category</th>
                                                                                     <th className="p-2 text-left border">Comment</th>
                                                                                     <th className="p-2 text-left border">Nurse</th>
                                                                                     <th className="p-2 text-left border">Time</th>
@@ -2836,7 +2836,7 @@ const PatientDetails = () => {
                                                                             <tbody>
                                                                                 {notes.map((note, index) => (
                                                                                     <tr key={note.id || index} className="border-b hover:bg-gray-50">
-                                                                                        <td className="p-2 border font-semibold text-blue-700">{note.service?.name || 'N/A'}</td>
+                                                                                        <td className="p-2 border font-semibold text-blue-700">{note.category || note.service?.name || 'N/A'}</td>
                                                                                         <td className="p-2 border text-gray-700">{note.comment}</td>
                                                                                         <td className="p-2 border text-gray-600">{note.nurse?.name || 'Unknown'}</td>
                                                                                         <td className="p-2 border text-gray-600">
