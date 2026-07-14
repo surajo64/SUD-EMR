@@ -270,13 +270,8 @@ const NurseTriage = () => {
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const { data } = await axios.get(`${backendUrl}/api/patients`, config);
-            const filtered = data.filter(p =>
-                p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (p.mrn && p.mrn.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                (p.contact && p.contact.includes(searchTerm))
-            );
-            setPatients(filtered);
+            const { data } = await axios.get(`${backendUrl}/api/patients?search=${searchTerm}`, config);
+            setPatients(data);
         } catch (error) {
             console.error(error);
             toast.error('Error searching patients');

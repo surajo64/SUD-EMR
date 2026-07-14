@@ -28,8 +28,8 @@ const RevenueReports = () => {
     const fetchDepositBalances = async () => {
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            // Fetch patients
-            const { data: patientsData } = await axios.get(`${backendUrl}/api/patients`, config);
+            // Fetch patients (request only the depositBalance field for performance)
+            const { data: patientsData } = await axios.get(`${backendUrl}/api/patients?fields=depositBalance`, config);
             const patTotal = patientsData.reduce((sum, p) => sum + (p.depositBalance || 0), 0);
             setTotalPatientDeposits(patTotal);
 

@@ -128,13 +128,8 @@ const CashierDashboard = () => {
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const { data } = await axios.get(`${backendUrl}/api/patients`, config);
-            const filtered = data.filter(p =>
-                p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (p.mrn && p.mrn.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                (p.contact && p.contact.includes(searchTerm))
-            );
-            setPatients(filtered);
+            const { data } = await axios.get(`${backendUrl}/api/patients?search=${searchTerm}`, config);
+            setPatients(data);
         } catch (error) {
             console.error(error);
             toast.error('Error searching patients');
@@ -163,15 +158,15 @@ const CashierDashboard = () => {
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const { data } = await axios.get(`${backendUrl}/api/visits`, config);
-            const patientEncounters = data.filter(v => v.patient && (v.patient._id === patient._id || v.patient === patient._id));
+            const { data } = await axios.get(`${backendUrl}/api/visits?patient=${patient._id}`, config);
+            const patientEncounters = data;
             // Sort encounters by creation date - latest first
             patientEncounters.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             setEncounters(patientEncounters);
 
-            // Fetch pending charges for each encounter
+            // Fetch pending charges for each encounter in parallel
             const pendingChargesMap = {};
-            for (const encounter of patientEncounters) {
+            await Promise.all(patientEncounters.map(async (encounter) => {
                 try {
                     const chargesResponse = await axios.get(
                         `${backendUrl}/api/encounter-charges/encounter/${encounter._id}`,
@@ -188,7 +183,7 @@ const CashierDashboard = () => {
                 } catch (err) {
                     console.error(`Error fetching charges for encounter ${encounter._id}:`, err);
                 }
-            }
+            }));
             setEncounterPendingCharges(pendingChargesMap);
         } catch (error) {
             console.error(error);

@@ -36,7 +36,7 @@ const get = (url, token) => {
         const options = {
             hostname: u.hostname,
             port: u.port,
-            path: u.pathname,
+            path: u.pathname + u.search,
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${token}`
@@ -69,7 +69,7 @@ const run = async () => {
         const token = loginRes.token;
         console.log('Login token:', token);
 
-        const res = await get('http://localhost:5000/api/hmo-transactions/total-retainership-balance', token);
+        const res = await get('http://localhost:5000/api/patients?page=1&limit=5', token);
         console.log('API Endpoint Response:', res);
     } catch(err) {
         console.error('Error:', err);

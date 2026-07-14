@@ -105,7 +105,9 @@ const getHMOWalletBalance = async (hmoName) => {
 // @access  Private
 const getPatients = async (req, res) => {
     try {
-        const { familyFile, search } = req.query;
+        const { familyFile, search, provider, hmo, startDate, endDate } = req.query;
+        const page = parseInt(req.query.page);
+        const limit = parseInt(req.query.limit) || 5; // Default limit match frontend PATIENTS_PER_PAGE
         let filter = {};
 
         if (familyFile) {
@@ -125,6 +127,34 @@ const getPatients = async (req, res) => {
                 { mrn: { $regex: search, $options: 'i' } },
                 { contact: { $regex: search, $options: 'i' } }
             ];
+        }
+
+        if (provider) {
+            if (provider === 'Standard') {
+                filter.$or = [
+                    { provider: 'Standard' },
+                    { provider: { $exists: false } },
+                    { provider: null }
+                ];
+            } else {
+                filter.provider = provider;
+            }
+        }
+
+        if (hmo) {
+            filter.hmo = hmo;
+        }
+
+        if (startDate || endDate) {
+            filter.createdAt = {};
+            if (startDate) {
+                filter.createdAt.$gte = new Date(startDate);
+            }
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                filter.createdAt.$lte = end;
+            }
         }
 
         // Apply encounter restrictions for doctor searches
@@ -174,21 +204,101 @@ const getPatients = async (req, res) => {
             }
         }
 
-        const patients = await Patient.find(filter).populate('familyFile');
+        if (page) {
+            const skip = (page - 1) * limit;
 
-        // Dynamically compute and overlay retainership wallet balance
-        const populatedPatients = [];
-        for (let patient of patients) {
-            let walletBalance = patient.depositBalance || 0;
-            if (['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider) && patient.hmo) {
-                walletBalance = await getHMOWalletBalance(patient.hmo);
+            // Fetch overall total
+            const total = await Patient.countDocuments({});
+            // Fetch total count matching current filters
+            const filteredCount = await Patient.countDocuments(filter);
+            
+            // Get stats counts matching current filters
+            const maleCount = await Patient.countDocuments({ ...filter, gender: { $regex: /^male$/i } });
+            const femaleCount = await Patient.countDocuments({ ...filter, gender: { $regex: /^female$/i } });
+
+            // Fetch actual paginated patient documents
+            const patients = await Patient.find(filter)
+                .populate('familyFile')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit);
+
+            // Dynamically compute and overlay retainership wallet balance
+            const populatedPatients = [];
+            const hmoBalances = {};
+            
+            // Find unique HMO names of patients that need balance calculation
+            const hmoNames = [...new Set(patients
+                .filter(patient => ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider) && patient.hmo)
+                .map(patient => patient.hmo)
+            )];
+
+            // Compute balances in parallel
+            await Promise.all(hmoNames.map(async (hmoName) => {
+                hmoBalances[hmoName] = await getHMOWalletBalance(hmoName);
+            }));
+
+            for (let patient of patients) {
+                let walletBalance = patient.depositBalance || 0;
+                if (['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider) && patient.hmo) {
+                    walletBalance = hmoBalances[patient.hmo] || 0;
+                }
+                const pObj = patient.toObject();
+                pObj.depositBalance = walletBalance;
+                populatedPatients.push(pObj);
             }
-            const pObj = patient.toObject();
-            pObj.depositBalance = walletBalance;
-            populatedPatients.push(pObj);
-        }
 
-        res.json(populatedPatients);
+            res.json({
+                patients: populatedPatients,
+                total,
+                filteredCount,
+                maleCount,
+                femaleCount,
+                page,
+                pages: Math.ceil(filteredCount / limit)
+            });
+        } else {
+            // Unpaginated path (for backward compatibility / export)
+            let query = Patient.find(filter);
+            if (req.query.fields) {
+                query = query.select(req.query.fields);
+            } else {
+                query = query.populate('familyFile');
+            }
+            const patients = await query.sort({ createdAt: -1 });
+
+            // If we only requested specific fields and didn't request provider/hmo, skip HMO balances calculation
+            if (req.query.fields && !req.query.fields.includes('hmo') && !req.query.fields.includes('provider')) {
+                return res.json(patients);
+            }
+
+            // Dynamically compute and overlay retainership wallet balance
+            const populatedPatients = [];
+            const hmoBalances = {};
+            
+            // Find unique HMO names of patients that need balance calculation
+            const hmoNames = [...new Set(patients
+                .filter(patient => ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider) && patient.hmo)
+                .map(patient => patient.hmo)
+            )];
+
+            // Compute balances in parallel
+            await Promise.all(hmoNames.map(async (hmoName) => {
+                hmoBalances[hmoName] = await getHMOWalletBalance(hmoName);
+            }));
+
+            for (let patient of patients) {
+                let walletBalance = patient.depositBalance || 0;
+                if (['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider) && patient.hmo) {
+                    walletBalance = hmoBalances[patient.hmo] || 0;
+                }
+                const pObj = patient.toObject();
+                pObj.depositBalance = walletBalance;
+                populatedPatients.push(pObj);
+            }
+
+            res.json(populatedPatients);
+        }
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

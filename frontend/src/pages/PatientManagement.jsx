@@ -26,6 +26,11 @@ const PatientManagement = () => {
     const [filterHMO, setFilterHMO] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const PATIENTS_PER_PAGE = 5;
+    const [totalPatientsCount, setTotalPatientsCount] = useState(0);
+    const [filteredPatientsCount, setFilteredPatientsCount] = useState(0);
+    const [maleCount, setMaleCount] = useState(0);
+    const [femaleCount, setFemaleCount] = useState(0);
+    const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [encounters, setEncounters] = useState([]);
     const [showEncountersModal, setShowEncountersModal] = useState(false);
@@ -138,9 +143,22 @@ const PatientManagement = () => {
         }
     }, [pendingEncounterPatient, showRegisterPatientModal]);
 
+    // Debounce search input
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedSearchTerm(searchTerm);
+        }, 300);
+        return () => clearTimeout(handler);
+    }, [searchTerm]);
+
+    // Reset current page when filters change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [debouncedSearchTerm, startDate, endDate, filterProvider, filterHMO]);
+
+    // Fetch initial static metadata once
     useEffect(() => {
         if (user && (user.role === 'admin' || user.role === 'super_admin' || user.role === 'receptionist' || user.role === 'readonly_admin')) {
-            fetchPatients();
             fetchHMOs();
             fetchFamilyFiles();
             fetchClinics();
@@ -151,6 +169,13 @@ const PatientManagement = () => {
         }
     }, [user]);
 
+    // Fetch patients when page or filters change
+    useEffect(() => {
+        if (user && (user.role === 'admin' || user.role === 'super_admin' || user.role === 'receptionist' || user.role === 'readonly_admin')) {
+            fetchPatients();
+        }
+    }, [currentPage, debouncedSearchTerm, startDate, endDate, filterProvider, filterHMO, user]);
+
     useEffect(() => {
         if (selectedWard) {
             const ward = wards.find(w => w._id === selectedWard);
@@ -159,10 +184,6 @@ const PatientManagement = () => {
             setAvailableBeds([]);
         }
     }, [selectedWard, wards]);
-
-    useEffect(() => {
-        filterPatients();
-    }, [searchTerm, startDate, endDate, patients, filterProvider, filterHMO]);
 
     const calculateAge = (dob) => {
         if (!dob) return '';
@@ -208,9 +229,22 @@ const PatientManagement = () => {
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const { data } = await axios.get(`${backendUrl}/api/patients`, config);
-            setPatients(data);
-            setFilteredPatients(data);
+            const params = new URLSearchParams();
+            params.append('page', currentPage);
+            params.append('limit', PATIENTS_PER_PAGE);
+            if (debouncedSearchTerm) params.append('search', debouncedSearchTerm);
+            if (startDate) params.append('startDate', startDate);
+            if (endDate) params.append('endDate', endDate);
+            if (filterProvider) params.append('provider', filterProvider);
+            if (filterHMO) params.append('hmo', filterHMO);
+
+            const { data } = await axios.get(`${backendUrl}/api/patients?${params.toString()}`, config);
+            setPatients(data.patients || []);
+            setFilteredPatients(data.patients || []);
+            setTotalPatientsCount(data.total || 0);
+            setFilteredPatientsCount(data.filteredCount || 0);
+            setMaleCount(data.maleCount || 0);
+            setFemaleCount(data.femaleCount || 0);
         } catch (error) {
             console.error(error);
             toast.error('Error fetching patients');
@@ -369,48 +403,7 @@ const PatientManagement = () => {
         }
     };
 
-    const filterPatients = () => {
-        let filtered = patients;
 
-        // Search filter
-        if (searchTerm) {
-            filtered = filtered.filter(p =>
-                p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                p.mrn?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                p.contact?.includes(searchTerm)
-            );
-        }
-
-        // Date range filter (by registration date)
-        if (startDate) {
-            filtered = filtered.filter(p => new Date(p.createdAt) >= new Date(startDate));
-        }
-        if (endDate) {
-            const end = new Date(endDate);
-            end.setHours(23, 59, 59, 999);
-            filtered = filtered.filter(p => new Date(p.createdAt) <= end);
-        }
-
-        // Provider filter
-        if (filterProvider) {
-            if (filterProvider === 'Standard') {
-                filtered = filtered.filter(p => !p.provider || p.provider === 'Standard');
-            } else {
-                filtered = filtered.filter(p => p.provider === filterProvider);
-            }
-        }
-
-        // HMO filter
-        if (['Retainership', 'NHIA'].includes(filterProvider) && filterHMO) {
-            filtered = filtered.filter(p => p.hmo === filterHMO);
-        }
-
-        // Sort: newest first
-        filtered = [...filtered].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-        setFilteredPatients(filtered);
-        setCurrentPage(1); // reset to first page on any filter change
-    };
 
     const fetchPatientEncounters = async (patientId) => {
         try {
@@ -487,30 +480,48 @@ const PatientManagement = () => {
         }
     };
 
-    const exportToExcel = () => {
-        const worksheetData = filteredPatients.map(patient => ({
-            'MRN': patient.mrn || 'N/A',
-            'Name': patient.name,
-            'Age': patient.age || 'N/A',
-            'Gender': patient.gender || 'N/A',
-            'Phone': patient.contact || 'N/A',
-            'Address': patient.address || 'N/A',
-            'Registration Date': new Date(patient.createdAt).toLocaleDateString()
-        }));
+    const exportToExcel = async () => {
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const params = new URLSearchParams();
+            if (debouncedSearchTerm) params.append('search', debouncedSearchTerm);
+            if (startDate) params.append('startDate', startDate);
+            if (endDate) params.append('endDate', endDate);
+            if (filterProvider) params.append('provider', filterProvider);
+            if (filterHMO) params.append('hmo', filterHMO);
 
-        const worksheet = XLSX.utils.json_to_sheet(worksheetData);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Patients');
+            const { data } = await axios.get(`${backendUrl}/api/patients?${params.toString()}`, config);
 
-        const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-        const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const worksheetData = data.map(patient => ({
+                'MRN': patient.mrn || 'N/A',
+                'Name': patient.name,
+                'Age': patient.age || 'N/A',
+                'Gender': patient.gender || 'N/A',
+                'Phone': patient.contact || 'N/A',
+                'Address': patient.address || 'N/A',
+                'Registration Date': new Date(patient.createdAt).toLocaleDateString()
+            }));
 
-        const filename = startDate && endDate
-            ? `Patients_${startDate}_to_${endDate}.xlsx`
-            : `All_Patients_${new Date().toISOString().split('T')[0]}.xlsx`;
+            const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Patients');
 
-        saveAs(data, filename);
-        toast.success('Patient list exported successfully!');
+            const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+            const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+            const filename = startDate && endDate
+                ? `Patients_${startDate}_to_${endDate}.xlsx`
+                : `All_Patients_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+            saveAs(blob, filename);
+            toast.success('Patient list exported successfully!');
+        } catch (error) {
+            console.error(error);
+            toast.error('Error exporting to Excel');
+        } finally {
+            setLoading(false);
+        }
     };
 
     if (user?.role !== 'admin' && user?.role !== 'super_admin' && user?.role !== 'receptionist' && user?.role !== 'readonly_admin') {
@@ -644,23 +655,19 @@ const PatientManagement = () => {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div className="bg-white p-6 rounded-lg shadow">
                         <p className="text-gray-600 text-sm font-semibold mb-2">Total Patients</p>
-                        <p className="text-3xl font-bold text-blue-600">{patients.length}</p>
+                        <p className="text-3xl font-bold text-blue-600">{totalPatientsCount}</p>
                     </div>
                     <div className="bg-white p-6 rounded-lg shadow">
                         <p className="text-gray-600 text-sm font-semibold mb-2">Filtered Results</p>
-                        <p className="text-3xl font-bold text-green-600">{filteredPatients.length}</p>
+                        <p className="text-3xl font-bold text-green-600">{filteredPatientsCount}</p>
                     </div>
                     <div className="bg-white p-6 rounded-lg shadow">
                         <p className="text-gray-600 text-sm font-semibold mb-2">Male Patients</p>
-                        <p className="text-3xl font-bold text-purple-600">
-                            {filteredPatients.filter(p => p.gender?.toLowerCase() === 'male').length}
-                        </p>
+                        <p className="text-3xl font-bold text-purple-600">{maleCount}</p>
                     </div>
                     <div className="bg-white p-6 rounded-lg shadow">
                         <p className="text-gray-600 text-sm font-semibold mb-2">Female Patients</p>
-                        <p className="text-3xl font-bold text-pink-600">
-                            {filteredPatients.filter(p => p.gender?.toLowerCase() === 'female').length}
-                        </p>
+                        <p className="text-3xl font-bold text-pink-600">{femaleCount}</p>
                     </div>
                 </div>
 
@@ -680,7 +687,6 @@ const PatientManagement = () => {
                         </thead>
                         <tbody>
                             {filteredPatients
-                                .slice((currentPage - 1) * PATIENTS_PER_PAGE, currentPage * PATIENTS_PER_PAGE)
                                 .map((patient) => (
                                     <tr key={patient._id} className="border-b hover:bg-gray-50">
                                         <td className="p-4 font-semibold text-blue-600">{patient.mrn || 'N/A'}</td>
@@ -774,10 +780,10 @@ const PatientManagement = () => {
                         </div>
                     )}
                     {/* Pagination */}
-                    {filteredPatients.length > PATIENTS_PER_PAGE && (
+                    {filteredPatientsCount > PATIENTS_PER_PAGE && (
                         <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
                             <p className="text-sm text-gray-600">
-                                Showing {Math.min((currentPage - 1) * PATIENTS_PER_PAGE + 1, filteredPatients.length)}–{Math.min(currentPage * PATIENTS_PER_PAGE, filteredPatients.length)} of {filteredPatients.length} patients
+                                Showing {Math.min((currentPage - 1) * PATIENTS_PER_PAGE + 1, filteredPatientsCount)}–{Math.min(currentPage * PATIENTS_PER_PAGE, filteredPatientsCount)} of {filteredPatientsCount} patients
                             </p>
                             <div className="flex items-center gap-2">
                                 <button
@@ -787,8 +793,8 @@ const PatientManagement = () => {
                                 >
                                     ← Prev
                                 </button>
-                                {Array.from({ length: Math.ceil(filteredPatients.length / PATIENTS_PER_PAGE) }, (_, i) => i + 1)
-                                    .filter(page => page === 1 || page === Math.ceil(filteredPatients.length / PATIENTS_PER_PAGE) || Math.abs(page - currentPage) <= 1)
+                                {Array.from({ length: Math.ceil(filteredPatientsCount / PATIENTS_PER_PAGE) }, (_, i) => i + 1)
+                                    .filter(page => page === 1 || page === Math.ceil(filteredPatientsCount / PATIENTS_PER_PAGE) || Math.abs(page - currentPage) <= 1)
                                     .reduce((acc, page, idx, arr) => {
                                         if (idx > 0 && arr[idx - 1] !== page - 1) acc.push('...');
                                         acc.push(page);
@@ -812,8 +818,8 @@ const PatientManagement = () => {
                                     )
                                 }
                                 <button
-                                    onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredPatients.length / PATIENTS_PER_PAGE), p + 1))}
-                                    disabled={currentPage === Math.ceil(filteredPatients.length / PATIENTS_PER_PAGE)}
+                                    onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredPatientsCount / PATIENTS_PER_PAGE), p + 1))}
+                                    disabled={currentPage === Math.ceil(filteredPatientsCount / PATIENTS_PER_PAGE)}
                                     className="px-3 py-1.5 text-sm border rounded hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
                                     Next →

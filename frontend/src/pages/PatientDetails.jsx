@@ -923,9 +923,8 @@ const PatientDetails = () => {
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const { data } = await axios.get(`${backendUrl}/api/patients`, config);
-            const foundPatient = data.find(p => p._id === id);
-            setPatient(foundPatient);
+            const { data } = await axios.get(`${backendUrl}/api/patients/${id}`, config);
+            setPatient(data);
 
             // Fetch all visits for this specific patient
             const visitsRes = await axios.get(`${backendUrl}/api/visits?patient=${id}`, config);

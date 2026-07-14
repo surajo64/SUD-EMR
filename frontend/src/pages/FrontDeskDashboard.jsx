@@ -15,6 +15,7 @@ const FrontDeskDashboard = () => {
     const [patients, setPatients] = useState([]);
     const [recentPatients, setRecentPatients] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
     const [filteredPatients, setFilteredPatients] = useState([]);
     const [showRegisterForm, setShowRegisterForm] = useState(false);
     const [showEncounterModal, setShowEncounterModal] = useState(false);
@@ -231,7 +232,6 @@ const FrontDeskDashboard = () => {
     });
 
     useEffect(() => {
-        fetchPatients();
         fetchRecentPatients();
         fetchCharges();
         fetchClinics();
@@ -301,29 +301,34 @@ const FrontDeskDashboard = () => {
         }
     }, [selectedWard, wards]);
 
+    // Debounce search input
     useEffect(() => {
-        if (searchTerm) {
-            const filtered = patients.filter(p =>
-                p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (p.mrn && p.mrn.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                (p.contact && p.contact.includes(searchTerm))
-            );
-            setFilteredPatients(filtered);
-        } else {
-            setFilteredPatients([]);
-        }
-    }, [searchTerm, patients]);
+        const handler = setTimeout(() => {
+            setDebouncedSearchTerm(searchTerm);
+        }, 300);
+        return () => clearTimeout(handler);
+    }, [searchTerm]);
+
+    // Fetch filtered patients on demand
+    useEffect(() => {
+        const searchOnServer = async () => {
+            if (debouncedSearchTerm) {
+                try {
+                    const config = { headers: { Authorization: `Bearer ${user.token}` } };
+                    const { data } = await axios.get(`${backendUrl}/api/patients?search=${debouncedSearchTerm}`, config);
+                    setFilteredPatients(data);
+                } catch (error) {
+                    console.error(error);
+                }
+            } else {
+                setFilteredPatients([]);
+            }
+        };
+        searchOnServer();
+    }, [debouncedSearchTerm]);
 
     const fetchPatients = async () => {
-        try {
-
-            const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const { data } = await axios.get(`${backendUrl}/api/patients`, config);
-            setPatients(data);
-        } catch (error) {
-            console.error(error);
-            toast.error('Error fetching patients');
-        }
+        // No longer fetching all patients on mount to keep loading fast
     };
 
     const fetchRecentPatients = async () => {
@@ -333,12 +338,12 @@ const FrontDeskDashboard = () => {
             const { data } = await axios.get(`${backendUrl}/api/patients/recent`, config);
             setRecentPatients(data);
 
-            // Fetch encounters for each recent patient
+            // Fetch encounters for each recent patient in parallel
             const encountersMap = {};
-            for (const patient of data) {
+            await Promise.all(data.map(async (patient) => {
                 const encounters = await fetchPatientEncounters(patient._id);
                 encountersMap[patient._id] = encounters;
-            }
+            }));
             setPatientEncounters(encountersMap);
         } catch (error) {
             console.error(error);

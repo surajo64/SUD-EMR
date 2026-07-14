@@ -322,17 +322,11 @@ const HMOManagement = () => {
             setSelectedHMOForDetail(hmo);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
 
-            // Fetch all patients and filter by this HMO
-            const { data } = await axios.get(`${backendUrl}/api/patients`, config);
+            // Fetch patients filtered by provider category and HMO name directly from database
+            const providerParam = hmo.category === 'State Scheme' ? 'KSCHMA' : hmo.category;
+            const { data } = await axios.get(`${backendUrl}/api/patients?provider=${providerParam}&hmo=${hmo.name}`, config);
 
-            // Patients are linked by provider (Retainership, NHIA, KSCHMA) 
-            // and hmo (which stores the name of the HMO/Entity)
-            const filtered = data.filter(p =>
-                (p.provider === hmo.category || (hmo.category === 'State Scheme' && p.provider === 'KSCHMA')) &&
-                p.hmo === hmo.name
-            );
-
-            setHmoPatients(filtered);
+            setHmoPatients(data);
             setShowDetailModal(true);
         } catch (error) {
             console.error(error);
