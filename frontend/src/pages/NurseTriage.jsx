@@ -576,7 +576,7 @@ const NurseTriage = () => {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const { data: prescriptions } = await axios.get(`${backendUrl}/api/prescriptions/visit/${encounterId}`, config);
             const consumableKeywords = ['syringe', 'cannula', 'giving set', 'infusion set', 'needle', 'plaster', 'gloves', 'mask', 'catheter', 'bandage'];
-            const filteredPrescriptions = prescriptions.filter(p => p.status === 'dispensed').map(p => ({
+            const filteredPrescriptions = prescriptions.filter(p => p.status === 'dispensed' || p.status === 'pending').map(p => ({
                 ...p,
                 medicines: p.medicines.filter(m => {
                     const isMedication = m.dosage || m.route || m.frequency;
@@ -1183,14 +1183,14 @@ const NurseTriage = () => {
                                             <FaTable /> Drug Observation Chart
                                         </h4>
                                         <div className="flex items-center gap-3">
-                                            <span className="text-[10px] bg-blue-500/50 px-2 py-0.5 rounded-full uppercase tracking-widest font-bold border border-blue-400/30">Dispensed</span>
+                                            <span className="text-[10px] bg-blue-500/50 px-2 py-0.5 rounded-full uppercase tracking-widest font-bold border border-blue-400/30">Prescribed</span>
                                         </div>
                                     </div>
 
                                     <div className="bg-white border-x border-b border-blue-200 rounded-b-lg shadow-sm overflow-hidden">
                                         {dispensedPrescriptions.length === 0 ? (
                                             <div className="p-8 text-center text-gray-400 italic text-sm">
-                                                No dispensed medications found.
+                                                No prescribed medications found.
                                             </div>
                                         ) : (
                                             <div className="">
@@ -1362,7 +1362,7 @@ const NurseTriage = () => {
                                             </div>
                                         )}
                                         <div className="p-3 bg-gray-50/80 text-[10px] text-gray-500 flex items-center gap-2 border-t border-blue-100 italic">
-                                            <FaClock className="text-blue-400" /> Compact observation chart. Only dispensed medications are displayed.
+                                            <FaClock className="text-blue-400" /> Compact observation chart. Prescribed and dispensed medications are displayed.
                                         </div>
                                     </div>
                                 </div>

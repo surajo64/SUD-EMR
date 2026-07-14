@@ -1018,7 +1018,7 @@ const PatientDetails = () => {
                 axios.get(`${backendUrl}/api/drug-administration/visit/${encounterId}`, config)
             ]);
             const consumableKeywords = ['syringe', 'cannula', 'giving set', 'infusion set', 'needle', 'plaster', 'gloves', 'mask', 'catheter', 'bandage'];
-            const dispensedRx = rxRes.data.filter(p => p.status === 'dispensed').map(p => ({
+            const dispensedRx = rxRes.data.filter(p => p.status === 'dispensed' || p.status === 'pending').map(p => ({
                 ...p,
                 medicines: p.medicines.filter(m => {
                     const isMedication = m.dosage || m.route || m.frequency;
@@ -2873,7 +2873,7 @@ const PatientDetails = () => {
                                                         <div className="p-4 bg-white">
                                                             {dispensedPrescriptions.length === 0 ? (
                                                                 <div className="text-center py-6 text-gray-500 italic bg-gray-50 rounded border border-dashed">
-                                                                    No dispensed medications found for this encounter.
+                                                                    No prescribed medications found for this encounter.
                                                                 </div>
                                                             ) : (
                                                                 <div className="space-y-4">
@@ -2951,7 +2951,14 @@ const PatientDetails = () => {
                                                                                                             return (
                                                                                                                 <tr key={`${p._id}-${m._id || m.name}`} className="hover:bg-blue-50/10 border-b last:border-0 transition-colors">
                                                                                                                     <td className="p-2 border-r">
-                                                                                                                        <div className="font-bold text-blue-950 leading-tight">{m.name}</div>
+                                                                                                                        <div className="font-bold text-blue-950 leading-tight flex items-center gap-2">
+                                                                                                                            {m.name}
+                                                                                                                            {m.buyOutside && (
+                                                                                                                                <span className="text-[9px] bg-orange-100 text-orange-800 px-1.5 py-0.5 rounded border border-orange-200 uppercase font-black">
+                                                                                                                                    Buy Outside
+                                                                                                                                </span>
+                                                                                                                            )}
+                                                                                                                        </div>
                                                                                                                         <div className="text-[9px] text-gray-500 flex items-center gap-1 mt-0.5">
                                                                                                                             <span className="font-medium text-gray-700">{m.dosage}</span>
                                                                                                                             <span>|</span>
@@ -3016,7 +3023,7 @@ const PatientDetails = () => {
                                                             )}
                                                         </div>
                                                         <div className="p-3 bg-gray-50 text-[10px] text-gray-500 flex items-center gap-2 border-t italic">
-                                                            <FaClock className="text-blue-400" /> This is a read-only view of the medication administration record.
+                                                            <FaClock className="text-blue-400" /> This is a view of the medication administration record for all prescribed medications.
                                                         </div>
                                                     </div>
                                                 )}
