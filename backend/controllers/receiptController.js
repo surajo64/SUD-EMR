@@ -273,7 +273,8 @@ const createReceiptForCharges = async (req, res) => {
 
             const existingCharges = await EncounterCharge.find({
                 patient: { $in: hmoPatientIds },
-                hmoPortion: { $gt: 0 }
+                hmoPortion: { $gt: 0 },
+                status: 'paid'
             });
             const totalUtilized = existingCharges.reduce((sum, c) => sum + c.hmoPortion, 0);
 

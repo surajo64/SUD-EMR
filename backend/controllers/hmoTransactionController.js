@@ -66,7 +66,8 @@ const getHMOStatement = async (req, res) => {
 
         const chargeQuery = {
             patient: { $in: patientIds },
-            hmoPortion: { $gt: 0 }
+            hmoPortion: { $gt: 0 },
+            status: 'paid'
         };
 
         if (startDate && endDate) {
@@ -178,7 +179,8 @@ const getTotalRetainershipBalance = async (req, res) => {
 
         const charges = await EncounterCharge.find({
             patient: { $in: patientIds },
-            hmoPortion: { $gt: 0 }
+            hmoPortion: { $gt: 0 },
+            status: 'paid'
         });
         const totalCharges = charges.reduce((sum, c) => sum + c.hmoPortion, 0) + totalManualCharges;
 

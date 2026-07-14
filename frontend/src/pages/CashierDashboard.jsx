@@ -33,8 +33,12 @@ const CashierDashboard = () => {
         totalReceiptsToday: 0
     });
 
-    const getPatientPortion = (charge) => {
+    const getPatientPortion = (charge, overrideMethod = null) => {
         if (!charge) return 0;
+        const currentMethod = overrideMethod || paymentMethod;
+        if (currentMethod === 'retainership') {
+            return charge.hmoPortion || 0;
+        }
         if (charge.patientPortion > 0) return charge.patientPortion;
         const provider = charge.patient?.provider || selectedPatient?.provider || 'Standard';
         const isInsurance = ['Retainership', 'Corporate Retainership', 'Family Retainership', 'NHIA', 'KSCHMA'].includes(provider);
@@ -145,15 +149,15 @@ const CashierDashboard = () => {
         setSelectedCharges([]);
 
         // Set default payment method based on provider first, then deposit balance
+        let initialPaymentMethod = 'cash';
         if (['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider)) {
-            setPaymentMethod('retainership');
+            initialPaymentMethod = 'retainership';
         } else if (['NHIA', 'KSCHMA', 'State Scheme'].includes(patient.provider)) {
-            setPaymentMethod('insurance');
+            initialPaymentMethod = 'insurance';
         } else if (patient.depositBalance > 0) {
-            setPaymentMethod('deposit');
-        } else {
-            setPaymentMethod('cash');
+            initialPaymentMethod = 'deposit';
         }
+        setPaymentMethod(initialPaymentMethod);
 
         try {
             setLoading(true);
@@ -174,7 +178,7 @@ const CashierDashboard = () => {
                     );
                     const pending = chargesResponse.data.filter(c => c.status === 'pending');
                     if (pending.length > 0) {
-                        const totalPending = pending.reduce((sum, c) => sum + getPatientPortion(c), 0);
+                        const totalPending = pending.reduce((sum, c) => sum + getPatientPortion(c, initialPaymentMethod), 0);
                         pendingChargesMap[encounter._id] = {
                             count: pending.length,
                             total: totalPending

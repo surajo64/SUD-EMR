@@ -623,6 +623,26 @@ const NurseTriage = () => {
         }
     };
 
+    // Returns the correct price tier based on the patient's provider category
+    const getChargePrice = (charge, patient) => {
+        if (!charge) return 0;
+        const provider = patient?.provider || 'Standard';
+        if (['Retainership', 'Corporate Retainership'].includes(provider)) {
+            return charge.retainershipFee ?? charge.standardFee ?? charge.basePrice ?? 0;
+        }
+        if (provider === 'Family Retainership') {
+            return charge.familyRetainershipFee ?? charge.retainershipFee ?? charge.standardFee ?? charge.basePrice ?? 0;
+        }
+        if (provider === 'NHIA') {
+            return charge.nhiaFee ?? charge.standardFee ?? charge.basePrice ?? 0;
+        }
+        if (provider === 'KSCHMA') {
+            return charge.kschmaFee ?? charge.standardFee ?? charge.basePrice ?? 0;
+        }
+        // Standard / cash patients
+        return charge.standardFee ?? charge.basePrice ?? 0;
+    };
+
     const handleAddCharge = async () => {
         if (!chargeForm.selectedChargeId) {
             toast.error('Please select a service');
@@ -1646,7 +1666,7 @@ const NurseTriage = () => {
                                         <table className="w-full border-collapse border text-sm bg-white">
                                             <thead className="bg-gray-100">
                                                 <tr>
-                                                     <th className="p-2 text-left border">Category</th>
+                                                    <th className="p-2 text-left border">Category</th>
                                                     <th className="p-2 text-left border">Comment</th>
                                                     <th className="p-2 text-left border">Nurse</th>
                                                     <th className="p-2 text-left border">Time</th>
@@ -1656,7 +1676,7 @@ const NurseTriage = () => {
                                             <tbody>
                                                 {nursingNotesList.map((note) => (
                                                     <tr key={note.id} className="border-b hover:bg-gray-50">
-                                                         <td className="p-2 border font-semibold text-blue-700">{note.category || note.service?.name}</td>
+                                                        <td className="p-2 border font-semibold text-blue-700">{note.category || note.service?.name}</td>
                                                         <td className="p-2 border text-gray-700">{note.comment}</td>
                                                         <td className="p-2 border text-gray-600">{note.nurse?.name || 'Unknown'}</td>
                                                         <td className="p-2 border text-gray-600 text-xs">
@@ -1729,9 +1749,9 @@ const NurseTriage = () => {
                                         setEditingChargeId(null);
                                         setChargeForm({ selectedChargeId: '', quantity: 1, notes: '' });
                                     }}
-                                    className="text-white hover:text-gray-200 text-2xl"
+                                    className="text-red-400 hover:text-red-600 text-2xl"
                                 >
-                                    Ãƒâ€”
+                                    X
                                 </button>
                             </div>
 
@@ -1750,7 +1770,7 @@ const NurseTriage = () => {
                                                 <option value="">-- Select Service --</option>
                                                 {nursingCharges.map(charge => (
                                                     <option key={charge._id} value={charge._id}>
-                                                        {charge.name} - ${charge.basePrice.toFixed(2)}
+                                                        {charge.name} - ₦{getChargePrice(charge, selectedPatient).toLocaleString()}
                                                     </option>
                                                 ))}
                                             </select>
@@ -1777,17 +1797,23 @@ const NurseTriage = () => {
                                         ></textarea>
                                     </div>
 
-                                    {/* Total Preview */}
                                     {chargeForm.selectedChargeId && (
-                                        <div className="bg-blue-50 p-3 rounded">
+                                        <div className="bg-blue-50 p-3 rounded border border-blue-200">
                                             <div className="flex justify-between items-center">
-                                                <span className="font-semibold">Total:</span>
-                                                <span className="font-bold text-xl text-blue-700">
-                                                    ${
-                                                        (nursingCharges.find(c => c._id === chargeForm.selectedChargeId)?.basePrice || 0) * chargeForm.quantity
-                                                    }.00
+                                                <span className="font-semibold text-gray-700">Price per unit:</span>
+                                                <span className="font-bold text-blue-700">
+                                                    ₦{getChargePrice(nursingCharges.find(c => c._id === chargeForm.selectedChargeId), selectedPatient).toLocaleString()}
                                                 </span>
                                             </div>
+                                            <div className="flex justify-between items-center mt-1 pt-1 border-t border-blue-200">
+                                                <span className="font-semibold text-gray-700">Total ({chargeForm.quantity}x):</span>
+                                                <span className="font-bold text-xl text-blue-700">
+                                                    ₦{(getChargePrice(nursingCharges.find(c => c._id === chargeForm.selectedChargeId), selectedPatient) * chargeForm.quantity).toLocaleString()}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Patient category: <span className="font-semibold text-blue-700">{selectedPatient?.provider || 'Standard'}</span>
+                                            </p>
                                         </div>
                                     )}
                                 </div>
@@ -1976,8 +2002,8 @@ const NurseTriage = () => {
                             <div className="mb-4">
                                 <label className="block text-gray-700 font-bold mb-1">Financial Deposit Balance</label>
                                 <div className={`p-3 rounded border text-sm font-semibold flex flex-col gap-1 ${isBlocked
-                                        ? 'bg-red-50 text-red-800 border-red-200'
-                                        : 'bg-green-50 text-green-800 border-green-200'
+                                    ? 'bg-red-50 text-red-800 border-red-200'
+                                    : 'bg-green-50 text-green-800 border-green-200'
                                     }`}>
                                     <div className="flex justify-between items-center">
                                         <span>Patient Deposit:</span>
