@@ -229,12 +229,45 @@ const getInventoryAlerts = async (req, res) => {
 
         const allItems = await Inventory.find(filter);
 
-        const lowStock = allItems.filter(item => item.quantity < item.reorderLevel);
-        const expiringSoon = allItems.filter(item => {
+        // Group by pharmacy and drug name to calculate total stock per drug for lowStock alert
+        const stockGroup = {};
+        allItems.forEach(item => {
+            const pharmId = item.pharmacy?.toString() || 'unknown';
+            const nameKey = item.name.toLowerCase();
+            const groupKey = `${pharmId}_${nameKey}`;
+            
+            if (!stockGroup[groupKey]) {
+                stockGroup[groupKey] = {
+                    name: item.name,
+                    pharmacy: item.pharmacy,
+                    totalQuantity: 0,
+                    reorderLevel: item.reorderLevel || 0,
+                    referenceItem: item
+                };
+            }
+            stockGroup[groupKey].totalQuantity += item.quantity;
+            if (item.reorderLevel > stockGroup[groupKey].reorderLevel) {
+                stockGroup[groupKey].reorderLevel = item.reorderLevel;
+            }
+        });
+
+        const lowStock = [];
+        Object.values(stockGroup).forEach(group => {
+            if (group.totalQuantity < group.reorderLevel) {
+                const rep = group.referenceItem.toObject ? group.referenceItem.toObject() : { ...group.referenceItem };
+                rep.quantity = group.totalQuantity;
+                lowStock.push(rep);
+            }
+        });
+
+        // Only alert for active items (quantity > 0) for expiring soon and expired
+        const activeItems = allItems.filter(item => item.quantity > 0);
+
+        const expiringSoon = activeItems.filter(item => {
             const expiryDate = new Date(item.expiryDate);
             return expiryDate > today && expiryDate <= thirtyDaysFromNow;
         });
-        const expired = allItems.filter(item => new Date(item.expiryDate) < today);
+        const expired = activeItems.filter(item => new Date(item.expiryDate) < today);
 
         res.json({
             lowStock,

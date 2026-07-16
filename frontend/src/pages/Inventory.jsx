@@ -413,6 +413,26 @@ const Inventory = () => {
         .filter((item) => item.name.toLowerCase().includes(search.toLowerCase()))
         .filter((item) => expiryFilter === "All" || checkExpiry(item.expiryDate) === expiryFilter);
 
+    // Hide 0-quantity batches if there is at least one active batch (quantity > 0) of the same drug in the same pharmacy
+    filteredItems = filteredItems.filter((item) => {
+        if (item.quantity > 0) return true;
+        
+        const itemPharmacyId = item.pharmacy?._id || item.pharmacy || '';
+        const itemPharmacyIdStr = typeof itemPharmacyId === 'object' ? itemPharmacyId.toString() : String(itemPharmacyId);
+        
+        const hasActiveBatch = filteredItems.some((other) => {
+            const otherPharmacyId = other.pharmacy?._id || other.pharmacy || '';
+            const otherPharmacyIdStr = typeof otherPharmacyId === 'object' ? otherPharmacyId.toString() : String(otherPharmacyId);
+            return (
+                other.name.toLowerCase() === item.name.toLowerCase() &&
+                otherPharmacyIdStr === itemPharmacyIdStr &&
+                other.quantity > 0 &&
+                other._id !== item._id
+            );
+        });
+        return !hasActiveBatch;
+    });
+
     // If viewing all pharmacies, aggregate quantities by drug name - but still show batch details
     if (!selectedPharmacy) {
         const aggregated = {};
