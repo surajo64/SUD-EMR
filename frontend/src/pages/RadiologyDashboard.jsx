@@ -27,6 +27,7 @@ const RadiologyDashboard = () => {
     const [editResultModal, setEditResultModal] = useState(null);
     const [editNotes, setEditNotes] = useState('');
     const [editImageUrl, setEditImageUrl] = useState('');
+    const [editUploadedImages, setEditUploadedImages] = useState([]); // images for the edit modal
     const [expandedEncounter, setExpandedEncounter] = useState(null);
     const resultRef = useRef();
 
@@ -128,6 +129,25 @@ const RadiologyDashboard = () => {
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
+
+            // Step 1: Upload any pending new images first
+            const newImages = uploadedImages.filter(img => img.file);
+            if (newImages.length > 0) {
+                const formData = new FormData();
+                const imageNames = [];
+                newImages.forEach((img, index) => {
+                    formData.append('images', img.file);
+                    imageNames.push(img.name || `Image ${index + 1}`);
+                });
+                formData.append('imageNames', JSON.stringify(imageNames));
+                await axios.post(
+                    `${backendUrl}/api/radiology/${selectedOrder._id}/upload-images`,
+                    formData,
+                    { headers: { Authorization: `Bearer ${user.token}`, 'Content-Type': 'multipart/form-data' } }
+                );
+            }
+
+            // Step 2: Save the report
             await axios.put(
                 `${backendUrl}/api/radiology/${selectedOrder._id}/report`,
                 {
@@ -146,6 +166,7 @@ const RadiologyDashboard = () => {
             setReceiptNumber('');
             setNotes('');
             setImageUrl('');
+            setUploadedImages([]);
             fetchRadiologyOrders();
         } catch (error) {
             console.error(error);
@@ -164,6 +185,25 @@ const RadiologyDashboard = () => {
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
+
+            // Step 1: Upload any pending new images first
+            const newImages = editUploadedImages.filter(img => img.file);
+            if (newImages.length > 0) {
+                const formData = new FormData();
+                const imageNames = [];
+                newImages.forEach((img, index) => {
+                    formData.append('images', img.file);
+                    imageNames.push(img.name || `Image ${index + 1}`);
+                });
+                formData.append('imageNames', JSON.stringify(imageNames));
+                await axios.post(
+                    `${backendUrl}/api/radiology/${editResultModal._id}/upload-images`,
+                    formData,
+                    { headers: { Authorization: `Bearer ${user.token}`, 'Content-Type': 'multipart/form-data' } }
+                );
+            }
+
+            // Step 2: Save the updated report
             await axios.put(
                 `${backendUrl}/api/radiology/${editResultModal._id}/report`,
                 {
@@ -180,6 +220,7 @@ const RadiologyDashboard = () => {
             setEditResultModal(null);
             setEditNotes('');
             setEditImageUrl('');
+            setEditUploadedImages([]);
             fetchRadiologyOrders();
         } catch (error) {
             console.error(error);
@@ -474,6 +515,7 @@ const RadiologyDashboard = () => {
                                                                             setEditResultModal(order);
                                                                             setEditNotes(order.report || order.notes || '');
                                                                             setEditImageUrl(order.resultImage || '');
+                                                                            setEditUploadedImages(order.images || []);
                                                                         }}
                                                                         className="p-1.5 bg-orange-50 text-orange-600 rounded hover:bg-orange-100 transition-colors"
                                                                         title="Edit"
@@ -638,48 +680,6 @@ const RadiologyDashboard = () => {
                                             </div>
                                         ))}
                                     </div>
-                                )}
-
-                                {/* Upload Button for new images */}
-                                {uploadedImages.some(img => img.file) && (
-                                    <button
-                                        onClick={async () => {
-                                            try {
-                                                setLoading(true);
-                                                const config = { headers: { Authorization: `Bearer ${user.token}`, 'Content-Type': 'multipart/form-data' } };
-
-                                                const formData = new FormData();
-                                                const imageNames = [];
-
-                                                uploadedImages.forEach((img, index) => {
-                                                    if (img.file) {
-                                                        formData.append('images', img.file);
-                                                        imageNames.push(img.name || `Image ${index + 1}`);
-                                                    }
-                                                });
-
-                                                formData.append('imageNames', JSON.stringify(imageNames));
-
-                                                const { data } = await axios.post(
-                                                    `${backendUrl}/api/radiology/${selectedOrder._id}/upload-images`,
-                                                    formData,
-                                                    config
-                                                );
-
-                                                toast.success('Images uploaded successfully!');
-                                                // Update with server response
-                                                setUploadedImages(data.order.images || []);
-                                            } catch (error) {
-                                                console.error(error);
-                                                toast.error('Error uploading images');
-                                            } finally {
-                                                setLoading(false);
-                                            }
-                                        }}
-                                        className="mt-3 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center gap-2"
-                                    >
-                                        <FaUpload /> Upload Images
-                                    </button>
                                 )}
 
                                 <p className="text-xs text-gray-500 mt-2">
@@ -887,51 +887,144 @@ Normal chest X-ray. No acute cardiopulmonary disease.
                     <div className="bg-white rounded-lg p-8 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-2xl font-bold">Edit Radiology Report</h3>
-                            <button onClick={() => setEditResultModal(null)} className="text-gray-500 hover:text-gray-700">
+                            <button onClick={() => { setEditResultModal(null); setEditUploadedImages([]); }} className="text-gray-500 hover:text-gray-700">
                                 <FaTimes size={24} />
                             </button>
                         </div>
 
-                        <div className="mb-4">
-                            <p className="text-sm text-gray-600 mb-2">
-                                <strong>Scan Type:</strong> {editResultModal.scanType}
-                            </p>
-                            <p className="text-sm text-gray-600 mb-2">
-                                <strong>Patient:</strong> {editResultModal.patient?.name} (MRN: {editResultModal.patient?.mrn})
+                        {/* Patient & Scan Info */}
+                        <div className="bg-indigo-50 p-4 rounded mb-6">
+                            <p className="font-bold text-lg">{editResultModal.scanType}</p>
+                            <p className="text-gray-700">Patient: {editResultModal.patient?.name}</p>
+                            <p className="text-sm text-gray-600">MRN: {editResultModal.patient?.mrn}</p>
+                        </div>
+
+                        {/* Image Upload (same as recording form) */}
+                        <div className="mb-6">
+                            <label className="block text-gray-700 mb-2 font-semibold flex items-center gap-2">
+                                <FaImage /> Upload Images
+                            </label>
+
+                            <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={(e) => {
+                                    const files = Array.from(e.target.files);
+                                    const newImages = files.map(file => ({
+                                        file,
+                                        name: '',
+                                        preview: URL.createObjectURL(file)
+                                    }));
+                                    setEditUploadedImages([...editUploadedImages, ...newImages]);
+                                }}
+                                className="w-full border p-2 rounded mb-3"
+                            />
+
+                            {/* Image Previews with Custom Names */}
+                            {editUploadedImages.length > 0 && (
+                                <div className="space-y-3 mt-3">
+                                    {editUploadedImages.map((img, index) => (
+                                        <div key={index} className="flex items-center gap-3 p-3 border rounded bg-gray-50">
+                                            {/* Preview Thumbnail */}
+                                            {img.preview ? (
+                                                <img
+                                                    src={img.preview}
+                                                    alt={img.name || 'Preview'}
+                                                    className="w-16 h-16 object-cover rounded"
+                                                />
+                                            ) : img.path ? (
+                                                <img
+                                                    src={`${backendUrl}/${img.path}`}
+                                                    alt={img.name}
+                                                    className="w-16 h-16 object-cover rounded"
+                                                />
+                                            ) : null}
+
+                                            {/* Custom Name Input */}
+                                            <input
+                                                type="text"
+                                                placeholder={`Image name (e.g., "AP View", "Lateral View")`}
+                                                value={img.name}
+                                                onChange={(e) => {
+                                                    const updated = [...editUploadedImages];
+                                                    updated[index].name = e.target.value;
+                                                    setEditUploadedImages(updated);
+                                                }}
+                                                className="flex-1 border p-2 rounded"
+                                                disabled={!img.file}
+                                            />
+
+                                            {/* Remove / Delete Button */}
+                                            <button
+                                                onClick={async () => {
+                                                    if (img._id) {
+                                                        try {
+                                                            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+                                                            await axios.delete(
+                                                                `${backendUrl}/api/radiology/${editResultModal._id}/images/${img._id}`,
+                                                                config
+                                                            );
+                                                            toast.success('Image deleted');
+                                                        } catch (error) {
+                                                            toast.error('Error deleting image');
+                                                            return;
+                                                        }
+                                                    }
+                                                    setEditUploadedImages(editUploadedImages.filter((_, i) => i !== index));
+                                                }}
+                                                className="bg-red-500 text-white px-3 py-2 rounded hover:bg-red-600"
+                                            >
+                                                <FaTrash />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            <p className="text-xs text-gray-500 mt-2">
+                                Upload multiple images and assign custom names for better organization
                             </p>
                         </div>
 
+                        {/* Findings / Report */}
                         <div className="mb-6">
-                            <label className="block text-gray-700 mb-2 font-semibold">Report/Findings</label>
+                            <label className="block text-gray-700 mb-2 font-semibold">
+                                Radiology Findings / Report
+                            </label>
                             <textarea
-                                className="w-full border p-3 rounded font-mono text-sm"
-                                rows="15"
+                                className="w-full border p-3 rounded"
+                                rows="10"
                                 value={editNotes}
                                 onChange={(e) => setEditNotes(e.target.value)}
-                                placeholder="Enter radiology findings and impressions..."
+                                placeholder="Enter radiology findings and impression...
+
+Example:
+CHEST X-RAY PA VIEW
+
+FINDINGS:
+- Heart size is normal
+- Lung fields are clear bilaterally
+- No pleural effusion
+- No pneumothorax
+- Bony thorax is intact
+
+IMPRESSION:
+Normal chest X-ray. No acute cardiopulmonary disease.
+                                "
                             ></textarea>
                         </div>
 
-                        <div className="mb-6">
-                            <label className="block text-gray-700 mb-2 font-semibold">Image URL (Optional)</label>
-                            <input
-                                type="text"
-                                className="w-full border p-3 rounded"
-                                value={editImageUrl}
-                                onChange={(e) => setEditImageUrl(e.target.value)}
-                                placeholder="Enter image URL (e.g., https://example.com/image.jpg)"
-                            />
-                        </div>
-
+                        {/* Action Buttons */}
                         <div className="flex gap-2">
                             <button
                                 onClick={handleEditReport}
-                                className="flex-1 bg-green-600 text-white px-6 py-3 rounded hover:bg-green-700 font-semibold flex items-center justify-center gap-2"
+                                className="flex-1 bg-indigo-600 text-white px-6 py-3 rounded hover:bg-indigo-700 font-bold flex items-center justify-center gap-2"
                             >
-                                <FaSave /> Save & Re-sign
+                                <FaSave /> Save & Re-sign Report
                             </button>
                             <button
-                                onClick={() => setEditResultModal(null)}
+                                onClick={() => { setEditResultModal(null); setEditUploadedImages([]); }}
                                 className="flex-1 bg-gray-400 text-white px-6 py-3 rounded hover:bg-gray-500 font-semibold"
                             >
                                 Cancel
