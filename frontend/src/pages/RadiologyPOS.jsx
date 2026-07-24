@@ -27,6 +27,15 @@ const RadiologyPOS = () => {
     const [age, setAge] = useState('');
     const [gender, setGender] = useState('Male');
     const [paymentMethod, setPaymentMethod] = useState('cash');
+    const [isManualPaymentMethod, setIsManualPaymentMethod] = useState(false);
+
+    // Registered Patient state
+    const [isRegisteredPatient, setIsRegisteredPatient] = useState(false);
+    const [selectedPatient, setSelectedPatient] = useState(null);
+    const [patientSearch, setPatientSearch] = useState('');
+    const [patientSearchResults, setPatientSearchResults] = useState([]);
+    const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+    const [searchingPatients, setSearchingPatients] = useState(false);
 
     // Sale state
     const [loading, setLoading] = useState(false);
@@ -93,9 +102,58 @@ const RadiologyPOS = () => {
         }
     }, [scanSearch, allCharges]);
 
+    // Helper to get scan price based on patient's provider
+    const getScanPriceForPatient = (charge, patient) => {
+        if (!patient) return charge.standardFee || charge.basePrice || 0;
+        const provider = patient.provider;
+        let fee = 0;
+        if (provider === 'Retainership' || provider === 'Corporate Retainership') fee = charge.retainershipFee || 0;
+        else if (provider === 'Family Retainership') fee = charge.familyRetainershipFee || 0;
+        else if (provider === 'NHIA') fee = charge.nhiaFee || 0;
+        else if (provider === 'KSCHMA') fee = charge.kschmaFee || 0;
+        else fee = charge.standardFee || charge.basePrice || 0;
+
+        if (fee === 0) {
+            fee = charge.standardFee || charge.basePrice || 0;
+        }
+        return fee;
+    };
+
+    // Debounced search for registered patients
+    useEffect(() => {
+        if (!isRegisteredPatient) return;
+
+        if (patientSearch.trim().length >= 2) {
+            setSearchingPatients(true);
+        } else {
+            setSearchingPatients(false);
+            setPatientSearchResults([]);
+            setShowPatientDropdown(false);
+        }
+
+        const delayDebounceFn = setTimeout(async () => {
+            if (patientSearch.trim().length >= 2) {
+                try {
+                    const config = { headers: { Authorization: `Bearer ${user.token}` } };
+                    const { data } = await axios.get(`${backendUrl}/api/patients?search=${patientSearch}`, config);
+                    setPatientSearchResults(data);
+                    setShowPatientDropdown(true);
+                } catch (error) {
+                    console.error('Error searching patients:', error);
+                } finally {
+                    setSearchingPatients(false);
+                }
+            }
+        }, 300);
+
+        return () => clearTimeout(delayDebounceFn);
+    }, [patientSearch, isRegisteredPatient, backendUrl, user.token]);
+
     const handleAddToCart = (charge) => {
         setShowDropdown(false);
         setScanSearch('');
+
+        const price = getScanPriceForPatient(charge, selectedPatient);
 
         const existing = cart.find(c => c.chargeId === charge._id);
         if (existing) {
@@ -106,9 +164,19 @@ const RadiologyPOS = () => {
         setCart([...cart, {
             chargeId: charge._id,
             name: charge.name,
-            price: charge.standardFee || charge.basePrice || 0
+            price,
+            chargeObj: charge
         }]);
     };
+
+    // Update cart item prices when selectedPatient changes
+    useEffect(() => {
+        setCart(prevCart => prevCart.map(item => {
+            const charge = item.chargeObj || { standardFee: item.price, basePrice: item.price };
+            const price = getScanPriceForPatient(charge, selectedPatient);
+            return { ...item, price };
+        }));
+    }, [selectedPatient]);
 
     const handleRemoveFromCart = (chargeId) => {
         setCart(cart.filter(c => c.chargeId !== chargeId));
@@ -116,16 +184,36 @@ const RadiologyPOS = () => {
 
     const total = cart.reduce((sum, c) => sum + c.price, 0);
 
+    // Handle automated payment detection based on patient type and deposit balance
+    useEffect(() => {
+        if (isManualPaymentMethod) return;
+
+        if (selectedPatient) {
+            const isRetainershipPatient = ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(selectedPatient.provider);
+            const hasSufficientBalance = selectedPatient.depositBalance >= total;
+
+            if (isRetainershipPatient && hasSufficientBalance) {
+                setPaymentMethod('retainership');
+            } else if (!isRetainershipPatient && hasSufficientBalance) {
+                setPaymentMethod('deposit');
+            } else {
+                setPaymentMethod('cash');
+            }
+        } else {
+            setPaymentMethod('cash');
+        }
+    }, [selectedPatient, total, isManualPaymentMethod]);
+
     const handleCompleteSale = async () => {
-        if (!customerName.trim()) {
+        if (!selectedPatient && !customerName.trim()) {
             toast.error('Customer name is required');
             return;
         }
-        if (!age || isNaN(age)) {
+        if (!selectedPatient && (!age || isNaN(age))) {
             toast.error('Valid age is required');
             return;
         }
-        if (!gender) {
+        if (!selectedPatient && !gender) {
             toast.error('Gender is required');
             return;
         }
@@ -137,9 +225,10 @@ const RadiologyPOS = () => {
         try {
             setLoading(true);
             const payload = {
-                customerName: customerName.trim(),
-                age,
-                gender,
+                patientId: selectedPatient ? selectedPatient._id : null,
+                customerName: selectedPatient ? selectedPatient.name : customerName.trim(),
+                age: selectedPatient ? (selectedPatient.age || 0) : age,
+                gender: selectedPatient ? (selectedPatient.gender || 'Unknown') : gender,
                 items: cart.map(c => ({
                     chargeId: c.chargeId,
                     name: c.name,
@@ -166,6 +255,11 @@ const RadiologyPOS = () => {
             setAge('');
             setGender('Male');
             setPaymentMethod('cash');
+            setIsManualPaymentMethod(false);
+            setSelectedPatient(null);
+            setIsRegisteredPatient(false);
+            setPatientSearch('');
+            setPatientSearchResults([]);
             fetchReceipts();
 
         } catch (error) {
@@ -327,41 +421,220 @@ const RadiologyPOS = () => {
                         <h3 className="text-lg font-bold text-gray-700 mb-4 flex items-center gap-2">
                             <FaReceipt className="text-green-600" /> Checkout
                         </h3>
-                        <div className="mb-4">
-                            <label className="block text-sm font-semibold text-gray-700 mb-1">Customer Name *</label>
+                        {/* Checkbox: Is Our Patient? */}
+                        <div className="mb-4 flex items-center gap-2">
                             <input
-                                type="text"
-                                placeholder="Patient's full name"
-                                className="w-full border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-green-400"
-                                value={customerName}
-                                onChange={e => setCustomerName(e.target.value)}
+                                type="checkbox"
+                                id="isRegisteredPatient"
+                                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-400 cursor-pointer"
+                                checked={isRegisteredPatient}
+                                onChange={e => {
+                                    setIsRegisteredPatient(e.target.checked);
+                                    setSelectedPatient(null);
+                                    setCustomerName('');
+                                    setAge('');
+                                    setGender('Male');
+                                    setPatientSearch('');
+                                    setPatientSearchResults([]);
+                                    setShowPatientDropdown(false);
+                                    setIsManualPaymentMethod(false);
+                                }}
                             />
+                            <label htmlFor="isRegisteredPatient" className="text-sm font-semibold text-gray-700 cursor-pointer select-none">
+                                Registered Patient?
+                            </label>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4 mb-4">
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">Age *</label>
-                                <input
-                                    type="number"
-                                    placeholder="Age"
-                                    className="w-full border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-400"
-                                    value={age}
-                                    onChange={e => setAge(e.target.value)}
-                                />
+                        {/* Customer Name or Patient Search */}
+                        {isRegisteredPatient ? (
+                            <div className="mb-4 relative">
+                                {selectedPatient ? (
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3.5 relative">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setSelectedPatient(null);
+                                                setCustomerName('');
+                                                setIsManualPaymentMethod(false);
+                                            }}
+                                            className="absolute top-2 right-2 text-gray-400 hover:text-red-500 transition"
+                                        >
+                                            <FaTimes />
+                                        </button>
+                                        <h4 className="font-bold text-gray-800 text-base">{selectedPatient.name}</h4>
+                                        <div className="grid grid-cols-2 gap-2 text-xs mt-2 text-gray-600">
+                                            <div>
+                                                <span className="font-medium text-gray-500 text-[11px] block">MRN</span>
+                                                <span className="font-semibold text-gray-700 text-xs">{selectedPatient.mrn}</span>
+                                            </div>
+                                            <div>
+                                                <span className="font-medium text-gray-500 text-[11px] block">Phone</span>
+                                                <span className="font-semibold text-gray-700 text-xs">{selectedPatient.contact || 'N/A'}</span>
+                                            </div>
+                                            <div>
+                                                <span className="font-medium text-gray-500 text-[11px] block">Provider</span>
+                                                <span className={`font-bold uppercase tracking-wider text-[9px] px-1.5 py-0.5 rounded-full inline-block mt-0.5 ${
+                                                    ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(selectedPatient.provider)
+                                                        ? 'bg-purple-100 text-purple-800'
+                                                        : ['NHIA', 'KSCHMA'].includes(selectedPatient.provider)
+                                                        ? 'bg-blue-100 text-blue-800'
+                                                        : 'bg-gray-100 text-gray-800'
+                                                }`}>
+                                                    {selectedPatient.provider}
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <span className="font-medium text-gray-500 text-[11px] block">Wallet Balance</span>
+                                                <span className={`font-bold text-xs ${selectedPatient.depositBalance > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                                                    ₦{(selectedPatient.depositBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* System Detection Banner */}
+                                        <div className="mt-3 pt-2.5 border-t border-blue-200 text-xs font-semibold text-gray-700">
+                                            {['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(selectedPatient.provider) ? (
+                                                selectedPatient.depositBalance >= total ? (
+                                                    <div className="flex items-center gap-1.5 text-purple-700 bg-purple-100/50 p-2 rounded">
+                                                        <span className="inline-block w-2.5 h-2.5 bg-purple-500 rounded-full animate-pulse" />
+                                                        Retainership detected. Balance covers total via Retainership account.
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex flex-col gap-1 text-orange-700 bg-orange-100/40 p-2 rounded">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="inline-block w-2.5 h-2.5 bg-orange-500 rounded-full" />
+                                                            Retainership detected but Retainership deposit balance is insufficient (₦{selectedPatient.depositBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}).
+                                                        </div>
+                                                        <span className="font-normal text-[11px] text-orange-600 pl-4">
+                                                            Customer must pay ₦{total.toLocaleString(undefined, { minimumFractionDigits: 2 })} out of pocket.
+                                                        </span>
+                                                    </div>
+                                                )
+                                            ) : selectedPatient.depositBalance >= total ? (
+                                                <div className="flex items-center gap-1.5 text-blue-700 bg-blue-100/50 p-2 rounded">
+                                                    <span className="inline-block w-2.5 h-2.5 bg-blue-500 rounded-full animate-pulse" />
+                                                    Wallet deposit detected. ₦{total.toLocaleString(undefined, { minimumFractionDigits: 2 })} will be deducted from wallet.
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-col gap-1 text-orange-700 bg-orange-100/40 p-2 rounded">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="inline-block w-2.5 h-2.5 bg-orange-500 rounded-full" />
+                                                        No Retainership / Insufficient Deposit (Wallet: ₦{(selectedPatient.depositBalance || 0).toLocaleString()}).
+                                                    </div>
+                                                    <span className="font-normal text-[11px] text-orange-600 pl-4">
+                                                        Customer must pay ₦{total.toLocaleString(undefined, { minimumFractionDigits: 2 })} out of pocket.
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="relative">
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                            Search Patient <span className="text-red-500">*</span>
+                                        </label>
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                placeholder="Search by MRN, phone, or name..."
+                                                className="w-full border rounded-lg p-2.5 pl-10 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 border-gray-300"
+                                                value={patientSearch}
+                                                onChange={e => setPatientSearch(e.target.value)}
+                                                onFocus={() => patientSearch.trim().length >= 2 && setShowPatientDropdown(true)}
+                                            />
+                                            <FaSearch className="absolute left-3 top-3.5 text-gray-400 text-sm" />
+                                            {searchingPatients && (
+                                                <div className="absolute right-3 top-3.5">
+                                                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {showPatientDropdown && patientSearch.trim().length >= 2 && (
+                                            searchingPatients ? (
+                                                <div className="absolute z-30 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 p-4 text-center text-gray-500 text-sm flex items-center justify-center gap-2">
+                                                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                                                    Searching patients...
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    {patientSearchResults.length > 0 && (
+                                                        <div className="absolute z-30 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto">
+                                                            {patientSearchResults.map(patient => (
+                                                                <div
+                                                                    key={patient._id}
+                                                                    className="p-3 hover:bg-blue-50 cursor-pointer border-b last:border-b-0 text-sm"
+                                                                    onClick={() => {
+                                                                        setSelectedPatient(patient);
+                                                                        setCustomerName(patient.name);
+                                                                        setShowPatientDropdown(false);
+                                                                        setPatientSearch('');
+                                                                        setIsManualPaymentMethod(false);
+                                                                    }}
+                                                                >
+                                                                    <p className="font-semibold text-gray-800">{patient.name}</p>
+                                                                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                                                                        <span>MRN: <span className="font-semibold text-gray-700">{patient.mrn}</span></span>
+                                                                        <span>Phone: <span className="font-semibold text-gray-700">{patient.contact}</span></span>
+                                                                    </div>
+                                                                    <div className="flex justify-between text-xs text-gray-500 mt-0.5 font-medium">
+                                                                        <span>Provider: <span className="text-purple-600">{patient.provider}</span></span>
+                                                                        <span>Wallet: <span className="text-green-600">₦{(patient.depositBalance || 0).toLocaleString()}</span></span>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    {patientSearchResults.length === 0 && (
+                                                        <div className="absolute z-30 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 p-4 text-center text-gray-500 text-sm">
+                                                            No registered patient found with &quot;{patientSearch}&quot;
+                                                        </div>
+                                                    )}
+                                                </>
+                                            )
+                                        )}
+                                    </div>
+                                )}
                             </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">Gender *</label>
-                                <select
-                                    className="w-full border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-400"
-                                    value={gender}
-                                    onChange={e => setGender(e.target.value)}
-                                >
-                                    <option value="Male">Male</option>
-                                    <option value="Female">Female</option>
-                                    <option value="Other">Other</option>
-                                </select>
-                            </div>
-                        </div>
+                        ) : (
+                            <>
+                                <div className="mb-4">
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Customer Name *</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Patient's full name"
+                                        className="w-full border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-400"
+                                        value={customerName}
+                                        onChange={e => setCustomerName(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4 mb-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Age *</label>
+                                        <input
+                                            type="number"
+                                            placeholder="Age"
+                                            className="w-full border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-400"
+                                            value={age}
+                                            onChange={e => setAge(e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Gender *</label>
+                                        <select
+                                            className="w-full border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-400"
+                                            value={gender}
+                                            onChange={e => setGender(e.target.value)}
+                                        >
+                                            <option value="Male">Male</option>
+                                            <option value="Female">Female</option>
+                                            <option value="Other">Other</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </>
+                        )}
 
                         <div className="border-t pt-4 space-y-2 text-sm">
                             <div className="flex justify-between text-lg font-bold text-blue-600 pt-2">
@@ -372,16 +645,31 @@ const RadiologyPOS = () => {
 
                         <div className="mt-4">
                             <label className="block text-sm font-semibold mb-1">Payment Method</label>
-                            <select className="w-full border rounded-lg p-2.5 text-sm" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
+                            <select
+                                className="w-full border rounded-lg p-2.5 text-sm"
+                                value={paymentMethod}
+                                onChange={e => {
+                                    setPaymentMethod(e.target.value);
+                                    setIsManualPaymentMethod(true);
+                                }}
+                            >
                                 <option value="cash">Cash</option>
-                                <option value="card">Card</option>
-                                <option value="transfer">Transfer</option>
+                                <option value="card">Card / POS</option>
+                                <option value="transfer">Bank Transfer</option>
+                                {selectedPatient && (
+                                    <>
+                                        <option value="deposit">Patient Deposit (Wallet: ₦{(selectedPatient.depositBalance || 0).toLocaleString()})</option>
+                                        {['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(selectedPatient.provider) && (
+                                            <option value="retainership">Retainership Account (Company Deposit)</option>
+                                        )}
+                                    </>
+                                )}
                             </select>
                         </div>
 
                         <button
                             onClick={handleCompleteSale}
-                            disabled={loading || cart.length === 0 || !customerName.trim() || !age || !gender}
+                            disabled={loading || cart.length === 0 || (!selectedPatient && (!customerName.trim() || !age || !gender))}
                             className="w-full mt-6 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 disabled:bg-gray-300 transition flex items-center justify-center gap-2"
                         >
                             {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <FaCheckCircle />}

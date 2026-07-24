@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const encounterTypes = ['Outpatient', 'Inpatient', 'Emergency', 'Follow-up', 'Consultation', 'External Investigation', 'External Lab', 'External Radiology', 'External Pharmacy'];
+const encounterTypes = ['Outpatient', 'Inpatient', 'Emergency', 'Follow-up', 'ANC Visit', 'Consultation', 'External Investigation', 'External Lab', 'External Radiology', 'External Pharmacy'];
 
 const visitSchema = mongoose.Schema({
     patient: { type: mongoose.Schema.Types.ObjectId, ref: 'Patient', required: true },
@@ -85,6 +85,7 @@ const visitSchema = mongoose.Schema({
 
     clinicalNotes: [{
         doctor: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+        noteType: { type: String, enum: ['standard', 'anc'], default: 'standard' },
         presentingComplaints: { type: String },
         historyOfPresentingComplaint: { type: String },
         systemReview: { type: String },
@@ -113,6 +114,40 @@ const visitSchema = mongoose.Schema({
             description: String,
             type: { type: String, enum: ['Primary', 'Secondary'] }
         }],
+        // ANC Visit-specific fields (Nigerian ANC setting)
+        ancVisitNumber: { type: String },         // e.g. 1st, 2nd, 3rd visit
+        edd: { type: String },                     // Expected Date of Delivery
+        gestation: { type: String },               // Gestational Age (weeks + days)
+        gravida: { type: String },                 // Gravida (G)
+        para: { type: String },                    // Para (P)
+        lmp: { type: String },                     // Last Menstrual Period
+        fundalHeight: { type: String },            // Fundal Height (cm)
+        fetalLie: { type: String },                // Longitudinal, Transverse, Oblique
+        fetalPresentation: { type: String },       // Cephalic, Breech, Shoulder
+        fetalPosition: { type: String },           // e.g. LOA, ROA, LOP, ROP
+        fetalHeartRate: { type: String },          // Fetal Heart Rate (bpm)
+        engagement: { type: String },              // Engaged / Not Engaged / Fifths palpable
+        liquor: { type: String },                  // Adequate / Reduced / Increased
+        uterineContractions: { type: String },     // None / Mild / Moderate / Strong
+        amnioticFluidIndex: { type: String },      // AFI (ultrasound)
+        placentalLocation: { type: String },       // Placental location (USS finding)
+        maternalWeight: { type: String },          // Weight in kg
+        maternalBP: { type: String },              // Blood Pressure (mmHg)
+        maternalPulse: { type: String },           // Pulse rate
+        maternalTemp: { type: String },            // Temperature
+        maternalHb: { type: String },              // Haemoglobin level
+        urinalysis: { type: String },              // Protein / Sugar / Ketones etc.
+        malariaProphylaxis: { type: String },      // SP dose given, date
+        tetanusToxoid: { type: String },           // TT dose number and date
+        ironFolate: { type: String },              // Iron/Folic acid — doses, adherence
+        hivStatus: { type: String },               // HIV status / PMTCT
+        syphilisStatus: { type: String },          // RPR/TPHA result
+        bloodGroupGenotype: { type: String },      // Blood group, genotype
+        ancComplaints: { type: String },           // Chief complaints this visit
+        ancRiskFactors: { type: String },          // Identified risk factors
+        ancCounselling: { type: String },          // Counselling given this visit
+        ancReferral: { type: String },             // Referred to (if applicable)
+        nextAppointment: { type: String },         // Next ANC appointment date
         createdAt: { type: Date, default: Date.now },
         updatedAt: { type: Date, default: Date.now }
     }],

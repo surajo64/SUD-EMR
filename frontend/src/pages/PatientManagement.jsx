@@ -132,6 +132,7 @@ const PatientManagement = () => {
     useEffect(() => {
         if (pendingEncounterPatient && !showRegisterPatientModal) {
             setEncounterPatient(pendingEncounterPatient);
+            // We may not have encounter history here, default to Outpatient for new flow
             setEncounterType('Outpatient');
             setSelectedClinic('');
             setReasonForVisit('');
@@ -350,7 +351,7 @@ const PatientManagement = () => {
 
     const handleCreateEncounter = async () => {
         if (!encounterPatient) return;
-        if (!isANC && !waiveConsultationFee && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && selectedCharges.length === 0) {
+        if (!isANC && !waiveConsultationFee && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient', 'ANC Visit'].includes(encounterType) && selectedCharges.length === 0) {
             toast.error('Please select at least one charge, or check ANC to skip charges');
             return;
         }
@@ -1321,6 +1322,7 @@ const PatientManagement = () => {
                                     <option value="Inpatient">Inpatient</option>
                                     <option value="Emergency">Emergency</option>
                                     <option value="Follow-up">Follow-up</option>
+                                    <option value="ANC Visit">🤰 ANC Visit</option>
                                     <option value="External Lab/Radiology">External Lab/Radiology</option>
                                     <option value="External Pharmacy">External Pharmacy</option>
                                     <option value="Consultation">Consultation</option>
@@ -1523,7 +1525,7 @@ const PatientManagement = () => {
                             )}
 
                             {/* Charges */}
-                            {!isANC && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient'].includes(encounterType) && (
+                            {!isANC && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient', 'ANC Visit'].includes(encounterType) && (
                                 <div className="mb-6">
                                     <label className="block text-gray-700 font-semibold mb-2">
                                         Consultation Charges <span className="text-red-500">*</span>

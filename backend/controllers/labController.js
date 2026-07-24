@@ -266,64 +266,135 @@ const deleteLabOrder = async (req, res) => {
     res.json({ message: 'Lab order and associated pending charge deleted.' });
 };
 
+const getHMOWalletBalance = async (hmoName) => {
+    const HMO = require('../models/hmoModel');
+    const HMOTransaction = require('../models/hmoTransactionModel');
+    const EncounterCharge = require('../models/encounterChargeModel');
+    const Patient = require('../models/patientModel');
+
+    const hmo = await HMO.findOne({ name: hmoName });
+    if (!hmo) return 0;
+
+    const transactions = await HMOTransaction.find({ hmo: hmo._id });
+    const totalDeposits = transactions
+        .filter(t => t.type === 'deposit')
+        .reduce((sum, d) => sum + d.amount, 0);
+
+    const manualCharges = transactions
+        .filter(t => t.type === 'charge')
+        .reduce((sum, c) => sum + c.amount, 0);
+
+    const refunds = transactions
+        .filter(t => t.type === 'refund')
+        .reduce((sum, r) => sum + r.amount, 0);
+
+    const hmoPatients = await Patient.find({ hmo: hmo.name }).select('_id');
+    const hmoPatientIds = hmoPatients.map(p => p._id);
+
+    const charges = await EncounterCharge.find({
+        patient: { $in: hmoPatientIds },
+        hmoPortion: { $gt: 0 },
+        status: 'paid'
+    });
+    const totalUtilized = charges.reduce((sum, c) => sum + c.hmoPortion, 0);
+
+    return totalDeposits - (totalUtilized + manualCharges + refunds);
+};
+
 // @desc    Process a direct/walk-in POS sale at Laboratory
 // @route   POST /api/lab/pos-sale
 // @access  Private (Lab Scientist/Technician)
 const processDirectSale = async (req, res) => {
     try {
-        const { customerName, age, gender, items, discount, tax, paymentMethod } = req.body;
+        const { patientId, customerName, age, gender, items, discount, tax, paymentMethod } = req.body;
         // items: [{ chargeId, name, price, specialization }]
 
-        if (!customerName || !customerName.trim()) {
+        if (!patientId && (!customerName || !customerName.trim())) {
             return res.status(400).json({ message: 'Customer name is required.' });
-        }
-
-        if (!age || isNaN(age)) {
-            return res.status(400).json({ message: 'Age is required and must be a number.' });
-        }
-
-        if (!gender) {
-            return res.status(400).json({ message: 'Gender is required.' });
         }
 
         if (!items || items.length === 0) {
             return res.status(400).json({ message: 'No items selected.' });
         }
 
-        // ── 1. Create walk-in patient ──────────────────────────────
-        const currentYear = new Date().getFullYear();
-        const prefix = `LAB-${currentYear}-`;
-
-        // Find the latest patient with similar MRN prefix
-        const lastPatient = await Patient.findOne({ mrn: new RegExp(`^${prefix}`) })
-            .sort({ mrn: -1 })
-            .limit(1);
-
-        let sequence = 1;
-        if (lastPatient) {
-            const parts = lastPatient.mrn.split('-');
-            if (parts.length === 3) {
-                const lastSequence = parseInt(parts[2]);
-                if (!isNaN(lastSequence)) {
-                    sequence = lastSequence + 1;
-                }
-            }
+        let subtotal = 0;
+        for (const item of items) {
+            subtotal += parseFloat(item.price) || 0;
         }
 
-        const walkInMrn = `${prefix}${sequence.toString().padStart(4, '0')}`;
-        const walkInPatient = await Patient.create({
-            mrn: walkInMrn,
-            name: customerName.trim(),
-            age: Number(age),
-            gender: gender,
-            contact: 'Walk-in',
-            provider: 'Standard',
-            depositBalance: 0
-        });
+        const discountAmt = parseFloat(discount) || 0;
+        const taxAmt = parseFloat(tax) || 0;
+        const totalAmount = subtotal - discountAmt + taxAmt;
+
+        // ── 1. Patient Lookup or Walk-in Creation ─────────────────────
+        let salePatient;
+        let finalPaymentMethod = paymentMethod || 'cash';
+        let isRetainership = false;
+
+        if (patientId) {
+            salePatient = await Patient.findById(patientId);
+            if (!salePatient) {
+                return res.status(404).json({ message: 'Selected patient not found.' });
+            }
+
+            const isRetainershipProvider = ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(salePatient.provider);
+
+            if (isRetainershipProvider && paymentMethod === 'retainership') {
+                const hmoBalance = salePatient.hmo ? await getHMOWalletBalance(salePatient.hmo) : 0;
+                if (hmoBalance >= totalAmount) {
+                    isRetainership = true;
+                    finalPaymentMethod = 'retainership';
+                } else {
+                    isRetainership = false;
+                    finalPaymentMethod = 'cash';
+                }
+            } else if (!isRetainershipProvider && paymentMethod === 'deposit') {
+                if (salePatient.depositBalance >= totalAmount) {
+                    finalPaymentMethod = 'deposit';
+                    salePatient.depositBalance -= totalAmount;
+                    await salePatient.save();
+                    console.log(`Deducted ₦${totalAmount} from patient ${salePatient.name} wallet. New balance: ₦${salePatient.depositBalance}`);
+                } else {
+                    finalPaymentMethod = 'cash';
+                }
+            } else {
+                finalPaymentMethod = paymentMethod || 'cash';
+                isRetainership = false;
+            }
+        } else {
+            const currentYear = new Date().getFullYear();
+            const prefix = `LAB-${currentYear}-`;
+
+            const lastPatient = await Patient.findOne({ mrn: new RegExp(`^${prefix}`) })
+                .sort({ mrn: -1 })
+                .limit(1);
+
+            let sequence = 1;
+            if (lastPatient) {
+                const parts = lastPatient.mrn.split('-');
+                if (parts.length === 3) {
+                    const lastSequence = parseInt(parts[2]);
+                    if (!isNaN(lastSequence)) {
+                        sequence = lastSequence + 1;
+                    }
+                }
+            }
+
+            const walkInMrn = `${prefix}${sequence.toString().padStart(4, '0')}`;
+            salePatient = await Patient.create({
+                mrn: walkInMrn,
+                name: customerName.trim(),
+                age: Number(age) || 0,
+                gender: gender || 'Unknown',
+                contact: 'Walk-in',
+                provider: 'Standard',
+                depositBalance: 0
+            });
+        }
 
         // ── 2. Create Visit ──────────────────────────────────────────
         const walkInVisit = await Visit.create({
-            patient: walkInPatient._id,
+            patient: salePatient._id,
             doctor: req.user._id,
             type: 'External Lab',
             status: 'Discharged',
@@ -333,23 +404,24 @@ const processDirectSale = async (req, res) => {
         });
 
         const createdChargeIds = [];
-        let subtotal = 0;
 
         // ── 3. Create Charges & Lab Orders ──────────────────────────
         for (const item of items) {
             const { chargeId, name, price, specialization } = item;
             const totalItemAmount = parseFloat(price);
-            subtotal += totalItemAmount;
+
+            const patientPortion = isRetainership ? 0 : totalItemAmount;
+            const hmoPortion = isRetainership ? totalItemAmount : 0;
 
             const encounterCharge = await EncounterCharge.create({
                 encounter: walkInVisit._id,
-                patient: walkInPatient._id,
+                patient: salePatient._id,
                 charge: chargeId,
                 quantity: 1,
                 unitPrice: price,
                 totalAmount: totalItemAmount,
-                patientPortion: totalItemAmount,
-                hmoPortion: 0,
+                patientPortion,
+                hmoPortion,
                 status: 'paid',
                 addedBy: req.user._id,
                 itemType: 'Lab',
@@ -362,7 +434,7 @@ const processDirectSale = async (req, res) => {
             // Create Lab Order
             await LabOrder.create({
                 doctor: req.user._id,
-                patient: walkInPatient._id,
+                patient: salePatient._id,
                 visit: walkInVisit._id,
                 charge: encounterCharge._id,
                 testName: name,
@@ -371,20 +443,15 @@ const processDirectSale = async (req, res) => {
             });
         }
 
-        // ── 4. Apply discount and tax ──────────────────────────────────────────
-        const discountAmt = parseFloat(discount) || 0;
-        const taxAmt = parseFloat(tax) || 0;
-        const totalAmount = subtotal - discountAmt + taxAmt;
-
-        // ── 5. Create Receipt ─────────────────────────────────────────
+        // ── 4. Create Receipt ─────────────────────────────────────────
         const receiptNumber = `POS-LAB-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
 
         const receipt = await Receipt.create({
-            patient: walkInPatient._id,
+            patient: salePatient._id,
             encounter: walkInVisit._id,
             charges: createdChargeIds,
             amountPaid: totalAmount < 0 ? 0 : totalAmount,
-            paymentMethod: paymentMethod || 'cash',
+            paymentMethod: finalPaymentMethod,
             cashier: req.user._id,
             receiptNumber,
             validated: true,
@@ -395,7 +462,7 @@ const processDirectSale = async (req, res) => {
             }]
         });
 
-        // ── 6. Link receipt on charges ─────────────────────────────────────────
+        // ── 5. Link receipt on charges ─────────────────────────────────────────
         await EncounterCharge.updateMany(
             { _id: { $in: createdChargeIds } },
             { receipt: receipt._id }
@@ -406,12 +473,10 @@ const processDirectSale = async (req, res) => {
             .populate('cashier', 'name')
             .populate({
                 path: 'charges',
-                select: 'itemName quantity unitPrice totalAmount'
+                populate: { path: 'charge', select: 'name' }
             });
 
         res.status(201).json({
-            message: 'Sale completed successfully',
-            receipt: populatedReceipt,
             receiptNumber,
             totalAmount: totalAmount < 0 ? 0 : totalAmount
         });

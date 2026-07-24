@@ -343,6 +343,52 @@ const PatientDetails = () => {
         diagnosis: [] // Array of {code, description}
     });
 
+    // ANC Note - Nigerian Antenatal Care Documentation
+    const blankAncNote = {
+        noteType: 'anc',
+        ancVisitNumber: '',
+        gravida: '',
+        para: '',
+        lmp: '',
+        edd: '',
+        gestation: '',
+        ancComplaints: '',
+        ancRiskFactors: '',
+        // Maternal Vitals
+        maternalWeight: '',
+        maternalBP: '',
+        maternalPulse: '',
+        maternalTemp: '',
+        maternalHb: '',
+        urinalysis: '',
+        // Obstetric Examination
+        fundalHeight: '',
+        fetalLie: '',
+        fetalPresentation: '',
+        fetalPosition: '',
+        fetalHeartRate: '',
+        engagement: '',
+        liquor: '',
+        uterineContractions: '',
+        amnioticFluidIndex: '',
+        placentalLocation: '',
+        // Investigations & Prophylaxis
+        malariaProphylaxis: '',
+        tetanusToxoid: '',
+        ironFolate: '',
+        hivStatus: '',
+        syphilisStatus: '',
+        bloodGroupGenotype: '',
+        // Plan
+        assessment: '',
+        plan: '',
+        ancCounselling: '',
+        ancReferral: '',
+        nextAppointment: '',
+        diagnosis: []
+    };
+    const [ancNote, setAncNote] = useState(blankAncNote);
+
     const [diagSearchTerm, setDiagSearchTerm] = useState('');
     const [showDiagDropdown, setShowDiagDropdown] = useState(false);
     const [showSoapModal, setShowSoapModal] = useState(false);
@@ -869,6 +915,56 @@ const PatientDetails = () => {
                 }
             } else {
                 setSoapNote(initialSoap);
+            }
+
+            // Also initialize ANC note if this is an ANC Visit encounter
+            if (encounter.type === 'ANC Visit' || encounter.encounterType === 'ANC Visit') {
+                const noteSource = editingNoteId && editingNoteId !== 'legacy-root'
+                    ? (encounter.clinicalNotes || []).find(n => n._id?.toString() === editingNoteId)
+                    : null;
+                if (noteSource && noteSource.noteType === 'anc') {
+                    setAncNote({
+                        noteType: 'anc',
+                        ancVisitNumber: noteSource.ancVisitNumber || '',
+                        gravida: noteSource.gravida || '',
+                        para: noteSource.para || '',
+                        lmp: noteSource.lmp || '',
+                        edd: noteSource.edd || '',
+                        gestation: noteSource.gestation || '',
+                        ancComplaints: noteSource.ancComplaints || '',
+                        ancRiskFactors: noteSource.ancRiskFactors || '',
+                        maternalWeight: noteSource.maternalWeight || '',
+                        maternalBP: noteSource.maternalBP || '',
+                        maternalPulse: noteSource.maternalPulse || '',
+                        maternalTemp: noteSource.maternalTemp || '',
+                        maternalHb: noteSource.maternalHb || '',
+                        urinalysis: noteSource.urinalysis || '',
+                        fundalHeight: noteSource.fundalHeight || '',
+                        fetalLie: noteSource.fetalLie || '',
+                        fetalPresentation: noteSource.fetalPresentation || '',
+                        fetalPosition: noteSource.fetalPosition || '',
+                        fetalHeartRate: noteSource.fetalHeartRate || '',
+                        engagement: noteSource.engagement || '',
+                        liquor: noteSource.liquor || '',
+                        uterineContractions: noteSource.uterineContractions || '',
+                        amnioticFluidIndex: noteSource.amnioticFluidIndex || '',
+                        placentalLocation: noteSource.placentalLocation || '',
+                        malariaProphylaxis: noteSource.malariaProphylaxis || '',
+                        tetanusToxoid: noteSource.tetanusToxoid || '',
+                        ironFolate: noteSource.ironFolate || '',
+                        hivStatus: noteSource.hivStatus || '',
+                        syphilisStatus: noteSource.syphilisStatus || '',
+                        bloodGroupGenotype: noteSource.bloodGroupGenotype || '',
+                        assessment: noteSource.assessment || '',
+                        plan: noteSource.plan || '',
+                        ancCounselling: noteSource.ancCounselling || '',
+                        ancReferral: noteSource.ancReferral || '',
+                        nextAppointment: noteSource.nextAppointment || '',
+                        diagnosis: noteSource.diagnosis || []
+                    });
+                } else if (!editingNoteId) {
+                    setAncNote(blankAncNote);
+                }
             }
         }
 
@@ -1593,7 +1689,12 @@ const PatientDetails = () => {
             return;
         }
 
-        if (!soapNote.diagnosis || soapNote.diagnosis.length === 0) {
+        const isAncVisit = encounter.type === 'ANC Visit' || encounter.encounterType === 'ANC Visit';
+
+        // For ANC visits, use ancNote diagnosis; for standard, use soapNote diagnosis
+        const activeDiagnosis = isAncVisit ? ancNote.diagnosis : soapNote.diagnosis;
+
+        if (!activeDiagnosis || activeDiagnosis.length === 0) {
             toast.error('Diagnosis is compulsory. Please search and select at least one ICD diagnosis.');
             return;
         }
@@ -1601,17 +1702,26 @@ const PatientDetails = () => {
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const payload = {
-                ...soapNote,
-                diagnosis: soapNote.diagnosis,
-                ...(editingNoteId ? { noteId: editingNoteId } : {})
-            };
+            let payload;
+            if (isAncVisit) {
+                payload = {
+                    ...ancNote,
+                    diagnosis: ancNote.diagnosis,
+                    ...(editingNoteId ? { noteId: editingNoteId } : {})
+                };
+            } else {
+                payload = {
+                    ...soapNote,
+                    diagnosis: soapNote.diagnosis,
+                    ...(editingNoteId ? { noteId: editingNoteId } : {})
+                };
+            }
             const { data } = await axios.post(
                 `${backendUrl}/api/visits/${encounter._id}/clinical-notes`,
                 payload,
                 config
             );
-            toast.success(editingNoteId ? 'Clinical note updated!' : 'Clinical note added!');
+            toast.success(editingNoteId ? 'Clinical note updated!' : (isAncVisit ? 'ANC note saved!' : 'Clinical note added!'));
             localStorage.removeItem(`draft_soap_${patient._id}_${encounter._id}`);
             setShowSoapModal(false);
             setEditingNoteId(null);
@@ -1647,6 +1757,7 @@ const PatientDetails = () => {
                 plan: '',
                 diagnosis: []
             });
+            setAncNote(blankAncNote);
         } catch (error) {
             console.error(error);
             toast.error(error.response?.data?.message || 'Error saving clinical note');
@@ -3033,13 +3144,19 @@ const PatientDetails = () => {
                                         {activeTab === 'soap' && (
                                             <div className="space-y-4">
                                                 <div className="flex justify-between items-center">
-                                                    <h3 className="text-xl font-bold">Clinical Documentation</h3>
+                                                    <h3 className="text-xl font-bold flex items-center gap-2">
+                                                        {(encounter.type === 'ANC Visit' || encounter.encounterType === 'ANC Visit') ? (
+                                                            <><span>🤰</span>ANC Documentation</>
+                                                        ) : 'Clinical Documentation'}
+                                                    </h3>
                                                     {canEdit && (
                                                         <button
                                                             onClick={() => { setEditingNoteId(null); setShowSoapModal(true); }}
-                                                            className="px-4 py-2 rounded flex items-center gap-2 bg-green-600 text-white hover:bg-green-700"
+                                                            className={(encounter.type === 'ANC Visit' || encounter.encounterType === 'ANC Visit')
+                                                                ? "px-4 py-2 rounded flex items-center gap-2 bg-pink-600 text-white hover:bg-pink-700"
+                                                                : "px-4 py-2 rounded flex items-center gap-2 bg-green-600 text-white hover:bg-green-700"}
                                                         >
-                                                            <FaPlus /> Add Clinical Note
+                                                            <FaPlus /> {(encounter.type === 'ANC Visit' || encounter.encounterType === 'ANC Visit') ? '🤰 Add ANC Note' : 'Add Clinical Note'}
                                                         </button>
                                                     )}
                                                 </div>
@@ -3092,8 +3209,92 @@ const PatientDetails = () => {
                                                                         </div>
 
                                                                         <div className="bg-white p-4 space-y-3">
-                                                                            {/* Clinical History - Collapsible */}
-                                                                            {(note.presentingComplaints || note.historyOfPresentingComplaint ||
+                                                                            {/* ANC Note Display */}
+                                                                            {note.noteType === 'anc' && (
+                                                                                <div className="space-y-3">
+                                                                                    <div className="bg-pink-50 border border-pink-200 rounded-lg p-3 flex items-center gap-2 text-sm text-pink-800">
+                                                                                        <span className="text-lg">🤰</span>
+                                                                                        <span><strong>ANC Visit Note</strong> — {note.gestation ? `${note.gestation} Gestation` : ''} {note.gravida ? `| ${note.gravida}` : ''}{note.para ? `${note.para}` : ''}</span>
+                                                                                    </div>
+                                                                                    {/* Booking Info Row */}
+                                                                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                                                                                        {[
+                                                                                            { label: 'Visit No.', val: note.ancVisitNumber },
+                                                                                            { label: 'Gravida', val: note.gravida },
+                                                                                            { label: 'Para', val: note.para },
+                                                                                            { label: 'LMP', val: note.lmp },
+                                                                                            { label: 'EDD', val: note.edd },
+                                                                                            { label: 'Gestation', val: note.gestation },
+                                                                                        ].filter(f => f.val).map(f => (
+                                                                                            <div key={f.label} className="bg-gray-50 rounded p-2 border">
+                                                                                                <p className="text-gray-500 font-semibold text-[10px]">{f.label}</p>
+                                                                                                <p className="font-bold text-gray-800">{f.val}</p>
+                                                                                            </div>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                    {note.ancComplaints && <div className="bg-gray-50 p-2 rounded border-l-4 border-pink-400"><p className="text-[11px] font-bold text-gray-600 mb-0.5">Chief Complaints</p><p className="text-sm text-gray-800 whitespace-pre-wrap">{note.ancComplaints}</p></div>}
+                                                                                    {note.ancRiskFactors && <div className="bg-red-50 p-2 rounded border-l-4 border-red-400"><p className="text-[11px] font-bold text-red-700 mb-0.5">⚠ Risk Factors</p><p className="text-sm text-gray-800 whitespace-pre-wrap">{note.ancRiskFactors}</p></div>}
+                                                                                    {/* Vitals Row */}
+                                                                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                                                                                        {[
+                                                                                            { label: 'Weight', val: note.maternalWeight, unit: 'kg' },
+                                                                                            { label: 'BP', val: note.maternalBP, unit: 'mmHg' },
+                                                                                            { label: 'Pulse', val: note.maternalPulse, unit: 'bpm' },
+                                                                                            { label: 'Temp', val: note.maternalTemp, unit: '°C' },
+                                                                                            { label: 'Hb', val: note.maternalHb, unit: 'g/dL' },
+                                                                                            { label: 'Urinalysis', val: note.urinalysis },
+                                                                                        ].filter(f => f.val).map(f => (
+                                                                                            <div key={f.label} className="bg-blue-50 rounded p-2 border border-blue-100">
+                                                                                                <p className="text-blue-600 font-semibold text-[10px]">{f.label}</p>
+                                                                                                <p className="font-bold text-gray-800">{f.val} {f.unit || ''}</p>
+                                                                                            </div>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                    {/* Obstetric Exam */}
+                                                                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                                                                                        {[
+                                                                                            { label: 'Fundal Height', val: note.fundalHeight },
+                                                                                            { label: 'Fetal Lie', val: note.fetalLie },
+                                                                                            { label: 'Presentation', val: note.fetalPresentation },
+                                                                                            { label: 'Position', val: note.fetalPosition },
+                                                                                            { label: 'FHR', val: note.fetalHeartRate, unit: 'bpm' },
+                                                                                            { label: 'Engagement', val: note.engagement },
+                                                                                            { label: 'Liquor', val: note.liquor },
+                                                                                            { label: 'Contractions', val: note.uterineContractions },
+                                                                                            { label: 'AFI', val: note.amnioticFluidIndex },
+                                                                                        ].filter(f => f.val).map(f => (
+                                                                                            <div key={f.label} className="bg-green-50 rounded p-2 border border-green-100">
+                                                                                                <p className="text-green-700 font-semibold text-[10px]">{f.label}</p>
+                                                                                                <p className="font-bold text-gray-800">{f.val} {f.unit || ''}</p>
+                                                                                            </div>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                    {/* Prophylaxis */}
+                                                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                                                                                        {[
+                                                                                            { label: 'Malaria Prophylaxis', val: note.malariaProphylaxis },
+                                                                                            { label: 'Tetanus Toxoid', val: note.tetanusToxoid },
+                                                                                            { label: 'Iron/Folic Acid', val: note.ironFolate },
+                                                                                            { label: 'HIV Status', val: note.hivStatus },
+                                                                                            { label: 'Syphilis', val: note.syphilisStatus },
+                                                                                            { label: 'Blood Group/Genotype', val: note.bloodGroupGenotype },
+                                                                                        ].filter(f => f.val).map(f => (
+                                                                                            <div key={f.label} className="bg-purple-50 rounded p-2 border border-purple-100">
+                                                                                                <p className="text-purple-700 font-semibold text-[10px]">{f.label}</p>
+                                                                                                <p className="text-gray-800">{f.val}</p>
+                                                                                            </div>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                    {note.assessment && <div className="bg-yellow-50 p-2 rounded border-l-4 border-yellow-400"><p className="text-[11px] font-bold text-yellow-700 mb-0.5">Assessment</p><p className="text-sm whitespace-pre-wrap">{note.assessment}</p></div>}
+                                                                                    {note.plan && <div className="bg-yellow-50 p-2 rounded border-l-4 border-orange-400"><p className="text-[11px] font-bold text-orange-700 mb-0.5">Plan</p><p className="text-sm whitespace-pre-wrap">{note.plan}</p></div>}
+                                                                                    {note.ancCounselling && <div className="bg-teal-50 p-2 rounded border-l-4 border-teal-400"><p className="text-[11px] font-bold text-teal-700 mb-0.5">Counselling Given</p><p className="text-sm whitespace-pre-wrap">{note.ancCounselling}</p></div>}
+                                                                                    {note.ancReferral && <div className="bg-red-50 p-2 rounded border-l-4 border-red-400"><p className="text-[11px] font-bold text-red-700 mb-0.5">Referral</p><p className="text-sm whitespace-pre-wrap">{note.ancReferral}</p></div>}
+                                                                                    {note.nextAppointment && <div className="bg-green-50 p-2 rounded border-l-4 border-green-400"><p className="text-[11px] font-bold text-green-700 mb-0.5">Next Appointment</p><p className="text-sm font-bold">{note.nextAppointment}</p></div>}
+                                                                                </div>
+                                                                            )}
+
+                                                                            {/* Standard Clinical Note Display */}
+                                                                            {note.noteType !== 'anc' && (note.presentingComplaints || note.historyOfPresentingComplaint ||
                                                                                 note.systemReview || note.pastMedicalSurgicalHistory ||
                                                                                 note.socialFamilyHistory || note.drugsHistory ||
                                                                                 note.functionalCognitiveStatus || note.menstruationGynecologicalObstetricsHistory ||
@@ -5381,18 +5582,262 @@ const PatientDetails = () => {
                 </div>
             )}
 
-            {/* SOAP Modal */}
+            {/* SOAP / ANC Note Modal */}
             {
-                showSoapModal && (
+                showSoapModal && (() => {
+                    const isAncVisit = encounter && (encounter.type === 'ANC Visit' || encounter.encounterType === 'ANC Visit');
+                    return (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                         <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                             <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-xl font-bold">{editingNoteId ? 'Edit Clinical Note' : 'Add Clinical Note'}</h3>
+                                <h3 className="text-xl font-bold flex items-center gap-2">
+                                    {isAncVisit ? (
+                                        <><span>🤰</span>{editingNoteId ? 'Edit ANC Note' : 'Add ANC Note'}</>
+                                    ) : (
+                                        editingNoteId ? 'Edit Clinical Note' : 'Add Clinical Note'
+                                    )}
+                                </h3>
                                 <button onClick={() => { setShowSoapModal(false); setEditingNoteId(null); }} className="text-gray-500 hover:text-gray-700">
                                     <FaTimes size={24} />
                                 </button>
                             </div>
-                            <div className="space-y-4">
+                            {isAncVisit ? (
+                                /* ==================== ANC NOTE FORM ==================== */
+                                <div className="space-y-5">
+                                    {/* ANC Visit Header Banner */}
+                                    <div className="bg-pink-50 border border-pink-200 rounded-lg p-3 flex items-center gap-2 text-sm text-pink-800">
+                                        <span className="text-lg">🤰</span>
+                                        <span><strong>Antenatal Care Note</strong> — Complete the obstetric assessment below</span>
+                                    </div>
+
+                                    {/* Section 1: Booking / Obstetric History */}
+                                    <div className="bg-gray-50 rounded-lg p-4 border">
+                                        <h4 className="font-bold text-gray-700 mb-3 text-sm uppercase tracking-wide">📋 A. Booking / Obstetric History</h4>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1">Visit Number</label>
+                                                <input
+                                                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-pink-400"
+                                                    placeholder="e.g. 1st, 2nd"
+                                                    value={ancNote.ancVisitNumber}
+                                                    onChange={e => setAncNote({ ...ancNote, ancVisitNumber: e.target.value })}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1">Gravida (G)</label>
+                                                <input
+                                                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-pink-400"
+                                                    placeholder="e.g. G3"
+                                                    value={ancNote.gravida}
+                                                    onChange={e => setAncNote({ ...ancNote, gravida: e.target.value })}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1">Para (P)</label>
+                                                <input
+                                                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-pink-400"
+                                                    placeholder="e.g. P2+0"
+                                                    value={ancNote.para}
+                                                    onChange={e => setAncNote({ ...ancNote, para: e.target.value })}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1">LMP (Last Menstrual Period)</label>
+                                                <input
+                                                    type="date"
+                                                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-pink-400"
+                                                    value={ancNote.lmp}
+                                                    onChange={e => {
+                                                        const val = e.target.value;
+                                                        let updated = { ...ancNote, lmp: val };
+                                                        if (val) {
+                                                            const lmpObj = new Date(val);
+                                                            if (!isNaN(lmpObj.getTime())) {
+                                                                const eddObj = new Date(lmpObj.getTime() + 280 * 24 * 60 * 60 * 1000);
+                                                                updated.edd = eddObj.toISOString().split('T')[0];
+                                                                const today = new Date();
+                                                                const diffTime = today - lmpObj;
+                                                                if (diffTime >= 0) {
+                                                                    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                                                                    const weeks = Math.floor(diffDays / 7);
+                                                                    const days = diffDays % 7;
+                                                                    updated.gestation = `${weeks}+${days} weeks`;
+                                                                }
+                                                            }
+                                                        }
+                                                        setAncNote(updated);
+                                                    }}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1">EDD (Expected Delivery Date)</label>
+                                                <input
+                                                    type="date"
+                                                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-pink-400"
+                                                    value={ancNote.edd}
+                                                    onChange={e => setAncNote({ ...ancNote, edd: e.target.value })}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1">Gestational Age</label>
+                                                <input
+                                                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-pink-400"
+                                                    placeholder="e.g. 28+2 weeks"
+                                                    value={ancNote.gestation}
+                                                    onChange={e => setAncNote({ ...ancNote, gestation: e.target.value })}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1">Chief Complaints This Visit</label>
+                                                <textarea className="w-full border rounded px-2 py-1.5 text-sm" rows="2" placeholder="e.g. leg swelling, abdominal pain..." value={ancNote.ancComplaints} onChange={e => setAncNote({ ...ancNote, ancComplaints: e.target.value })} />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1">Risk Factors Identified</label>
+                                                <textarea className="w-full border rounded px-2 py-1.5 text-sm" rows="2" placeholder="e.g. elderly gravida, pre-eclampsia..." value={ancNote.ancRiskFactors} onChange={e => setAncNote({ ...ancNote, ancRiskFactors: e.target.value })} />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Section 2: Maternal Vitals */}
+                                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
+                                        <h4 className="font-bold text-blue-700 mb-3 text-sm uppercase tracking-wide">💊 B. Maternal Vitals & Investigations</h4>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                            {[
+                                                { label: 'Weight (kg)', key: 'maternalWeight', placeholder: 'e.g. 68' },
+                                                { label: 'Blood Pressure', key: 'maternalBP', placeholder: 'e.g. 120/80 mmHg' },
+                                                { label: 'Pulse (bpm)', key: 'maternalPulse', placeholder: 'e.g. 84' },
+                                                { label: 'Temperature (°C)', key: 'maternalTemp', placeholder: 'e.g. 36.8' },
+                                                { label: 'Haemoglobin (g/dL)', key: 'maternalHb', placeholder: 'e.g. 11.2' },
+                                                { label: 'Urinalysis', key: 'urinalysis', placeholder: 'Protein/Sugar/Ketones' },
+                                            ].map(({ label, key, placeholder }) => (
+                                                <div key={key}>
+                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
+                                                    <input className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder={placeholder} value={ancNote[key]} onChange={e => setAncNote({ ...ancNote, [key]: e.target.value })} />
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                                            {[
+                                                { label: 'Malaria Prophylaxis (SP)', key: 'malariaProphylaxis', placeholder: 'Dose no. & date given' },
+                                                { label: 'Tetanus Toxoid', key: 'tetanusToxoid', placeholder: 'TT1/TT2 & date' },
+                                                { label: 'Iron/Folic Acid', key: 'ironFolate', placeholder: 'Tabs dispensed & adherence' },
+                                                { label: 'HIV Status / PMTCT', key: 'hivStatus', placeholder: 'Positive/Negative/On ARV' },
+                                                { label: 'Syphilis (RPR/TPHA)', key: 'syphilisStatus', placeholder: 'Reactive/Non-reactive' },
+                                                { label: 'Blood Group / Genotype', key: 'bloodGroupGenotype', placeholder: 'e.g. A+ / AA' },
+                                            ].map(({ label, key, placeholder }) => (
+                                                <div key={key}>
+                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
+                                                    <input className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" placeholder={placeholder} value={ancNote[key]} onChange={e => setAncNote({ ...ancNote, [key]: e.target.value })} />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Section 3: Obstetric Examination */}
+                                    <div className="bg-green-50 rounded-lg p-4 border border-green-100">
+                                        <h4 className="font-bold text-green-700 mb-3 text-sm uppercase tracking-wide">🩺 C. Obstetric Examination (Abdominal)</h4>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                            {[
+                                                { label: 'Fundal Height (cm)', key: 'fundalHeight', placeholder: 'e.g. 28 cm' },
+                                                { label: 'Fetal Lie', key: 'fetalLie', placeholder: 'Longitudinal/Transverse' },
+                                                { label: 'Presentation', key: 'fetalPresentation', placeholder: 'Cephalic/Breech' },
+                                                { label: 'Position', key: 'fetalPosition', placeholder: 'e.g. LOA, ROA, ROP' },
+                                                { label: 'Fetal Heart Rate (bpm)', key: 'fetalHeartRate', placeholder: 'e.g. 142' },
+                                                { label: 'Engagement', key: 'engagement', placeholder: 'Engaged / 2/5 palpable' },
+                                                { label: 'Liquor', key: 'liquor', placeholder: 'Adequate/Reduced' },
+                                                { label: 'Uterine Contractions', key: 'uterineContractions', placeholder: 'None/Mild/Mod/Strong' },
+                                                { label: 'AFI (USS)', key: 'amnioticFluidIndex', placeholder: 'Amniotic fluid index' },
+                                                { label: 'Placental Location (USS)', key: 'placentalLocation', placeholder: 'Fundal/Anterior/etc.' },
+                                            ].map(({ label, key, placeholder }) => (
+                                                <div key={key}>
+                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
+                                                    <input className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-400" placeholder={placeholder} value={ancNote[key]} onChange={e => setAncNote({ ...ancNote, [key]: e.target.value })} />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Section 4: Assessment, Plan, Counselling */}
+                                    <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-100">
+                                        <h4 className="font-bold text-yellow-700 mb-3 text-sm uppercase tracking-wide">📝 D. Assessment, Plan & Counselling</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1">Clinical Assessment / Impression</label>
+                                                <textarea className="w-full border rounded px-2 py-1.5 text-sm" rows="3" placeholder="Impression and clinical findings..." value={ancNote.assessment} onChange={e => setAncNote({ ...ancNote, assessment: e.target.value })} />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1">Treatment Plan</label>
+                                                <textarea className="w-full border rounded px-2 py-1.5 text-sm" rows="3" placeholder="Medications, referrals, investigations..." value={ancNote.plan} onChange={e => setAncNote({ ...ancNote, plan: e.target.value })} />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1">Counselling Given</label>
+                                                <textarea className="w-full border rounded px-2 py-1.5 text-sm" rows="2" placeholder="Nutrition, danger signs, birth preparedness..." value={ancNote.ancCounselling} onChange={e => setAncNote({ ...ancNote, ancCounselling: e.target.value })} />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1">Referral (if applicable)</label>
+                                                <textarea className="w-full border rounded px-2 py-1.5 text-sm" rows="2" placeholder="Referred to (specialist / facility)..." value={ancNote.ancReferral} onChange={e => setAncNote({ ...ancNote, ancReferral: e.target.value })} />
+                                            </div>
+                                        </div>
+                                        <div className="mt-3">
+                                            <label className="block text-xs font-semibold text-gray-600 mb-1">Next ANC Appointment Date</label>
+                                            <input className="border rounded px-2 py-1.5 text-sm w-48 focus:outline-none focus:ring-1 focus:ring-yellow-400" type="date" value={ancNote.nextAppointment} onChange={e => setAncNote({ ...ancNote, nextAppointment: e.target.value })} />
+                                        </div>
+                                    </div>
+
+                                    {/* Diagnosis (ICD-11 — same as standard note) */}
+                                    <div className="border rounded-lg p-4">
+                                        <h4 className="font-bold text-gray-700 mb-3 text-sm uppercase tracking-wide">🩻 E. Diagnosis (ICD-11) <span className="text-red-500">*</span></h4>
+                                        <div className="relative mb-2">
+                                            <input
+                                                className="w-full border p-2 rounded text-sm"
+                                                placeholder="Search ICD-11 diagnosis..."
+                                                value={diagSearchTerm}
+                                                onChange={e => { setDiagSearchTerm(e.target.value); setShowDiagDropdown(true); }}
+                                                onFocus={() => setShowDiagDropdown(true)}
+                                            />
+                                            {showDiagDropdown && diagSearchTerm && (
+                                                <div className="absolute z-10 w-full bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                                    <div className="p-2 text-xs text-gray-500">Type to search ICD-11 codes...</div>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {ancNote.diagnosis.length > 0 && (
+                                            <div className="flex flex-wrap gap-2 mt-2">
+                                                {ancNote.diagnosis.map((d, i) => (
+                                                    <span key={i} className="bg-pink-100 text-pink-800 text-xs px-2 py-1 rounded flex items-center gap-1">
+                                                        {d.code} — {d.description}
+                                                        <button onClick={() => setAncNote({ ...ancNote, diagnosis: ancNote.diagnosis.filter((_, idx) => idx !== i) })} className="text-pink-600 hover:text-pink-800 ml-1">✕</button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {ancNote.diagnosis.length === 0 && (
+                                            <p className="text-xs text-red-500 mt-1">⚠ At least one ICD-11 diagnosis is required before saving.</p>
+                                        )}
+                                    </div>
+
+                                    {/* ANC Save Buttons */}
+                                    <div className="flex gap-2 pt-2">
+                                        <button
+                                            onClick={handleSaveSOAP}
+                                            disabled={ancNote.diagnosis.length === 0}
+                                            className={`px-6 py-2 rounded font-semibold transition-colors ${ancNote.diagnosis.length === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-pink-600 text-white hover:bg-pink-700'}`}
+                                        >
+                                            {editingNoteId ? 'Update ANC Note' : '🤰 Save ANC Note'}
+                                        </button>
+                                        <button onClick={() => { setShowSoapModal(false); setEditingNoteId(null); }} className="bg-gray-400 text-white px-6 py-2 rounded hover:bg-gray-500">
+                                            Cancel
+                                        </button>
+                                        {ancNote.diagnosis.length === 0 && (
+                                            <span className="text-red-500 text-sm font-medium">⚠ Diagnosis required to save</span>
+                                        )}
+                                    </div>
+                                </div>
+                            ) : (
+                                /* ==================== STANDARD CLINICAL NOTE FORM ==================== */
+                                <div className="space-y-4">
                                 {/* Structured History Fields - 2 columns */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
@@ -5738,13 +6183,15 @@ const PatientDetails = () => {
                                         Cancel
                                     </button>
                                     {soapNote.diagnosis.length === 0 && (
-                                        <span className="text-red-500 text-sm font-medium">âš  Diagnosis required to save</span>
+                                        <span className="text-red-500 text-sm font-medium">⚠ Diagnosis required to save</span>
                                     )}
                                 </div>
-                            </div>
+                                </div>
+                            )}
                         </div>
                     </div>
-                )
+                    );
+                })()
             }
 
             {/* Lab Order Modal */}

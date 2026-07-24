@@ -166,10 +166,10 @@ const createVisit = async (req, res) => {
         admissionDate: type === 'Inpatient' ? new Date() : undefined,
         ward: type === 'Inpatient' ? ward : undefined,
         bed: type === 'Inpatient' ? bed : undefined,
-        paymentValidated: ['External Investigation', 'External Pharmacy', 'External Lab/Radiology'].includes(type) || !!waiveConsultationFee,
+        paymentValidated: ['External Investigation', 'External Pharmacy', 'External Lab/Radiology'].includes(type) || !!waiveConsultationFee || type === 'ANC Visit',
         encounterStatus: ['External Investigation', 'External Pharmacy', 'External Lab/Radiology'].includes(type) 
             ? 'awaiting_services' 
-            : (type === 'Inpatient' ? 'admitted' : (req.body.encounterStatus || (waiveConsultationFee ? 'in_nursing' : 'registered'))),
+            : (type === 'Inpatient' ? 'admitted' : (type === 'ANC Visit' ? 'in_nursing' : (req.body.encounterStatus || (waiveConsultationFee ? 'in_nursing' : 'registered')))),
         status: type === 'Inpatient' ? 'Admitted' : 'In Progress',
         reasonForVisit,
         isANC: !!isANC,
@@ -1126,7 +1126,17 @@ const saveClinicalNote = async (req, res) => {
             functionalCognitiveStatus, menstruationGynecologicalObstetricsHistory,
             pregnancyHistory, immunization, nutritional, developmentalMilestones,
             generalAppearance, heent, neck, cvs, resp, abd, neuro, msk, skin,
-            assessment, plan, diagnosis
+            assessment, plan, diagnosis,
+            // ANC-specific fields
+            noteType,
+            ancVisitNumber, edd, gestation, gravida, para, lmp,
+            fundalHeight, fetalLie, fetalPresentation, fetalPosition,
+            fetalHeartRate, engagement, liquor, uterineContractions,
+            amnioticFluidIndex, placentalLocation,
+            maternalWeight, maternalBP, maternalPulse, maternalTemp, maternalHb,
+            urinalysis, malariaProphylaxis, tetanusToxoid, ironFolate,
+            hivStatus, syphilisStatus, bloodGroupGenotype,
+            ancComplaints, ancRiskFactors, ancCounselling, ancReferral, nextAppointment
         } = req.body;
 
         const noteData = {
@@ -1137,6 +1147,16 @@ const saveClinicalNote = async (req, res) => {
             generalAppearance, heent, neck, cvs, resp, abd, neuro, msk, skin,
             assessment, plan,
             diagnosis: diagnosis || [],
+            // ANC-specific fields
+            noteType: noteType || 'standard',
+            ancVisitNumber, edd, gestation, gravida, para, lmp,
+            fundalHeight, fetalLie, fetalPresentation, fetalPosition,
+            fetalHeartRate, engagement, liquor, uterineContractions,
+            amnioticFluidIndex, placentalLocation,
+            maternalWeight, maternalBP, maternalPulse, maternalTemp, maternalHb,
+            urinalysis, malariaProphylaxis, tetanusToxoid, ironFolate,
+            hivStatus, syphilisStatus, bloodGroupGenotype,
+            ancComplaints, ancRiskFactors, ancCounselling, ancReferral, nextAppointment,
             updatedAt: new Date()
         };
 
