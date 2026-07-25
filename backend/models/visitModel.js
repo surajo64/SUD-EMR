@@ -387,6 +387,7 @@ const visitSchema = mongoose.Schema({
     orderTasks: [{
         orderType: { type: String, required: true },
         customOrderTask: { type: String },
+        expectedDischargeDate: { type: Date },
         instructions: { type: String, required: true },
         doctor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         doctorName: { type: String },
@@ -394,6 +395,9 @@ const visitSchema = mongoose.Schema({
         completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         completedByName: { type: String },
         completedAt: { type: Date },
+        updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        updatedByName: { type: String },
+        updatedAt: { type: Date },
         createdAt: { type: Date, default: Date.now }
     }],
 }, {

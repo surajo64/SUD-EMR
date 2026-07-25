@@ -9,7 +9,7 @@ import { checkRange, getRangeColorClass } from '../utils/labUtils';
 import Layout from '../components/Layout';
 import LoadingOverlay from '../components/loadingOverlay';
 import AppointmentModal from '../components/AppointmentModal';
-import { FaTimes, FaFileMedical, FaPills, FaChevronDown, FaChevronUp, FaHeartbeat, FaNotesMedical, FaProcedures, FaXRay, FaVial, FaUserMd, FaCalendarPlus, FaPlus, FaTrash, FaEdit, FaSearch, FaClock, FaChevronRight, FaFileAlt, FaCheckCircle, FaInfoCircle, FaDollarSign, FaPrint, FaUpload, FaEye, FaDownload, FaStethoscope, FaClipboardList } from 'react-icons/fa';
+import { FaTimes, FaFileMedical, FaPills, FaChevronDown, FaChevronUp, FaHeartbeat, FaNotesMedical, FaProcedures, FaXRay, FaVial, FaUserMd, FaCalendarPlus, FaPlus, FaTrash, FaEdit, FaSearch, FaClock, FaChevronRight, FaFileAlt, FaCheckCircle, FaInfoCircle, FaDollarSign, FaPrint, FaUpload, FaEye, FaDownload, FaStethoscope, FaClipboardList, FaCheck, FaCommentAlt } from 'react-icons/fa';
 import icd11Data from '../data/icd11.json';
 import useHospitalSettings from '../hooks/useHospitalSettings';
 
@@ -883,8 +883,10 @@ const PatientDetails = () => {
 
     // Order Task States & Handlers
     const [showOrderTaskModal, setShowOrderTaskModal] = useState(false);
-    const [orderType, setOrderType] = useState('Admission order');
+    const [editingTaskId, setEditingTaskId] = useState(null);
+    const [orderType, setOrderType] = useState('');
     const [customOrderTask, setCustomOrderTask] = useState('');
+    const [expectedDischargeDate, setExpectedDischargeDate] = useState('');
     const [orderInstructions, setOrderInstructions] = useState('');
     const [submittingOrderTask, setSubmittingOrderTask] = useState(false);
 
@@ -898,6 +900,10 @@ const PatientDetails = () => {
             toast.error('Please specify the order task');
             return;
         }
+        if (orderType === 'Admission order' && !expectedDischargeDate) {
+            toast.error('Please select expected date of discharge');
+            return;
+        }
         if (!orderInstructions.trim()) {
             toast.error('Please enter instructions for the nurse');
             return;
@@ -906,20 +912,36 @@ const PatientDetails = () => {
         try {
             setSubmittingOrderTask(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            const response = await axios.post(
-                `${backendUrl}/api/visits/${encounter._id}/order-tasks`,
-                {
-                    orderType,
-                    customOrderTask: orderType === 'Others' ? customOrderTask.trim() : '',
-                    instructions: orderInstructions.trim()
-                },
-                config
-            );
-            toast.success('Order task created successfully!');
+            const payload = {
+                orderType,
+                customOrderTask: orderType === 'Others' ? customOrderTask.trim() : '',
+                expectedDischargeDate: orderType === 'Admission order' ? expectedDischargeDate : undefined,
+                instructions: orderInstructions.trim()
+            };
+
+            let response;
+            if (editingTaskId) {
+                response = await axios.put(
+                    `${backendUrl}/api/visits/${encounter._id}/order-tasks/${editingTaskId}`,
+                    payload,
+                    config
+                );
+                toast.success('Order task updated successfully!');
+            } else {
+                response = await axios.post(
+                    `${backendUrl}/api/visits/${encounter._id}/order-tasks`,
+                    payload,
+                    config
+                );
+                toast.success('Order task created successfully!');
+            }
+
             setEncounter(response.data);
             setShowOrderTaskModal(false);
-            setOrderType('Admission order');
+            setEditingTaskId(null);
+            setOrderType('');
             setCustomOrderTask('');
+            setExpectedDischargeDate('');
             setOrderInstructions('');
         } catch (err) {
             console.error('Error saving order task:', err);
@@ -3123,6 +3145,11 @@ const PatientDetails = () => {
                                                                                         Task: {task.customOrderTask}
                                                                                     </span>
                                                                                 )}
+                                                                                {task.expectedDischargeDate && (
+                                                                                    <span className="text-xs font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                                                                        Expected Discharge: {new Date(task.expectedDischargeDate).toLocaleDateString()}
+                                                                                    </span>
+                                                                                )}
                                                                                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${isCompleted ? 'bg-green-600 text-white' : 'bg-amber-500 text-white'}`}>
                                                                                     {task.status || 'Pending'}
                                                                                 </span>
@@ -3135,6 +3162,16 @@ const PatientDetails = () => {
                                                                             <div className="flex items-center gap-3 text-[11px] text-gray-500 pt-1 flex-wrap">
                                                                                 <span>Doctor: <strong className="text-gray-700">{task.doctorName || task.doctor?.name || 'Doctor'}</strong></span>
                                                                                 <span>Ordered: {new Date(task.createdAt).toLocaleString()}</span>
+                                                                                {task.expectedDischargeDate && (
+                                                                                    <span className="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                                                                        • Exp. Discharge: {new Date(task.expectedDischargeDate).toLocaleDateString()}
+                                                                                    </span>
+                                                                                )}
+                                                                                {task.updatedByName && (
+                                                                                    <span className="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                                                                        • Modified by Dr. <strong>{task.updatedByName.replace(/^Dr\.\s*/i, '')}</strong> at {new Date(task.updatedAt).toLocaleString()}
+                                                                                    </span>
+                                                                                )}
                                                                                 {isCompleted && (
                                                                                     <span className="text-green-700 font-medium bg-green-100/80 px-2 py-0.5 rounded border border-green-200">
                                                                                         • Completed by Nurse <strong>{task.completedByName || task.completedBy?.name || 'Nurse'}</strong> at {new Date(task.completedAt).toLocaleString()}
@@ -3143,27 +3180,47 @@ const PatientDetails = () => {
                                                                             </div>
                                                                         </div>
 
-                                                                        {user && ['nurse', 'matron'].includes(user.role) && (
-                                                                            <div className="flex items-center gap-2 self-start md:self-center">
-                                                                                {!isCompleted ? (
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        onClick={() => handleUpdateOrderTaskStatus(task._id, 'Completed')}
-                                                                                        className="px-3.5 py-2 text-xs bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition flex items-center gap-1.5 shadow-sm active:scale-95"
-                                                                                    >
-                                                                                        <FaCheckCircle /> Mark as Completed
-                                                                                    </button>
-                                                                                ) : (
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        onClick={() => handleUpdateOrderTaskStatus(task._id, 'Pending')}
-                                                                                        className="px-2.5 py-1 text-[11px] bg-gray-200 text-gray-700 font-semibold rounded hover:bg-gray-300 transition"
-                                                                                    >
-                                                                                        Re-open Task
-                                                                                    </button>
-                                                                                )}
-                                                                            </div>
-                                                                        )}
+                                                                        <div className="flex items-center gap-2 self-start md:self-center">
+                                                                            {canEdit && (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => {
+                                                                                        setEditingTaskId(task._id);
+                                                                                        setOrderType(task.orderType || '');
+                                                                                        setCustomOrderTask(task.customOrderTask || '');
+                                                                                        setExpectedDischargeDate(task.expectedDischargeDate ? new Date(task.expectedDischargeDate).toISOString().split('T')[0] : '');
+                                                                                        setOrderInstructions(task.instructions || '');
+                                                                                        setShowOrderTaskModal(true);
+                                                                                    }}
+                                                                                    className="px-3 py-1.5 text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 font-bold rounded-lg transition flex items-center gap-1 shadow-2xs active:scale-95"
+                                                                                    title="Edit Order Task"
+                                                                                >
+                                                                                    <FaEdit size={11} /> Edit Order
+                                                                                </button>
+                                                                            )}
+
+                                                                            {user && ['nurse', 'matron'].includes(user.role) && (
+                                                                                <>
+                                                                                    {!isCompleted ? (
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={() => handleUpdateOrderTaskStatus(task._id, 'Completed')}
+                                                                                            className="px-3.5 py-2 text-xs bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition flex items-center gap-1.5 shadow-sm active:scale-95"
+                                                                                        >
+                                                                                            <FaCheckCircle /> Mark as Completed
+                                                                                        </button>
+                                                                                    ) : (
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={() => handleUpdateOrderTaskStatus(task._id, 'Pending')}
+                                                                                            className="px-2.5 py-1 text-[11px] bg-gray-200 text-gray-700 font-semibold rounded hover:bg-gray-300 transition"
+                                                                                        >
+                                                                                            Re-open Task
+                                                                                        </button>
+                                                                                    )}
+                                                                                </>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
                                                                 );
                                                             })}
@@ -3243,13 +3300,12 @@ const PatientDetails = () => {
                                                                                                 <thead className="bg-gray-100 border-b">
                                                                                                     <tr>
                                                                                                         <th className="p-2 border-r font-bold text-gray-600 w-64">Medication</th>
-                                                                                                        {dayTimes.length > 0 ? dayTimes.map(timeStr => (
+                                                                                                        {dayTimes.map(timeStr => (
                                                                                                             <th key={timeStr} className="p-2 border-r font-bold text-gray-600 text-center min-w-[70px]">
                                                                                                                 {timeStr}
                                                                                                             </th>
-                                                                                                        )) : (
-                                                                                                            <th className="p-2 border-r font-bold text-gray-400 text-center italic">No records for this day</th>
-                                                                                                        )}
+                                                                                                        ))}
+                                                                                                        <th className="p-2 border-r font-bold text-green-700 text-center w-16 bg-green-50/30">Action</th>
                                                                                                     </tr>
                                                                                                 </thead>
                                                                                                 <tbody>
@@ -3321,39 +3377,43 @@ const PatientDetails = () => {
                                                                                                                     {dayTimes.map(timeStr => {
                                                                                                                         const admin = dayHistory.find(h =>
                                                                                                                             new Date(h.administeredAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) === timeStr &&
-                                                                                                                            (h.medicineId === m._id || h.medicineName === m.name)
+                                                                                                                            ((h.medicineId && m._id && h.medicineId === m._id) || h.medicineName === m.name)
                                                                                                                         );
                                                                                                                         return (
                                                                                                                             <td key={timeStr} className="p-2 border-r text-center">
-                                                                                                                                {m.isDiscontinued ? (
-                                                                                                                                    <div className="inline-flex flex-col items-center justify-center p-1 rounded bg-red-100 border border-red-300 text-red-800 font-bold text-[8px] shadow-sm select-none" title="Doctor has stopped this medication">
-                                                                                                                                        <span className="font-black text-[8px] text-red-700 uppercase tracking-tighter">STOPPED</span>
-                                                                                                                                        <span className="text-[7px] text-red-600 leading-none">Do Not Serve</span>
-                                                                                                                                    </div>
-                                                                                                                                ) : admin ? (
+                                                                                                                                {admin ? (
                                                                                                                                     <div className="inline-flex flex-col items-center justify-center p-1 rounded-md bg-green-50 border border-green-200 shadow-sm group relative cursor-help">
-                                                                                                                                        <span className="font-black text-[8px] text-green-700 uppercase tracking-tighter">Given</span>
+                                                                                                                                        <div className="flex items-center gap-0.5">
+                                                                                                                                            <span className="font-black text-[8px] text-green-700 uppercase tracking-tighter">Given</span>
+                                                                                                                                            {admin.remarks && <FaCommentAlt size={7} className="text-green-600 ml-0.5" title="Comment recorded" />}
+                                                                                                                                        </div>
                                                                                                                                         <span className="text-[7px] text-green-600 leading-none">{getNurseFirstName(admin.nurse?.name)}</span>
                                                                                                                                         {isFirstRow ? (
-                                                                                                                                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 bg-gray-900 border border-gray-700 text-white p-2 rounded-lg text-[9px] hidden group-hover:block z-50 shadow-2xl backdrop-blur-sm text-left">
-                                                                                                                                                <div className="font-bold mb-1" style={{ color: '#ffffff' }}>
+                                                                                                                                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-52 bg-gray-900 border border-gray-700 text-white p-2.5 rounded-lg text-[9px] hidden group-hover:block z-50 shadow-2xl backdrop-blur-sm text-left">
+                                                                                                                                                <div className="text-white font-bold mb-1" style={{ color: '#ffffff' }}>
                                                                                                                                                     Administered by: {admin.nurse?.name || 'Unknown'}
                                                                                                                                                 </div>
+                                                                                                                                                <div className="text-gray-300 text-[8.5px]">
+                                                                                                                                                    Time: {new Date(admin.administeredAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                                                                                                                                </div>
                                                                                                                                                 {admin.remarks && (
-                                                                                                                                                    <div className="text-gray-300 break-words mt-1 border-t border-gray-700 pt-1">
-                                                                                                                                                        Remarks: {admin.remarks}
+                                                                                                                                                    <div className="text-gray-200 break-words mt-1 border-t border-gray-700 pt-1 font-medium">
+                                                                                                                                                        Comment: {admin.remarks}
                                                                                                                                                     </div>
                                                                                                                                                 )}
                                                                                                                                                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-gray-900"></div>
                                                                                                                                             </div>
                                                                                                                                         ) : (
-                                                                                                                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-gray-900 border border-gray-700 text-white p-2 rounded-lg text-[9px] hidden group-hover:block z-50 shadow-2xl backdrop-blur-sm text-left">
-                                                                                                                                                <div className="font-bold mb-1" style={{ color: '#ffffff' }}>
+                                                                                                                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 bg-gray-900 border border-gray-700 text-white p-2.5 rounded-lg text-[9px] hidden group-hover:block z-50 shadow-2xl backdrop-blur-sm text-left">
+                                                                                                                                                <div className="text-white font-bold mb-1" style={{ color: '#ffffff' }}>
                                                                                                                                                     Administered by: {admin.nurse?.name || 'Unknown'}
                                                                                                                                                 </div>
+                                                                                                                                                <div className="text-gray-300 text-[8.5px]">
+                                                                                                                                                    Time: {new Date(admin.administeredAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                                                                                                                                </div>
                                                                                                                                                 {admin.remarks && (
-                                                                                                                                                    <div className="text-gray-300 break-words mt-1 border-t border-gray-700 pt-1">
-                                                                                                                                                        Remarks: {admin.remarks}
+                                                                                                                                                    <div className="text-gray-200 break-words mt-1 border-t border-gray-700 pt-1 font-medium">
+                                                                                                                                                        Comment: {admin.remarks}
                                                                                                                                                     </div>
                                                                                                                                                 )}
                                                                                                                                                 <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
@@ -3364,6 +3424,45 @@ const PatientDetails = () => {
                                                                                                                             </td>
                                                                                                                         );
                                                                                                                     })}
+                                                                                                                    {(() => {
+                                                                                                                        const medAdminOnDate = dayHistory.filter(h => (h.medicineId && m._id && h.medicineId === m._id) || h.medicineName === m.name);
+                                                                                                                        const isServedOnDate = medAdminOnDate.length > 0;
+                                                                                                                        const isPastDate = dateTimestamp < today.getTime();
+
+                                                                                                                        return (
+                                                                                                                            <td className={`p-2 text-center ${m.isDiscontinued ? 'bg-red-50/40' : (isServedOnDate ? 'bg-gray-50/60' : 'bg-green-50/20')}`}>
+                                                                                                                                {m.isDiscontinued ? (
+                                                                                                                                    <div className="flex flex-col items-center justify-center">
+                                                                                                                                        <button
+                                                                                                                                            disabled
+                                                                                                                                            className="w-6 h-6 flex items-center justify-center mx-auto bg-red-200 text-red-700 rounded-md cursor-not-allowed shadow-sm border border-red-300"
+                                                                                                                                            title="Medication stopped by doctor. Cannot administer."
+                                                                                                                                        >
+                                                                                                                                            <FaTimes size={10} />
+                                                                                                                                        </button>
+                                                                                                                                        <span className="text-[7px] font-black text-red-600 uppercase mt-0.5">STOPPED</span>
+                                                                                                                                    </div>
+                                                                                                                                ) : (isServedOnDate || isPastDate) ? (
+                                                                                                                                    <div className="flex flex-col items-center justify-center">
+                                                                                                                                        <button
+                                                                                                                                            disabled
+                                                                                                                                            className="w-6 h-6 flex items-center justify-center mx-auto bg-gray-200 text-gray-400 rounded-md cursor-not-allowed border border-gray-300 shadow-2xs"
+                                                                                                                                            title={isServedOnDate ? "Medication already served for this date" : "Past date. Serving disabled."}
+                                                                                                                                        >
+                                                                                                                                            <FaCheck size={10} className="text-gray-500" />
+                                                                                                                                        </button>
+                                                                                                                                        <span className="text-[7px] font-bold text-gray-500 uppercase mt-0.5">
+                                                                                                                                            {isServedOnDate ? 'SERVED' : 'PASSED'}
+                                                                                                                                        </span>
+                                                                                                                                    </div>
+                                                                                                                                ) : (
+                                                                                                                                    <div className="flex flex-col items-center justify-center">
+                                                                                                                                        <span className="text-[7px] font-bold text-green-700 uppercase">PENDING</span>
+                                                                                                                                    </div>
+                                                                                                                                )}
+                                                                                                                            </td>
+                                                                                                                        );
+                                                                                                                    })()}
                                                                                                                 </tr>
                                                                                                             );
                                                                                                         }));
@@ -3400,8 +3499,10 @@ const PatientDetails = () => {
                                                         <div className="flex items-center gap-2">
                                                             <button
                                                                 onClick={() => {
-                                                                    setOrderType('Admission order');
+                                                                    setEditingTaskId(null);
+                                                                    setOrderType('');
                                                                     setCustomOrderTask('');
+                                                                    setExpectedDischargeDate('');
                                                                     setOrderInstructions('');
                                                                     setShowOrderTaskModal(true);
                                                                 }}
@@ -5825,11 +5926,28 @@ const PatientDetails = () => {
                                     className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                                     required
                                 >
+                                    <option value="">Select Order Type</option>
                                     <option value="Admission order">Admission order</option>
                                     <option value="Discharge order">Discharge order</option>
                                     <option value="Others">Others</option>
                                 </select>
                             </div>
+
+                            {/* Expected Date of Discharge - Appears when Admission order is selected */}
+                            {orderType === 'Admission order' && (
+                                <div className="animate-in fade-in duration-200">
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                        Expected Date of Discharge <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="date"
+                                        required
+                                        value={expectedDischargeDate}
+                                        onChange={(e) => setExpectedDischargeDate(e.target.value)}
+                                        className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    />
+                                </div>
+                            )}
 
                             {/* Custom Order Task Title - Appears when Others is selected */}
                             {orderType === 'Others' && (

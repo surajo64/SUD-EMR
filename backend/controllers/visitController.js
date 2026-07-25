@@ -234,6 +234,11 @@ const getVisits = async (req, res) => {
         }
     }
 
+    if (req.query.excludeInpatient === 'true') {
+        query.type = { $ne: 'Inpatient' };
+        query.encounterType = { $ne: 'Inpatient' };
+    }
+
     // Filter for doctors based on speciality or doctor restrictions
     if (req.user && req.user.role === 'doctor') {
         const doctorClinicId = req.user.assignedSpecialityClinic?._id || req.user.assignedSpecialityClinic;
@@ -269,16 +274,21 @@ const getVisits = async (req, res) => {
         };
 
         query.$and = query.$and || [];
-        // Admitted inpatients can be accessed by all doctors of any speciality.
-        // Therefore, restrictions ONLY apply if the encounter is NOT Inpatient.
-        query.$and.push({
-            $or: [
-                { type: 'Inpatient' },
-                {
-                    $and: [specialityFilter, specificDoctorFilter]
-                }
-            ]
-        });
+        if (req.query.excludeInpatient === 'true') {
+            query.$and.push(specialityFilter);
+            query.$and.push(specificDoctorFilter);
+        } else {
+            // Admitted inpatients can be accessed by all doctors of any speciality.
+            // Therefore, restrictions ONLY apply if the encounter is NOT Inpatient.
+            query.$and.push({
+                $or: [
+                    { type: 'Inpatient' },
+                    {
+                        $and: [specialityFilter, specificDoctorFilter]
+                    }
+                ]
+            });
+        }
     }
 
     const visits = await Visit.find(query)
@@ -1372,7 +1382,7 @@ const saveOrderTask = async (req, res) => {
         const visit = await Visit.findById(req.params.id);
         if (!visit) return res.status(404).json({ message: 'Visit not found' });
 
-        const { orderType, customOrderTask, instructions } = req.body;
+        const { orderType, customOrderTask, expectedDischargeDate, instructions } = req.body;
         if (!orderType || !instructions) {
             return res.status(400).json({ message: 'Order type and instructions are required' });
         }
@@ -1380,9 +1390,15 @@ const saveOrderTask = async (req, res) => {
             return res.status(400).json({ message: 'Order task title is required when Others is selected' });
         }
 
+        const isAdmissionOrder = (orderType || '').toLowerCase().includes('admission');
+        if (isAdmissionOrder && !expectedDischargeDate) {
+            return res.status(400).json({ message: 'Expected date of discharge is required for Admission order' });
+        }
+
         const newTask = {
             orderType,
             customOrderTask: orderType === 'Others' ? customOrderTask.trim() : '',
+            expectedDischargeDate: expectedDischargeDate ? new Date(expectedDischargeDate) : undefined,
             instructions: instructions.trim(),
             doctor: req.user._id,
             doctorName: req.user.name,
@@ -1460,6 +1476,59 @@ const updateOrderTaskStatus = async (req, res) => {
     }
 };
 
+// @desc    Update an order task content/instructions (Doctor edit)
+// @route   PUT /api/visits/:id/order-tasks/:taskId
+// @access  Private (Doctor/User)
+const updateOrderTask = async (req, res) => {
+    try {
+        const visit = await Visit.findById(req.params.id);
+        if (!visit) return res.status(404).json({ message: 'Visit not found' });
+
+        const { taskId } = req.params;
+        const { orderType, customOrderTask, expectedDischargeDate, instructions } = req.body;
+
+        if (!visit.orderTasks) {
+            return res.status(404).json({ message: 'No order tasks found for this visit' });
+        }
+
+        const task = visit.orderTasks.id(taskId) || visit.orderTasks.find(t => t._id.toString() === taskId);
+        if (!task) {
+            return res.status(404).json({ message: 'Order task not found' });
+        }
+
+        if (orderType) task.orderType = orderType;
+        task.customOrderTask = orderType === 'Others' ? (customOrderTask || '').trim() : '';
+
+        const isAdmissionOrder = (orderType || task.orderType || '').toLowerCase().includes('admission');
+        if (isAdmissionOrder && expectedDischargeDate) {
+            task.expectedDischargeDate = new Date(expectedDischargeDate);
+        } else if (!isAdmissionOrder) {
+            task.expectedDischargeDate = undefined;
+        }
+
+        if (instructions) task.instructions = instructions.trim();
+
+        task.updatedBy = req.user._id;
+        task.updatedByName = req.user.name;
+        task.updatedAt = new Date();
+
+        await visit.save();
+
+        const updatedVisit = await Visit.findById(visit._id)
+            .populate('patient', 'name mrn age gender contact')
+            .populate('doctor', 'name')
+            .populate('consultingPhysician', 'name')
+            .populate('clinicalNotes.doctor', 'name role')
+            .populate('orderTasks.doctor', 'name role')
+            .populate('orderTasks.completedBy', 'name role');
+
+        res.json(formatVisitWithClinicalNotes(updatedVisit));
+    } catch (error) {
+        console.error('updateOrderTask error:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     createVisit,
     getVisits,
@@ -1474,12 +1543,10 @@ module.exports = {
     saveChecklist,
     savePreAnaesthesiaChecklist,
     savePostoperativeHandoverChecklist,
+    saveClinicalNote,
     convertToInpatient,
     changeEncounterType,
-    saveClinicalNote,
     saveOrderTask,
-    updateOrderTaskStatus
+    updateOrderTaskStatus,
+    updateOrderTask
 };
-
-
-

@@ -27,11 +27,17 @@ const DoctorNotification = () => {
         if (!user || user.role !== 'doctor') return;
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            // Fetch today's visits (already filtered by backend doctor restrictions)
-            const { data } = await axios.get(`${backendUrl}/api/visits?today=true`, config);
+            // Fetch today's visits excluding Inpatients
+            const { data } = await axios.get(`${backendUrl}/api/visits?today=true&excludeInpatient=true`, config);
 
-            // Filter for unseen visits only
-            const unseen = data.filter(visit => !visit.seen);
+            // Filter for unseen non-inpatient visits only
+            const unseen = data.filter(visit => {
+                const isInpatient = visit.type === 'Inpatient' || 
+                                    visit.encounterType === 'Inpatient' || 
+                                    visit.status === 'Admitted' || 
+                                    visit.encounterStatus === 'admitted';
+                return !visit.seen && !isInpatient;
+            });
 
             // Sort: first come (oldest check-in) at the top
             unseen.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));

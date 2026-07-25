@@ -53,15 +53,29 @@ const PatientList = () => {
             const { data: allPatients } = await axios.get(`${backendUrl}/api/patients`, config);
             setPatients(allPatients);
 
-            // Fetch today's patients via visits
-            const { data: todayVisits } = await axios.get(`${backendUrl}/api/visits?today=true`, config);
+            // Fetch today's patients via visits (exclude Inpatient encounters if doctor)
+            const isDoctor = user?.role === 'doctor';
+            const endpoint = `${backendUrl}/api/visits?today=true${isDoctor ? '&excludeInpatient=true' : ''}`;
+            const { data: todayVisits } = await axios.get(endpoint, config);
+
+            // Filter out any Inpatient encounters for doctors
+            const filteredTodayVisits = todayVisits.filter(visit => {
+                const isInpatient = visit.type === 'Inpatient' || 
+                                    visit.encounterType === 'Inpatient' || 
+                                    visit.status === 'Admitted' || 
+                                    visit.encounterStatus === 'admitted';
+                if (isDoctor && isInpatient) {
+                    return false;
+                }
+                return true;
+            });
 
             // Extract unique patients from visits, maintaining recent order
             const uniqueTodayPatients = [];
             const seenPatientIds = new Set();
 
             // Sort visits oldest first (first come first serve)
-            const sortedVisits = [...todayVisits].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+            const sortedVisits = [...filteredTodayVisits].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
             sortedVisits.forEach(visit => {
                 if (visit.patient && !seenPatientIds.has(visit.patient._id)) {
@@ -74,7 +88,8 @@ const PatientList = () => {
                         seen: visit.seen,
                         seenBy: visit.seenBy,
                         seenAt: visit.seenAt,
-                        encounterStatus: visit.encounterStatus
+                        encounterStatus: visit.encounterStatus,
+                        encounterType: visit.type || visit.encounterType
                     });
                 }
             });
@@ -209,7 +224,7 @@ const PatientList = () => {
                         ))}
                         {filteredPatients.length === 0 && (
                             <tr>
-                                <td colSpan="6" className="p-4 text-center text-gray-500">No patients found.</td>
+                                <td colSpan="7" className="p-4 text-center text-gray-500">No patients found.</td>
                             </tr>
                         )}
                     </tbody>

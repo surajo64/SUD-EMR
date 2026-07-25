@@ -4,7 +4,7 @@ import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import { AppContext } from '../context/AppContext';
 import Layout from '../components/Layout';
-import { FaUserMd, FaSearch, FaCheckCircle, FaNotesMedical, FaHeartbeat, FaMoneyBillWave, FaTrash, FaEdit, FaPlus, FaTimes, FaTable, FaClock, FaChevronDown, FaChevronRight, FaHistory, FaClipboardList } from 'react-icons/fa';
+import { FaUserMd, FaSearch, FaCheckCircle, FaNotesMedical, FaHeartbeat, FaMoneyBillWave, FaTrash, FaEdit, FaPlus, FaTimes, FaTable, FaClock, FaChevronDown, FaChevronRight, FaHistory, FaClipboardList, FaCheck, FaCommentAlt } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import LoadingOverlay from '../components/loadingOverlay';
 import { formatAge } from '../utils/patientUtils';
@@ -1500,39 +1500,43 @@ const NurseTriage = () => {
                                                                                                 {dayTimes.map(timeStr => {
                                                                                                     const admin = dayHistory.find(h =>
                                                                                                         new Date(h.administeredAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) === timeStr &&
-                                                                                                        (h.medicineId === m._id || h.medicineName === m.name)
+                                                                                                        ((h.medicineId && m._id && h.medicineId === m._id) || h.medicineName === m.name)
                                                                                                     );
                                                                                                     return (
                                                                                                         <td key={timeStr} className="p-2 border-r text-center">
-                                                                                                            {m.isDiscontinued ? (
-                                                                                                                <div className="inline-flex flex-col items-center justify-center p-1 rounded bg-red-100 border border-red-300 text-red-800 font-bold text-[8px] shadow-sm select-none" title="Doctor has stopped this medication">
-                                                                                                                    <span className="font-black text-[8px] text-red-700 uppercase tracking-tighter">STOPPED</span>
-                                                                                                                    <span className="text-[7px] text-red-600 leading-none">Do Not Serve</span>
-                                                                                                                </div>
-                                                                                                            ) : admin ? (
+                                                                                                            {admin ? (
                                                                                                                 <div className="inline-flex flex-col items-center justify-center p-1 rounded-md bg-green-50 border border-green-200 shadow-sm group relative cursor-help">
-                                                                                                                    <span className="font-black text-[8px] text-green-700 uppercase tracking-tighter">Given</span>
+                                                                                                                    <div className="flex items-center gap-0.5">
+                                                                                                                        <span className="font-black text-[8px] text-green-700 uppercase tracking-tighter">Given</span>
+                                                                                                                        {admin.remarks && <FaCommentAlt size={7} className="text-green-600 ml-0.5" title="Comment recorded" />}
+                                                                                                                    </div>
                                                                                                                     <span className="text-[7px] text-green-600 leading-none">{getNurseFirstName(admin.nurse?.name)}</span>
                                                                                                                     {isFirstRow ? (
-                                                                                                                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 bg-gray-900 border border-gray-700 text-white p-2 rounded-lg text-[9px] hidden group-hover:block z-50 shadow-2xl backdrop-blur-sm text-left">
+                                                                                                                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-52 bg-gray-900 border border-gray-700 text-white p-2.5 rounded-lg text-[9px] hidden group-hover:block z-50 shadow-2xl backdrop-blur-sm text-left">
                                                                                                                             <div className="text-white font-bold mb-1" style={{ color: '#ffffff' }}>
                                                                                                                                 Administered by: {admin.nurse?.name || 'Unknown'}
                                                                                                                             </div>
+                                                                                                                            <div className="text-gray-300 text-[8.5px]">
+                                                                                                                                Time: {new Date(admin.administeredAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                                                                                                            </div>
                                                                                                                             {admin.remarks && (
-                                                                                                                                <div className="text-gray-300 break-words mt-1 border-t border-gray-700 pt-1">
-                                                                                                                                    Remarks: {admin.remarks}
+                                                                                                                                <div className="text-gray-200 break-words mt-1 border-t border-gray-700 pt-1 font-medium">
+                                                                                                                                    Comment: {admin.remarks}
                                                                                                                                 </div>
                                                                                                                             )}
                                                                                                                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-gray-900"></div>
                                                                                                                         </div>
                                                                                                                     ) : (
-                                                                                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-gray-900 border border-gray-700 text-white p-2 rounded-lg text-[9px] hidden group-hover:block z-50 shadow-2xl backdrop-blur-sm text-left">
+                                                                                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 bg-gray-900 border border-gray-700 text-white p-2.5 rounded-lg text-[9px] hidden group-hover:block z-50 shadow-2xl backdrop-blur-sm text-left">
                                                                                                                             <div className="text-white font-bold mb-1" style={{ color: '#ffffff' }}>
                                                                                                                                 Administered by: {admin.nurse?.name || 'Unknown'}
                                                                                                                             </div>
+                                                                                                                            <div className="text-gray-300 text-[8.5px]">
+                                                                                                                                Time: {new Date(admin.administeredAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                                                                                                            </div>
                                                                                                                             {admin.remarks && (
-                                                                                                                                <div className="text-gray-300 break-words mt-1 border-t border-gray-700 pt-1">
-                                                                                                                                    Remarks: {admin.remarks}
+                                                                                                                                <div className="text-gray-200 break-words mt-1 border-t border-gray-700 pt-1 font-medium">
+                                                                                                                                    Comment: {admin.remarks}
                                                                                                                                 </div>
                                                                                                                             )}
                                                                                                                             <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
@@ -1543,42 +1547,65 @@ const NurseTriage = () => {
                                                                                                         </td>
                                                                                                     );
                                                                                                 })}
-                                                                                                <td className={`p-2 text-center ${m.isDiscontinued ? 'bg-red-50/40' : 'bg-green-50/20'}`}>
-                                                                                                    {m.isDiscontinued ? (
-                                                                                                        <div className="flex flex-col items-center justify-center">
-                                                                                                            <button
-                                                                                                                disabled
-                                                                                                                className="w-6 h-6 flex items-center justify-center mx-auto bg-red-200 text-red-700 rounded-md cursor-not-allowed shadow-sm border border-red-300"
-                                                                                                                title="Medication stopped by doctor. Cannot administer."
-                                                                                                            >
-                                                                                                                <FaTimes size={10} />
-                                                                                                            </button>
-                                                                                                            <span className="text-[7px] font-black text-red-600 uppercase mt-0.5">STOPPED</span>
-                                                                                                        </div>
-                                                                                                    ) : (
-                                                                                                        !isReadOnly && (
-                                                                                                            <button
-                                                                                                                onClick={() => {
-                                                                                                                    setAdminForm({
-                                                                                                                        ...adminForm,
-                                                                                                                        prescriptionId: p._id,
-                                                                                                                        medicineId: m._id || m.name,
-                                                                                                                        medicineName: m.name,
-                                                                                                                        dosage: m.dosage || '',
-                                                                                                                        date: new Date().toISOString().split('T')[0],
-                                                                                                                        time: new Date().toTimeString().slice(0, 5),
-                                                                                                                        remarks: ''
-                                                                                                                    });
-                                                                                                                    setShowDrugAdminModal(true);
-                                                                                                                }}
-                                                                                                                className="w-6 h-6 flex items-center justify-center mx-auto bg-green-600 text-white rounded-md hover:bg-green-700 transition hover:scale-110 shadow-sm"
-                                                                                                                title="Record Dose"
-                                                                                                            >
-                                                                                                                <FaPlus size={8} />
-                                                                                                            </button>
-                                                                                                        )
-                                                                                                    )}
-                                                                                                </td>
+                                                                                                {(() => {
+                                                                                                    const medAdminOnDate = dayHistory.filter(h => (h.medicineId && m._id && h.medicineId === m._id) || h.medicineName === m.name);
+                                                                                                    const isServedOnDate = medAdminOnDate.length > 0;
+                                                                                                    const isPastDate = dateTimestamp < today.getTime();
+
+                                                                                                    return (
+                                                                                                        <td className={`p-2 text-center ${m.isDiscontinued ? 'bg-red-50/40' : (isServedOnDate ? 'bg-gray-50/60' : 'bg-green-50/20')}`}>
+                                                                                                            {m.isDiscontinued ? (
+                                                                                                                <div className="flex flex-col items-center justify-center">
+                                                                                                                    <button
+                                                                                                                        disabled
+                                                                                                                        className="w-6 h-6 flex items-center justify-center mx-auto bg-red-200 text-red-700 rounded-md cursor-not-allowed shadow-sm border border-red-300"
+                                                                                                                        title="Medication stopped by doctor. Cannot administer."
+                                                                                                                    >
+                                                                                                                        <FaTimes size={10} />
+                                                                                                                    </button>
+                                                                                                                    <span className="text-[7px] font-black text-red-600 uppercase mt-0.5">STOPPED</span>
+                                                                                                                </div>
+                                                                                                            ) : (isServedOnDate || isPastDate) ? (
+                                                                                                                <div className="flex flex-col items-center justify-center">
+                                                                                                                    <button
+                                                                                                                        disabled
+                                                                                                                        className="w-6 h-6 flex items-center justify-center mx-auto bg-gray-200 text-gray-400 rounded-md cursor-not-allowed border border-gray-300 shadow-2xs"
+                                                                                                                        title={isServedOnDate ? "Medication already served for this date" : "Past date. Serving disabled."}
+                                                                                                                    >
+                                                                                                                        <FaCheck size={10} className="text-gray-500" />
+                                                                                                                    </button>
+                                                                                                                    <span className="text-[7px] font-bold text-gray-500 uppercase mt-0.5">
+                                                                                                                        {isServedOnDate ? 'SERVED' : 'PASSED'}
+                                                                                                                    </span>
+                                                                                                                </div>
+                                                                                                            ) : (
+                                                                                                                !isReadOnly && (
+                                                                                                                    <button
+                                                                                                                        onClick={() => {
+                                                                                                                            const d = new Date(dateTimestamp);
+                                                                                                                            const dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+                                                                                                                            setAdminForm({
+                                                                                                                                ...adminForm,
+                                                                                                                                prescriptionId: p._id,
+                                                                                                                                medicineId: m._id || m.name,
+                                                                                                                                medicineName: m.name,
+                                                                                                                                dosage: m.dosage || '',
+                                                                                                                                date: dateStr,
+                                                                                                                                time: new Date().toTimeString().slice(0, 5),
+                                                                                                                                remarks: ''
+                                                                                                                            });
+                                                                                                                            setShowDrugAdminModal(true);
+                                                                                                                        }}
+                                                                                                                        className="w-6 h-6 flex items-center justify-center mx-auto bg-green-600 text-white rounded-md hover:bg-green-700 transition hover:scale-110 shadow-sm"
+                                                                                                                        title="Record Dose / Serve Medication"
+                                                                                                                    >
+                                                                                                                        <FaPlus size={8} />
+                                                                                                                    </button>
+                                                                                                                )
+                                                                                                            )}
+                                                                                                        </td>
+                                                                                                    );
+                                                                                                })()}
                                                                                             </tr>
                                                                                         );
                                                                                     }));
@@ -1634,6 +1661,11 @@ const NurseTriage = () => {
                                                                         Task: {task.customOrderTask}
                                                                     </span>
                                                                 )}
+                                                                {task.expectedDischargeDate && (
+                                                                    <span className="text-xs font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                                                        Expected Discharge: {new Date(task.expectedDischargeDate).toLocaleDateString()}
+                                                                    </span>
+                                                                )}
                                                                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${isCompleted ? 'bg-green-600 text-white' : 'bg-amber-500 text-white'}`}>
                                                                     {task.status || 'Pending'}
                                                                 </span>
@@ -1646,6 +1678,16 @@ const NurseTriage = () => {
                                                             <div className="flex items-center gap-3 text-[11px] text-gray-500 pt-1 flex-wrap">
                                                                 <span>Doctor: <strong className="text-gray-700">{task.doctorName || task.doctor?.name || 'Doctor'}</strong></span>
                                                                 <span>Ordered: {new Date(task.createdAt).toLocaleString()}</span>
+                                                                {task.expectedDischargeDate && (
+                                                                    <span className="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                                                        • Exp. Discharge: {new Date(task.expectedDischargeDate).toLocaleDateString()}
+                                                                    </span>
+                                                                )}
+                                                                {task.updatedByName && (
+                                                                    <span className="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                                                        • Modified by Dr. <strong>{task.updatedByName.replace(/^Dr\.\s*/i, '')}</strong> at {new Date(task.updatedAt).toLocaleString()}
+                                                                    </span>
+                                                                )}
                                                                 {isCompleted && (
                                                                     <span className="text-green-700 font-medium bg-green-100/80 px-2 py-0.5 rounded border border-green-200">
                                                                         • Completed by Nurse <strong>{task.completedByName || task.completedBy?.name || 'Nurse'}</strong> at {new Date(task.completedAt).toLocaleString()}
