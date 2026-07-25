@@ -519,7 +519,8 @@ const PharmacyPrescriptions = () => {
         return medicines.map((med, idx) => (
             <div key={idx} className="mb-1 flex items-center gap-2 flex-wrap text-sm">
                 <span className="font-semibold text-gray-900">{med.name}</span>
-                {med.dosage && <span className="text-gray-600">- Strength: {med.dosage}</span>}
+                {(med.strength || med.dosage) && <span className="text-gray-600">- Strength: {med.strength || med.dosage}</span>}
+                {(med.formulation || med.form) && <span className="text-gray-600">Form: {med.formulation || med.form}</span>}
                 <span className="text-gray-500">{med.frequency}</span>
                 <span className="text-gray-500">{(med.duration && !isNaN(med.duration)) ? `${med.duration} days` : med.duration}</span>
                 {med.dosageText && <span className="text-purple-700 font-medium bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 text-xs">Dosage: {med.dosageText}</span>}

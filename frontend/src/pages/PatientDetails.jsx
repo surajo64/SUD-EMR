@@ -417,11 +417,13 @@ const PatientDetails = () => {
     const [showRadDropdown, setShowRadDropdown] = useState(false);
     const [selectedDrug, setSelectedDrug] = useState('');
     const [drugQuantity, setDrugQuantity] = useState(1);
-    const [drugDosage, setDrugDosage] = useState('');
+    const [drugStrength, setDrugStrength] = useState('');
+    const [drugFormulation, setDrugFormulation] = useState('');
+    const [drugDosageText, setDrugDosageText] = useState('');
+    const [drugNote, setDrugNote] = useState('');
     const [drugFrequency, setDrugFrequency] = useState('');
     const [drugDuration, setDrugDuration] = useState('');
     const [drugRoute, setDrugRoute] = useState('');
-    const [drugForm, setDrugForm] = useState('');
 
     // Multi-Drug Prescription State
     const [drugSearchTerm, setDrugSearchTerm] = useState('');
@@ -818,7 +820,7 @@ const PatientDetails = () => {
                 return num > 20 ? 1 : num; // If it's a large number (e.g. 500), it's likely strength
             };
 
-            const doseUnits = parseDose(drugDosage);
+            const doseUnits = parseDose(drugDosageText || drugStrength);
 
             // Parse frequencyMultiplier based on medical abbreviations
             const freqLower = (drugFrequency || '').toLowerCase().trim();
@@ -858,7 +860,7 @@ const PatientDetails = () => {
 
         const timer = setTimeout(calculateTotal, 300); // Debounce
         return () => clearTimeout(timer);
-    }, [drugDosage, drugFrequency, drugDuration, showRxModal, selectedDrug]);
+    }, [drugDosageText, drugStrength, drugFrequency, drugDuration, showRxModal, selectedDrug]);
 
     // Tab State - default based on user role
     const getDefaultTab = () => {
@@ -2030,8 +2032,10 @@ const PatientDetails = () => {
 
         // Auto-populate fields from drug data
         setDrugRoute(drug.route || '');
-        setDrugDosage(drug.dosage || '');
-        setDrugForm(drug.form || '');
+        setDrugStrength(drug.dosage || drug.strength || '');
+        setDrugFormulation(drug.form || drug.formulation || '');
+        setDrugDosageText('');
+        setDrugNote('');
         setDrugFrequency(drug.frequency || '');
     };
 
@@ -2061,10 +2065,12 @@ const PatientDetails = () => {
             price: drugData.price,
             quantity: drugQuantity,
             route: drugRoute || 'As directed',
-            dosage: drugDosage || 'As directed',
-            form: drugForm || 'As directed',
+            strength: drugStrength || '-',
+            formulation: drugFormulation || '-',
+            dosage: drugDosageText || '-',
             frequency: drugFrequency || 'As directed',
             duration: (drugDuration && !isNaN(drugDuration)) ? `${drugDuration} days` : (drugDuration || 'As directed'),
+            note: drugNote || '',
             buyOutside: buyOutside // Include flag
         };
 
@@ -2075,8 +2081,10 @@ const PatientDetails = () => {
         setDrugSearchTerm('');
         setDrugQuantity(1);
         setDrugRoute('');
-        setDrugDosage('');
-        setDrugForm('');
+        setDrugStrength('');
+        setDrugFormulation('');
+        setDrugDosageText('');
+        setDrugNote('');
         setDrugFrequency('');
         setDrugDuration('');
         toast.success('Drug added to list');
@@ -2089,23 +2097,24 @@ const PatientDetails = () => {
     const processSinglePrescription = async (drugItem, config) => {
         const selectedDrugData = inventoryDrugs.find(d => d._id === drugItem.drugId);
 
-        // removed charge generation logic here
-
         // Create prescription WITHOUT charge ID
         await axios.post(
             `${backendUrl}/api/prescriptions`,
             {
                 patientId: patient._id,
                 visitId: encounter._id,
-                // chargeId is now omitted
                 medicines: [{
                     name: selectedDrugData.name,
-                    dosage: drugItem.dosage,
+                    strength: drugItem.strength !== '-' ? drugItem.strength : '',
+                    formulation: drugItem.formulation !== '-' ? drugItem.formulation : '',
+                    dosage: (drugItem.strength !== '-' ? drugItem.strength : (drugItem.dosage !== '-' ? drugItem.dosage : 'As directed')),
+                    dosageText: drugItem.dosage !== '-' ? drugItem.dosage : '',
                     frequency: drugItem.frequency,
                     duration: drugItem.duration,
                     route: drugItem.route,
-                    form: drugItem.form,
+                    form: drugItem.formulation !== '-' ? drugItem.formulation : '',
                     quantity: drugItem.quantity,
+                    note: drugItem.note || '',
                     buyOutside: drugItem.buyOutside // Pass the flag
                 }],
                 notes: 'Doctor prescribed'
@@ -3899,9 +3908,13 @@ const PatientDetails = () => {
                                                                                                             )}
                                                                                                         </p>
                                                                                                         <div className="text-sm text-gray-600 space-y-1 mt-1">
-                                                                                                            <p><span className="font-medium">Dosage:</span> {med.dosage}</p>
+                                                                                                            {med.route && <p><span className="font-medium">Route:</span> {med.route}</p>}
+                                                                                                            {(med.strength || med.dosage) && <p><span className="font-medium">Strength:</span> {med.strength || med.dosage}</p>}
+                                                                                                            {(med.formulation || med.form) && <p><span className="font-medium">Formulation:</span> {med.formulation || med.form}</p>}
+                                                                                                            {med.dosageText && <p><span className="font-medium">Dosage:</span> {med.dosageText}</p>}
                                                                                                             <p><span className="font-medium">Frequency:</span> {med.frequency}</p>
                                                                                                             <p><span className="font-medium">Duration:</span> {(med.duration && !isNaN(med.duration)) ? `${med.duration} days` : med.duration}</p>
+                                                                                                            {med.note && <p><span className="font-medium">Note:</span> {med.note}</p>}
                                                                                                             {med.instructions && (
                                                                                                                 <p><span className="font-medium">Instructions:</span> {med.instructions}</p>
                                                                                                             )}
@@ -6529,13 +6542,11 @@ const PatientDetails = () => {
 
 
 
-
-
             {/* Prescription Modal */}
             {
                 showRxModal && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                        <div className="bg-white rounded-lg p-6 w-full max-w-4xl">
+                        <div className="bg-white rounded-lg p-6 w-full max-w-5xl">
                             <div className="flex justify-between items-center mb-4">
                                 <h3 className="text-xl font-bold">Add Prescription</h3>
                                 <button onClick={() => setShowRxModal(false)} className="text-gray-500 hover:text-gray-700">
@@ -6574,7 +6585,7 @@ const PatientDetails = () => {
                                                                 )}
                                                             </div>
                                                             <div className="text-xs text-gray-500">
-                                                                Total Stock: {drug.quantity} {drug.batches.length > 1 && `(${drug.batches.length} batches)`} | â‚¦{drug.price}
+                                                                Total Stock: {drug.quantity} {drug.batches.length > 1 && `(${drug.batches.length} batches)`} | ₦{drug.price}
                                                             </div>
                                                         </div>
                                                     ))}
@@ -6583,131 +6594,158 @@ const PatientDetails = () => {
                                         </div>
 
                                         {selectedDrug && (
-                                            <div className="grid grid-cols-7 gap-2 items-end">
-                                                <div>
-                                                    <label className="block text-xs text-gray-600 mb-1">Route</label>
-                                                    <select
-                                                        className="w-full border p-2 rounded text-sm"
-                                                        value={drugRoute}
-                                                        onChange={(e) => setDrugRoute(e.target.value)}
-                                                    >
-                                                        <option value="">-- Route --</option>
-                                                        {metadataOptions.route.map(m => (
-                                                            <option key={m._id} value={m.value}>{m.value}</option>
-                                                        ))}
-                                                        {!metadataOptions.route.find(m => m.value === drugRoute) && drugRoute && (
-                                                            <option value={drugRoute}>{drugRoute}</option>
-                                                        )}
-                                                    </select>
+                                            <div className="space-y-3 pt-1">
+                                                <div className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end">
+                                                    <div>
+                                                        <label className="block text-xs text-gray-600 mb-1 font-semibold">Route</label>
+                                                        <select
+                                                            className="w-full border p-2 rounded text-sm"
+                                                            value={drugRoute}
+                                                            onChange={(e) => setDrugRoute(e.target.value)}
+                                                        >
+                                                            <option value="">-- Route --</option>
+                                                            {metadataOptions.route.map(m => (
+                                                                <option key={m._id} value={m.value}>{m.value}</option>
+                                                            ))}
+                                                            {!metadataOptions.route.find(m => m.value === drugRoute) && drugRoute && (
+                                                                <option value={drugRoute}>{drugRoute}</option>
+                                                            )}
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs text-gray-600 mb-1 font-semibold">Strength</label>
+                                                        <select
+                                                            className="w-full border p-2 rounded text-sm"
+                                                            value={drugStrength}
+                                                            onChange={(e) => setDrugStrength(e.target.value)}
+                                                        >
+                                                            <option value="">-- Strength --</option>
+                                                            {metadataOptions.dosage.map(m => (
+                                                                <option key={m._id} value={m.value}>{m.value}</option>
+                                                            ))}
+                                                            {!metadataOptions.dosage.find(m => m.value === drugStrength) && drugStrength && (
+                                                                <option value={drugStrength}>{drugStrength}</option>
+                                                            )}
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs text-gray-600 mb-1 font-semibold">Formulation</label>
+                                                        <select
+                                                            className="w-full border p-2 rounded text-sm"
+                                                            value={drugFormulation}
+                                                            onChange={(e) => setDrugFormulation(e.target.value)}
+                                                        >
+                                                            <option value="">-- Formulation --</option>
+                                                            {metadataOptions.form.map(m => (
+                                                                <option key={m._id} value={m.value}>{m.value}</option>
+                                                            ))}
+                                                            {!metadataOptions.form.find(m => m.value === drugFormulation) && drugFormulation && (
+                                                                <option value={drugFormulation}>{drugFormulation}</option>
+                                                            )}
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs text-gray-600 mb-1 font-semibold">Dosage</label>
+                                                        <input
+                                                            type="text"
+                                                            className="w-full border p-2 rounded text-sm"
+                                                            value={drugDosageText}
+                                                            onChange={(e) => setDrugDosageText(e.target.value)}
+                                                            placeholder="e.g. 1 Tablet"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs text-gray-600 mb-1 font-semibold">Frequency</label>
+                                                        <select
+                                                            className="w-full border p-2 rounded text-sm"
+                                                            value={drugFrequency}
+                                                            onChange={(e) => setDrugFrequency(e.target.value)}
+                                                        >
+                                                            <option value="">-- Freq --</option>
+                                                            {metadataOptions.frequency.map(m => (
+                                                                <option key={m._id} value={m.value}>{m.value}</option>
+                                                            ))}
+                                                            {!metadataOptions.frequency.find(m => m.value === drugFrequency) && drugFrequency && (
+                                                                <option value={drugFrequency}>{drugFrequency}</option>
+                                                            )}
+                                                        </select>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <label className="block text-xs text-gray-600 mb-1">Dosage</label>
-                                                    <select
-                                                        className="w-full border p-2 rounded text-sm"
-                                                        value={drugDosage}
-                                                        onChange={(e) => setDrugDosage(e.target.value)}
-                                                    >
-                                                        <option value="">-- Dosage --</option>
-                                                        {metadataOptions.dosage.map(m => (
-                                                            <option key={m._id} value={m.value}>{m.value}</option>
-                                                        ))}
-                                                        {!metadataOptions.dosage.find(m => m.value === drugDosage) && drugDosage && (
-                                                            <option value={drugDosage}>{drugDosage}</option>
-                                                        )}
-                                                    </select>
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs text-gray-600 mb-1">Form</label>
-                                                    <select
-                                                        className="w-full border p-2 rounded text-sm"
-                                                        value={drugForm}
-                                                        onChange={(e) => setDrugForm(e.target.value)}
-                                                    >
-                                                        <option value="">-- Form --</option>
-                                                        {metadataOptions.form.map(m => (
-                                                            <option key={m._id} value={m.value}>{m.value}</option>
-                                                        ))}
-                                                        {!metadataOptions.form.find(m => m.value === drugForm) && drugForm && (
-                                                            <option value={drugForm}>{drugForm}</option>
-                                                        )}
-                                                    </select>
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs text-gray-600 mb-1">Frequency</label>
-                                                    <select
-                                                        className="w-full border p-2 rounded text-sm"
-                                                        value={drugFrequency}
-                                                        onChange={(e) => setDrugFrequency(e.target.value)}
-                                                    >
-                                                        <option value="">-- Freq --</option>
-                                                        {metadataOptions.frequency.map(m => (
-                                                            <option key={m._id} value={m.value}>{m.value}</option>
-                                                        ))}
-                                                        {!metadataOptions.frequency.find(m => m.value === drugFrequency) && drugFrequency && (
-                                                            <option value={drugFrequency}>{drugFrequency}</option>
-                                                        )}
-                                                    </select>
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs text-gray-600 mb-1">Duration</label>
-                                                    <input
-                                                        type="text"
-                                                        className="w-full border p-2 rounded text-sm"
-                                                        value={drugDuration}
-                                                        onChange={(e) => setDrugDuration(e.target.value)}
-                                                        placeholder="5 days"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs text-gray-600 mb-1">Quantity</label>
-                                                    <input
-                                                        type="number"
-                                                        className="w-full border p-2 rounded text-sm"
-                                                        value={drugQuantity}
-                                                        onChange={(e) => setDrugQuantity(parseInt(e.target.value))}
-                                                        min="1"
-                                                    />
-                                                </div>
-                                                <div className="flex flex-col items-center justify-center h-full mb-1">
-                                                    <label className="text-[10px] text-gray-600 mb-1 font-bold">Buy Outside</label>
-                                                    <input
-                                                        type="checkbox"
-                                                        className="w-5 h-5 cursor-pointer accent-red-600"
-                                                        checked={buyOutside}
-                                                        onChange={(e) => setBuyOutside(e.target.checked)}
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <button
-                                                        onClick={handleAddDrugToQueue}
-                                                        className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 text-sm font-semibold h-[38px]"
-                                                    >
-                                                        Add
-                                                    </button>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end">
+                                                    <div>
+                                                        <label className="block text-xs text-gray-600 mb-1 font-semibold">Duration</label>
+                                                        <input
+                                                            type="text"
+                                                            className="w-full border p-2 rounded text-sm"
+                                                            value={drugDuration}
+                                                            onChange={(e) => setDrugDuration(e.target.value)}
+                                                            placeholder="5 days"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs text-gray-600 mb-1 font-semibold">Quantity</label>
+                                                        <input
+                                                            type="number"
+                                                            className="w-full border p-2 rounded text-sm"
+                                                            value={drugQuantity}
+                                                            onChange={(e) => setDrugQuantity(parseInt(e.target.value) || 1)}
+                                                            min="1"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs text-gray-600 mb-1 font-semibold">Note</label>
+                                                        <input
+                                                            type="text"
+                                                            className="w-full border p-2 rounded text-sm"
+                                                            value={drugNote}
+                                                            onChange={(e) => setDrugNote(e.target.value)}
+                                                            placeholder="e.g. After meals"
+                                                        />
+                                                    </div>
+                                                    <div className="flex flex-col items-center justify-center h-full mb-1">
+                                                        <label className="text-[10px] text-gray-600 mb-1 font-bold">Buy Outside</label>
+                                                        <input
+                                                            type="checkbox"
+                                                            className="w-5 h-5 cursor-pointer accent-red-600"
+                                                            checked={buyOutside}
+                                                            onChange={(e) => setBuyOutside(e.target.checked)}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <button
+                                                            onClick={handleAddDrugToQueue}
+                                                            className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 text-sm font-semibold h-[38px]"
+                                                        >
+                                                            Add
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         )}
                                     </div>
 
                                     {/* Temporary Drug List */}
-                                    <div className="border rounded overflow-hidden">
+                                    <div className={`border rounded overflow-x-auto ${tempDrugs.length >= 6 ? 'max-h-72 overflow-y-auto' : ''}`}>
                                         <table className="w-full text-sm text-left">
-                                            <thead className="bg-gray-100">
+                                            <thead className="bg-gray-100 sticky top-0 z-10">
                                                 <tr>
                                                     <th className="p-2">Drug</th>
                                                     <th className="p-2">Route</th>
+                                                    <th className="p-2">Strength</th>
+                                                    <th className="p-2">Formulation</th>
                                                     <th className="p-2">Dosage</th>
-                                                    <th className="p-2">Form</th>
                                                     <th className="p-2">Freq</th>
                                                     <th className="p-2">Dur</th>
                                                     <th className="p-2">Qty</th>
+                                                    <th className="p-2">Note</th>
                                                     <th className="p-2">Action</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {tempDrugs.length === 0 ? (
                                                     <tr>
-                                                        <td colSpan="8" className="p-4 text-center text-gray-500">
+                                                        <td colSpan="10" className="p-4 text-center text-gray-500">
                                                             No drugs added yet. Search and add drugs above.
                                                         </td>
                                                     </tr>
@@ -6724,12 +6762,14 @@ const PatientDetails = () => {
                                                                     )}
                                                                 </div>
                                                             </td>
-                                                            <td className="p-2">{drug.route}</td>
-                                                            <td className="p-2">{drug.dosage}</td>
-                                                            <td className="p-2">{drug.form}</td>
-                                                            <td className="p-2">{drug.frequency}</td>
-                                                            <td className="p-2">{(drug.duration && !isNaN(drug.duration)) ? `${drug.duration} days` : drug.duration}</td>
+                                                            <td className="p-2">{drug.route || '-'}</td>
+                                                            <td className="p-2">{drug.strength || '-'}</td>
+                                                            <td className="p-2">{drug.formulation || '-'}</td>
+                                                            <td className="p-2">{drug.dosage || '-'}</td>
+                                                            <td className="p-2">{drug.frequency || '-'}</td>
+                                                            <td className="p-2">{(drug.duration && !isNaN(drug.duration)) ? `${drug.duration} days` : (drug.duration || '-')}</td>
                                                             <td className="p-2">{drug.quantity}</td>
+                                                            <td className="p-2 text-xs text-gray-600 max-w-[120px] truncate" title={drug.note}>{drug.note || '-'}</td>
                                                             <td className="p-2">
                                                                 <button
                                                                     onClick={() => handleRemoveDrugFromQueue(drug.id)}
