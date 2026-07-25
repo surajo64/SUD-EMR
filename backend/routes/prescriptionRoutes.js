@@ -9,7 +9,8 @@ const {
     dispenseWithInventory,
     bulkDispenseWithInventory,
     generatePrescriptionCharge,
-    deletePrescription
+    deletePrescription,
+    toggleDiscontinueMedicine
 } = require('../controllers/prescriptionController');
 const { protect, pharmacy } = require('../middleware/authMiddleware');
 
@@ -23,6 +24,7 @@ router.put('/bulk-dispense', protect, bulkDispenseWithInventory);
 router.put('/:id/dispense', protect, dispensePrescription);
 router.put('/:id/dispense-with-inventory', protect, dispenseWithInventory);
 router.put('/:id/generate-charge', protect, pharmacy, generatePrescriptionCharge);
+router.put('/:id/medicines/:medIndex/discontinue', protect, toggleDiscontinueMedicine);
 router.delete('/:id', protect, deletePrescription);
 
 module.exports = router;

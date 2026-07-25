@@ -4,7 +4,7 @@ import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import { AppContext } from '../context/AppContext';
 import Layout from '../components/Layout';
-import { FaUserMd, FaSearch, FaCheckCircle, FaNotesMedical, FaHeartbeat, FaMoneyBillWave, FaTrash, FaEdit, FaPlus, FaTable, FaClock, FaChevronDown, FaChevronRight, FaHistory } from 'react-icons/fa';
+import { FaUserMd, FaSearch, FaCheckCircle, FaNotesMedical, FaHeartbeat, FaMoneyBillWave, FaTrash, FaEdit, FaPlus, FaTimes, FaTable, FaClock, FaChevronDown, FaChevronRight, FaHistory } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import LoadingOverlay from '../components/loadingOverlay';
 import { formatAge } from '../utils/patientUtils';
@@ -152,6 +152,58 @@ const NurseTriage = () => {
         remarks: ''
     });
     const [expandedDays, setExpandedDays] = useState({});
+    // Stop / Discontinue Drug Modal States
+    const [showStopDrugModal, setShowStopDrugModal] = useState(false);
+    const [stopDrugTarget, setStopDrugTarget] = useState(null);
+    const [stopDrugReason, setStopDrugReason] = useState('');
+
+    const handleConfirmStopDrug = async () => {
+        if (!stopDrugTarget) return;
+        if (!stopDrugReason.trim()) {
+            toast.error('Please enter a reason for stopping this medication');
+            return;
+        }
+
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            await axios.put(
+                `${backendUrl}/api/prescriptions/${stopDrugTarget.prescriptionId}/medicines/${stopDrugTarget.medIndex}/discontinue`,
+                { reason: stopDrugReason.trim() },
+                config
+            );
+            toast.success('Medication stopped! Reason logged for nurses.');
+            setShowStopDrugModal(false);
+            setStopDrugTarget(null);
+            setStopDrugReason('');
+            fetchDrugAdministrationData(selectedEncounter._id);
+            if (selectedPatient) {
+                fetchPatientEncounters(selectedPatient._id);
+            }
+        } catch (err) {
+            console.error(err);
+            toast.error('Error stopping medication');
+        }
+    };
+
+    const handleToggleReactivateDrug = async (prescriptionId, medIndex) => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            await axios.put(
+                `${backendUrl}/api/prescriptions/${prescriptionId}/medicines/${medIndex}/discontinue`,
+                {},
+                config
+            );
+            toast.success('Medication reactivated!');
+            fetchDrugAdministrationData(selectedEncounter._id);
+            if (selectedPatient) {
+                fetchPatientEncounters(selectedPatient._id);
+            }
+        } catch (err) {
+            console.error(err);
+            toast.error('Error reactivating medication');
+        }
+    };
+
     const { user } = useContext(AuthContext);
     const { backendUrl } = useContext(AppContext);
 
@@ -667,6 +719,15 @@ const NurseTriage = () => {
     const handleRecordDrugAdmin = async () => {
         if (!adminForm.date || !adminForm.time) {
             toast.error('Please select date and time');
+            return;
+        }
+
+        // Check if target medicine was stopped/discontinued by doctor
+        const targetPrescription = dispensedPrescriptions.find(p => p._id === adminForm.prescriptionId);
+        const targetMed = targetPrescription?.medicines?.find(m => (m._id && m._id === adminForm.medicineId) || m.name === adminForm.medicineName);
+        if (targetMed?.isDiscontinued) {
+            toast.error('Cannot administer this medication. It has been stopped by the doctor!');
+            setShowDrugAdminModal(false);
             return;
         }
 
@@ -1350,28 +1411,74 @@ const NurseTriage = () => {
                                                                                 </tr>
                                                                             </thead>
                                                                             <tbody>
-                                                                                {(() => {
-                                                                                    let overallRowIdx = 0;
-                                                                                    return dispensedPrescriptions.flatMap(p => p.medicines.map(m => {
-                                                                                        const isFirstRow = overallRowIdx === 0;
-                                                                                        overallRowIdx++;
-                                                                                        return (
-                                                                                            <tr key={`${p._id}-${m._id || m.name}`} className="hover:bg-blue-50/10 border-b last:border-0 transition-colors">
-                                                                                                <td className="p-2 border-r">
-                                                                                                    <div className="font-bold text-blue-950 leading-tight flex items-center gap-2">
-                                                                                                        {m.name}
-                                                                                                        {m.buyOutside && (
-                                                                                                            <span className="text-[9px] bg-orange-100 text-orange-800 px-1.5 py-0.5 rounded border border-orange-200 uppercase font-black">
-                                                                                                                Buy Outside
-                                                                                                            </span>
-                                                                                                        )}
-                                                                                                    </div>
-                                                                                                    <div className="text-[9px] text-gray-500 flex items-center gap-1 mt-0.5">
-                                                                                                        <span className="font-medium text-gray-700">{m.dosage}</span>
+                                                                                 {(() => {
+                                                                                     let overallRowIdx = 0;
+                                                                                     return dispensedPrescriptions.flatMap(p => p.medicines.map(m => {
+                                                                                         const isFirstRow = overallRowIdx === 0;
+                                                                                         overallRowIdx++;
+                                                                                         const stoppedByName = (typeof m.discontinuedBy === 'object' && m.discontinuedBy?.name) 
+                                                                                             ? m.discontinuedBy.name 
+                                                                                             : (m.discontinuedBy && user && (m.discontinuedBy === user._id || m.discontinuedBy.toString() === user._id.toString())
+                                                                                                 ? user.name
+                                                                                                 : (user?.role === 'doctor' ? user.name : 'Doctor'));
+                                                                                         return (
+                                                                                             <tr key={`${p._id}-${m._id || m.name}`} className={`border-b last:border-0 transition-colors ${m.isDiscontinued ? 'bg-red-50/40 border-l-4 border-l-red-500' : 'hover:bg-blue-50/10'}`}>
+                                                                                                 <td className="p-2 border-r">
+                                                                                                     <div className="font-bold text-blue-950 leading-tight flex items-center justify-between gap-2">
+                                                                                                         <div className="flex items-center gap-2 flex-wrap">
+                                                                                                             <span className={m.isDiscontinued ? 'line-through text-red-700 font-bold' : ''}>{m.name}</span>
+                                                                                                             {m.buyOutside && (
+                                                                                                                 <span className="text-[9px] bg-orange-100 text-orange-800 px-1.5 py-0.5 rounded border border-orange-200 uppercase font-black">
+                                                                                                                     Buy Outside
+                                                                                                                 </span>
+                                                                                                             )}
+                                                                                                             {m.isDiscontinued && (
+                                                                                                                 <span className="text-[9px] bg-red-100 text-red-800 px-2 py-0.5 rounded border border-red-300 font-bold uppercase tracking-wide flex items-center gap-1">
+                                                                                                                     🛑 STOPPED BY {stoppedByName.toUpperCase().startsWith('DR') ? stoppedByName.toUpperCase() : `DR. ${stoppedByName.toUpperCase()}`}
+                                                                                                                 </span>
+                                                                                                             )}
+                                                                                                         </div>
+
+                                                                                                         {/* Doctor Stop / Discontinue Checkbox */}
+                                                                                                         {user.role === 'doctor' && (
+                                                                                                             <label className="flex items-center gap-1.5 text-[10px] font-bold text-red-700 hover:text-red-800 bg-red-50 hover:bg-red-100 px-2 py-1 rounded border border-red-200 cursor-pointer transition shadow-2xs ml-auto whitespace-nowrap">
+                                                                                                                 <input
+                                                                                                                     type="checkbox"
+                                                                                                                     checked={!!m.isDiscontinued}
+                                                                                                                     onChange={() => {
+                                                                                                                         const medIdx = p.medicines.findIndex(item => (item._id && item._id === m._id) || item.name === m.name);
+                                                                                                                         if (!m.isDiscontinued) {
+                                                                                                                             setStopDrugTarget({
+                                                                                                                                 prescriptionId: p._id,
+                                                                                                                                 medIndex: medIdx >= 0 ? medIdx : 0,
+                                                                                                                                 medName: m.name
+                                                                                                                             });
+                                                                                                                             setStopDrugReason('');
+                                                                                                                             setShowStopDrugModal(true);
+                                                                                                                         } else {
+                                                                                                                             handleToggleReactivateDrug(p._id, medIdx >= 0 ? medIdx : 0);
+                                                                                                                         }
+                                                                                                                     }}
+                                                                                                                     className="accent-red-600 w-3.5 h-3.5 cursor-pointer"
+                                                                                                                 />
+                                                                                                                 <span>{m.isDiscontinued ? 'Stopped' : 'Stop Drug'}</span>
+                                                                                                             </label>
+                                                                                                         )}
+                                                                                                     </div>
+                                                                                                    <div className="text-[9px] text-gray-500 flex flex-wrap items-center gap-1 mt-0.5">
+                                                                                                        <span className="font-medium text-gray-700">Strength: {m.dosage}</span>
                                                                                                         <span>|</span>
                                                                                                         <span className="font-medium text-gray-700">{m.frequency}</span>
                                                                                                         {m.route && <><span className="text-orange-500 font-bold px-1 rounded uppercase bg-orange-50 text-[8px] border border-orange-100">{m.route}</span></>}
+                                                                                                        <span className="text-purple-700 font-semibold text-[8px] bg-purple-50 px-1 rounded border border-purple-100">Dosage: {m.dosageText || 'As directed'}</span>
+                                                                                                        <span className="text-blue-600 italic text-[8px]">Note: {m.note || 'None'}</span>
                                                                                                     </div>
+                                                                                                    {m.isDiscontinued && (
+                                                                                                        <div className="mt-1 bg-red-50 border-l-2 border-red-500 text-red-800 px-2 py-1 rounded-r text-[10px] flex items-center gap-1.5 font-medium shadow-2xs">
+                                                                                                            <span className="font-bold text-red-700">Reason:</span>
+                                                                                                            <span className="italic font-normal">{m.discontinueReason || 'No reason specified'}</span>
+                                                                                                        </div>
+                                                                                                    )}
                                                                                                 </td>
                                                                                                 {dayTimes.map(timeStr => {
                                                                                                     const admin = dayHistory.find(h =>
@@ -1380,7 +1487,12 @@ const NurseTriage = () => {
                                                                                                     );
                                                                                                     return (
                                                                                                         <td key={timeStr} className="p-2 border-r text-center">
-                                                                                                            {admin ? (
+                                                                                                            {m.isDiscontinued ? (
+                                                                                                                <div className="inline-flex flex-col items-center justify-center p-1 rounded bg-red-100 border border-red-300 text-red-800 font-bold text-[8px] shadow-sm select-none" title="Doctor has stopped this medication">
+                                                                                                                    <span className="font-black text-[8px] text-red-700 uppercase tracking-tighter">STOPPED</span>
+                                                                                                                    <span className="text-[7px] text-red-600 leading-none">Do Not Serve</span>
+                                                                                                                </div>
+                                                                                                            ) : admin ? (
                                                                                                                 <div className="inline-flex flex-col items-center justify-center p-1 rounded-md bg-green-50 border border-green-200 shadow-sm group relative cursor-help">
                                                                                                                     <span className="font-black text-[8px] text-green-700 uppercase tracking-tighter">Given</span>
                                                                                                                     <span className="text-[7px] text-green-600 leading-none">{getNurseFirstName(admin.nurse?.name)}</span>
@@ -1414,27 +1526,40 @@ const NurseTriage = () => {
                                                                                                         </td>
                                                                                                     );
                                                                                                 })}
-                                                                                                <td className="p-2 text-center bg-green-50/20">
-                                                                                                    {!isReadOnly && (
-                                                                                                        <button
-                                                                                                            onClick={() => {
-                                                                                                                setAdminForm({
-                                                                                                                    ...adminForm,
-                                                                                                                    prescriptionId: p._id,
-                                                                                                                    medicineId: m._id || m.name,
-                                                                                                                    medicineName: m.name,
-                                                                                                                    dosage: m.dosage || '',
-                                                                                                                    date: new Date().toISOString().split('T')[0],
-                                                                                                                    time: new Date().toTimeString().slice(0, 5),
-                                                                                                                    remarks: ''
-                                                                                                                });
-                                                                                                                setShowDrugAdminModal(true);
-                                                                                                            }}
-                                                                                                            className="w-6 h-6 flex items-center justify-center mx-auto bg-green-600 text-white rounded-md hover:bg-green-700 transition hover:scale-110 shadow-sm"
-                                                                                                            title="Record Dose"
-                                                                                                        >
-                                                                                                            <FaPlus size={8} />
-                                                                                                        </button>
+                                                                                                <td className={`p-2 text-center ${m.isDiscontinued ? 'bg-red-50/40' : 'bg-green-50/20'}`}>
+                                                                                                    {m.isDiscontinued ? (
+                                                                                                        <div className="flex flex-col items-center justify-center">
+                                                                                                            <button
+                                                                                                                disabled
+                                                                                                                className="w-6 h-6 flex items-center justify-center mx-auto bg-red-200 text-red-700 rounded-md cursor-not-allowed shadow-sm border border-red-300"
+                                                                                                                title="Medication stopped by doctor. Cannot administer."
+                                                                                                            >
+                                                                                                                <FaTimes size={10} />
+                                                                                                            </button>
+                                                                                                            <span className="text-[7px] font-black text-red-600 uppercase mt-0.5">STOPPED</span>
+                                                                                                        </div>
+                                                                                                    ) : (
+                                                                                                        !isReadOnly && (
+                                                                                                            <button
+                                                                                                                onClick={() => {
+                                                                                                                    setAdminForm({
+                                                                                                                        ...adminForm,
+                                                                                                                        prescriptionId: p._id,
+                                                                                                                        medicineId: m._id || m.name,
+                                                                                                                        medicineName: m.name,
+                                                                                                                        dosage: m.dosage || '',
+                                                                                                                        date: new Date().toISOString().split('T')[0],
+                                                                                                                        time: new Date().toTimeString().slice(0, 5),
+                                                                                                                        remarks: ''
+                                                                                                                    });
+                                                                                                                    setShowDrugAdminModal(true);
+                                                                                                                }}
+                                                                                                                className="w-6 h-6 flex items-center justify-center mx-auto bg-green-600 text-white rounded-md hover:bg-green-700 transition hover:scale-110 shadow-sm"
+                                                                                                                title="Record Dose"
+                                                                                                            >
+                                                                                                                <FaPlus size={8} />
+                                                                                                            </button>
+                                                                                                        )
                                                                                                     )}
                                                                                                 </td>
                                                                                             </tr>
@@ -2632,6 +2757,58 @@ const NurseTriage = () => {
                                     Cancel
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Stop Drug Reason Modal */}
+            {showStopDrugModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4 animate-fade-in">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden border-t-4 border-red-600">
+                        <div className="bg-red-50 p-4 border-b border-red-100 flex justify-between items-center">
+                            <h3 className="font-bold text-lg text-red-800 flex items-center gap-2">
+                                🛑 Reason for Stopping Medication
+                            </h3>
+                            <button
+                                onClick={() => { setShowStopDrugModal(false); setStopDrugTarget(null); setStopDrugReason(''); }}
+                                className="text-gray-400 hover:text-gray-600 text-2xl font-bold"
+                            >
+                                &times;
+                            </button>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <div className="bg-gray-50 border p-3 rounded-lg">
+                                <p className="text-xs text-gray-500 font-semibold uppercase">Target Medication</p>
+                                <p className="font-bold text-gray-800 text-base">{stopDrugTarget?.medName}</p>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">
+                                    Discontinue Reason <span className="text-red-500">*</span>
+                                </label>
+                                <textarea
+                                    className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-red-400 outline-none text-sm"
+                                    rows="3"
+                                    placeholder="e.g. Patient experienced allergic rash, Adverse reaction, Treatment complete, etc."
+                                    value={stopDrugReason}
+                                    onChange={(e) => setStopDrugReason(e.target.value)}
+                                    autoFocus
+                                ></textarea>
+                            </div>
+                        </div>
+                        <div className="bg-gray-50 p-4 border-t flex justify-end gap-3">
+                            <button
+                                onClick={() => { setShowStopDrugModal(false); setStopDrugTarget(null); setStopDrugReason(''); }}
+                                className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg font-semibold text-sm transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleConfirmStopDrug}
+                                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-sm shadow transition flex items-center gap-2"
+                            >
+                                🛑 Confirm & Stop Medication
+                            </button>
                         </div>
                     </div>
                 </div>

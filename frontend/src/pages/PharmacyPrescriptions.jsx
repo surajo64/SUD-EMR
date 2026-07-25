@@ -136,6 +136,11 @@ const PharmacyPrescriptions = () => {
                 dosage: med.dosage || 'As directed',
                 frequency: med.frequency || 'As directed',
                 duration: med.duration || 'As directed',
+                route: med.route || '',
+                form: med.form || '',
+                dosageText: med.dosageText || '',
+                note: med.note || '',
+                prescribedQuantity: med.quantity || 1,
                 quantityDispensed: med.quantity || 1 // Use doctor's quantity or default to 1
             }))
             : [];
@@ -512,10 +517,15 @@ const PharmacyPrescriptions = () => {
     const renderMedicines = (medicines) => {
         if (!Array.isArray(medicines)) return medicines || '';
         return medicines.map((med, idx) => (
-            <div key={idx} className="mb-1 flex items-center gap-2">
-                <span className="font-semibold">{med.name}</span> - {med.dosage}, {med.frequency}, {(med.duration && !isNaN(med.duration)) ? `${med.duration} days` : med.duration}
+            <div key={idx} className="mb-1 flex items-center gap-2 flex-wrap text-sm">
+                <span className="font-semibold text-gray-900">{med.name}</span>
+                {med.dosage && <span className="text-gray-600">- Strength: {med.dosage}</span>}
+                <span className="text-gray-500">{med.frequency}</span>
+                <span className="text-gray-500">{(med.duration && !isNaN(med.duration)) ? `${med.duration} days` : med.duration}</span>
+                {med.dosageText && <span className="text-purple-700 font-medium bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 text-xs">Dosage: {med.dosageText}</span>}
+                {med.note && <span className="text-blue-600 italic bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 text-xs">Note: {med.note}</span>}
                 {med.buyOutside && (
-                    <span className="text-[10px] bg-orange-100 text-orange-700 px-1 rounded border border-orange-200 font-bold">
+                    <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded border border-orange-200 font-bold">
                         BUY OUTSIDE
                     </span>
                 )}
@@ -766,7 +776,7 @@ const PharmacyPrescriptions = () => {
                                 Prescription for {selectedPatient.name}
                             </h3>
                             <p className="text-sm text-gray-600">
-                                Prescribed on: {new Date(selectedPrescription.createdAt).toLocaleString()}
+                                <span className="font-semibold text-gray-700">Prescribed by:</span> <span className="font-bold text-blue-900">{selectedPrescription.doctor?.name ? (selectedPrescription.doctor.name.toLowerCase().startsWith('dr') ? selectedPrescription.doctor.name : `Dr. ${selectedPrescription.doctor.name}`) : 'Doctor'}</span> | {new Date(selectedPrescription.createdAt).toLocaleString()}
                             </p>
                         </div>
                         <button
@@ -794,7 +804,13 @@ const PharmacyPrescriptions = () => {
                                 {selectedPrescription.medicines.map((med, idx) => (
                                     <div key={idx} className="p-3 border-b last:border-0">
                                         <p className="font-bold">{med.name}</p>
-                                        <p className="text-sm text-gray-600">{med.dosage} | {med.frequency} | {med.duration}</p>
+                                        <div className="text-sm text-gray-600 space-y-0.5 mt-1">
+                                            <p><span className="font-medium">Strength:</span> {med.dosage || 'N/A'}</p>
+                                            <p><span className="font-medium">Frequency:</span> {med.frequency}</p>
+                                            <p><span className="font-medium">Duration:</span> {med.duration}</p>
+                                            <p><span className="font-medium">Dosage:</span> {med.dosageText || 'As directed'}</p>
+                                            <p><span className="font-medium">Note:</span> {med.note || 'None'}</p>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -840,7 +856,7 @@ const PharmacyPrescriptions = () => {
                                             return (
                                                 <div key={index} className="mb-4 pb-4 border-b last:border-0">
                                                     <div className="flex justify-between items-start mb-2">
-                                                        <p className="font-bold text-lg">{med.name}</p>
+                                                        <p className="font-bold text-lg text-gray-900">{med.name}</p>
                                                         <div className="text-right">
                                                             <p className="text-sm font-semibold text-gray-700">Unit Price: ₦{unitPrice.toLocaleString()}</p>
                                                             <p className="text-sm font-bold text-blue-600">Total: ₦{totalCost.toLocaleString()}</p>
@@ -849,6 +865,20 @@ const PharmacyPrescriptions = () => {
                                                             )}
                                                         </div>
                                                     </div>
+
+                                                    {/* Full Prescription Details Summary */}
+                                                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-3 my-3 text-xs md:text-sm">
+                                                        <p className="font-bold text-blue-900 mb-2 text-xs uppercase tracking-wider flex items-center gap-1">
+                                                            📋 Doctor Prescribed Details
+                                                        </p>
+                                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-gray-800">
+                                                            <div><span className="text-gray-500 font-medium">Prescribed Qty:</span> <span className="font-bold text-blue-800 bg-blue-100 px-1.5 py-0.5 rounded">{med.prescribedQuantity || med.quantityDispensed || 1}</span></div>
+                                                            <div><span className="text-gray-500 font-medium">Frequency:</span> <span className="font-semibold">{med.frequency || 'As directed'}</span></div>
+                                                            <div><span className="text-gray-500 font-medium">Duration:</span> <span className="font-semibold">{(med.duration && !isNaN(med.duration)) ? `${med.duration} days` : (med.duration || 'As directed')}</span></div>
+                                                            <div><span className="text-gray-500 font-medium">Route:</span> <span className="font-semibold">{med.route || 'As directed'}</span></div>
+                                                        </div>
+                                                    </div>
+
                                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
                                                         <div>
                                                             <label className="block text-sm font-semibold text-gray-700 mb-1">
@@ -885,14 +915,24 @@ const PharmacyPrescriptions = () => {
                                                         </div>
                                                         <div>
                                                             <label className="block text-sm font-semibold text-gray-700 mb-1">
-                                                                Dosage/Instruction
+                                                                Strength
                                                             </label>
                                                             <input
                                                                 type="text"
-                                                                className="border p-2 rounded w-full"
+                                                                className="border p-2 rounded w-full bg-gray-50"
                                                                 value={med.dosage}
                                                                 readOnly
                                                             />
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                                                        <div className="bg-purple-50 border border-purple-100 rounded p-2">
+                                                            <span className="text-xs font-semibold text-purple-700">Dosage: </span>
+                                                            <span className="text-xs text-purple-800">{med.dosageText || 'As directed'}</span>
+                                                        </div>
+                                                        <div className="bg-blue-50 border border-blue-100 rounded p-2">
+                                                            <span className="text-xs font-semibold text-blue-700">Note: </span>
+                                                            <span className="text-xs text-blue-800">{med.note || 'None'}</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1089,90 +1129,113 @@ const PharmacyPrescriptions = () => {
                                     </div>
                                 </div>
                             ) : (
-                                <div>
-                                    <div className="bg-green-50 p-4 rounded mb-6">
-                                        <p className="text-green-700 font-semibold flex items-center gap-2">
-                                            <FaCheckCircle /> Payment Verified - Ready to Dispense
-                                        </p>
-                                    </div>
+                                    <div>
+                                        <div className="bg-green-50 p-4 rounded mb-6">
+                                            <p className="text-green-700 font-semibold flex items-center gap-2">
+                                                <FaCheckCircle /> Payment Verified - Ready to Dispense
+                                            </p>
+                                        </div>
 
-                                    {/* Editable Dispensing Form */}
-                                    <div className="bg-blue-50 p-6 rounded mb-6">
-                                        <h4 className="font-bold text-lg mb-4">Medications to Dispense</h4>
-                                        <p className="text-sm text-gray-600 mb-4">
-                                            Review and edit quantities/dosages as needed based on doctor's instructions and inventory availability.
-                                        </p>
+                                        {/* Editable Dispensing Form */}
+                                        <div className="bg-blue-50 p-6 rounded mb-6">
+                                            <h4 className="font-bold text-lg mb-4">Medications to Dispense</h4>
+                                            <p className="text-sm text-gray-600 mb-4">
+                                                Review and edit quantities/dosages as needed based on doctor's instructions and inventory availability.
+                                            </p>
 
-                                        <div className="space-y-4">
-                                            {dispensingMedicines.map((med, index) => (
-                                                <div key={index} className="bg-white p-4 rounded border">
-                                                    <p className="font-bold text-lg mb-3">{med.name}</p>
+                                            <div className="space-y-4">
+                                                {dispensingMedicines.map((med, index) => (
+                                                    <div key={index} className="bg-white p-4 rounded border">
+                                                        <p className="font-bold text-lg mb-3">{med.name}</p>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                            <div>
+                                                                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                                                    Quantity to Dispense
+                                                                </label>
+                                                                <input
+                                                                    type="number"
+                                                                    min="1"
+                                                                    className="border p-2 rounded w-full"
+                                                                    value={med.quantityDispensed}
+                                                                    onChange={(e) => updateMedicine(index, 'quantityDispensed', parseInt(e.target.value))}
+                                                                />
+                                                                <p className="text-xs text-gray-600 mt-1">
+                                                                    Available: {inventoryAvailability[med.name]?.available || 0}
+                                                                    {(inventoryAvailability[med.name]?.available || 0) < med.quantityDispensed && (
+                                                                        <span className="text-red-600 font-bold ml-2">INSUFFICIENT STOCK!</span>
+                                                                    )}
+                                                                </p>
+                                                            </div>
 
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                        <div>
-                                                            <label className="block text-sm font-semibold text-gray-700 mb-1">
-                                                                Quantity to Dispense
-                                                            </label>
-                                                            <input
-                                                                type="number"
-                                                                min="1"
-                                                                className="border p-2 rounded w-full"
-                                                                value={med.quantityDispensed}
-                                                                onChange={(e) => updateMedicine(index, 'quantityDispensed', parseInt(e.target.value))}
-                                                            />
-                                                            <p className="text-xs text-gray-600 mt-1">
-                                                                Available: {inventoryAvailability[med.name]?.available || 0}
-                                                                {(inventoryAvailability[med.name]?.available || 0) < med.quantityDispensed && (
-                                                                    <span className="text-red-600 font-bold ml-2">INSUFFICIENT STOCK!</span>
-                                                                )}
-                                                            </p>
-                                                        </div>
+                                                            <div>
+                                                                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                                                    Strength
+                                                                </label>
+                                                                <input
+                                                                    type="text"
+                                                                    className="border p-2 rounded w-full bg-gray-50"
+                                                                    value={med.dosage}
+                                                                    onChange={(e) => updateMedicine(index, 'dosage', e.target.value)}
+                                                                    placeholder="e.g., 500mg"
+                                                                />
+                                                            </div>
 
-                                                        <div>
-                                                            <label className="block text-sm font-semibold text-gray-700 mb-1">
-                                                                Dosage
-                                                            </label>
-                                                            <input
-                                                                type="text"
-                                                                className="border p-2 rounded w-full"
-                                                                value={med.dosage}
-                                                                onChange={(e) => updateMedicine(index, 'dosage', e.target.value)}
-                                                                placeholder="e.g., 500mg"
-                                                            />
-                                                        </div>
+                                                            <div>
+                                                                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                                                    Frequency
+                                                                </label>
+                                                                <input
+                                                                    type="text"
+                                                                    className="border p-2 rounded w-full"
+                                                                    value={med.frequency}
+                                                                    onChange={(e) => updateMedicine(index, 'frequency', e.target.value)}
+                                                                    placeholder="e.g., Twice daily"
+                                                                />
+                                                            </div>
 
-                                                        <div>
-                                                            <label className="block text-sm font-semibold text-gray-700 mb-1">
-                                                                Frequency
-                                                            </label>
-                                                            <input
-                                                                type="text"
-                                                                className="border p-2 rounded w-full"
-                                                                value={med.frequency}
-                                                                onChange={(e) => updateMedicine(index, 'frequency', e.target.value)}
-                                                                placeholder="e.g., Twice daily"
-                                                            />
-                                                        </div>
+                                                            <div>
+                                                                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                                                    Duration
+                                                                </label>
+                                                                <input
+                                                                    type="text"
+                                                                    className="border p-2 rounded w-full"
+                                                                    value={(med.duration && !isNaN(med.duration)) ? `${med.duration} days` : med.duration}
+                                                                    onChange={(e) => updateMedicine(index, 'duration', e.target.value)}
+                                                                    placeholder="e.g., 7 days"
+                                                                />
+                                                            </div>
 
-                                                        <div>
-                                                            <label className="block text-sm font-semibold text-gray-700 mb-1">
-                                                                Duration
-                                                            </label>
-                                                            <input
-                                                                type="text"
-                                                                className="border p-2 rounded w-full"
-                                                                value={(med.duration && !isNaN(med.duration)) ? `${med.duration} days` : med.duration}
-                                                                onChange={(e) => updateMedicine(index, 'duration', e.target.value)}
-                                                                placeholder="e.g., 7 days"
-                                                            />
+                                                            <div>
+                                                                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                                                    Dosage
+                                                                </label>
+                                                                <input
+                                                                    type="text"
+                                                                    className="border p-2 rounded w-full bg-purple-50"
+                                                                    value={med.dosageText || ''}
+                                                                    onChange={(e) => updateMedicine(index, 'dosageText', e.target.value)}
+                                                                    placeholder="e.g., 1 tablet twice daily"
+                                                                />
+                                                            </div>
+
+                                                            <div>
+                                                                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                                                    Note
+                                                                </label>
+                                                                <input
+                                                                    type="text"
+                                                                    className="border p-2 rounded w-full bg-blue-50"
+                                                                    value={med.note || ''}
+                                                                    onChange={(e) => updateMedicine(index, 'note', e.target.value)}
+                                                                    placeholder="e.g., Take after meals"
+                                                                />
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            ))}
+                                                ))}
+                                            </div>
                                         </div>
-                                    </div>
-
-                                    {/* Dispensing Instructions */}
                                     <div className="bg-gradient-to-r from-green-50 to-blue-50 p-6 rounded mb-6">
                                         <h4 className="font-bold text-lg mb-3 flex items-center gap-2">
                                             <FaBoxOpen className="text-green-600" /> Dispensing Checklist

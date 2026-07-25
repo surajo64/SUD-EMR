@@ -85,7 +85,8 @@ const getPrescriptions = async (req, res) => {
 // @access  Private
 const getPatientPrescriptions = async (req, res) => {
     const prescriptions = await Prescription.find({ patient: req.params.id })
-        .populate('doctor', 'name');
+        .populate('doctor', 'name')
+        .populate('medicines.discontinuedBy', 'name');
     res.json(prescriptions);
 };
 
@@ -97,7 +98,8 @@ const getPrescriptionsByVisit = async (req, res) => {
         .populate('doctor', 'name')
         .populate('patient', 'name age gender mrn provider')
         .populate('charge')
-        .populate('dispensedBy', 'name');
+        .populate('dispensedBy', 'name')
+        .populate('medicines.discontinuedBy', 'name');
     res.json(prescriptions);
 };
 
@@ -639,6 +641,41 @@ const deletePrescription = async (req, res) => {
     res.json({ message: 'Prescription and associated pending charge deleted.' });
 };
 
+// @desc    Toggle discontinue status of a medicine in a prescription
+// @route   PUT /api/prescriptions/:id/medicines/:medIndex/discontinue
+// @access  Private (Doctor/Admin)
+const toggleDiscontinueMedicine = async (req, res) => {
+    try {
+        const { id, medIndex } = req.params;
+        const prescription = await Prescription.findById(id);
+
+        if (!prescription) {
+            return res.status(404).json({ message: 'Prescription not found' });
+        }
+
+        const idx = parseInt(medIndex);
+        if (isNaN(idx) || idx < 0 || idx >= prescription.medicines.length) {
+            return res.status(400).json({ message: 'Invalid medicine index' });
+        }
+
+        const { reason } = req.body || {};
+        const medicine = prescription.medicines[idx];
+        const isDiscontinued = !medicine.isDiscontinued;
+
+        medicine.isDiscontinued = isDiscontinued;
+        medicine.discontinuedBy = isDiscontinued ? req.user._id : null;
+        medicine.discontinuedAt = isDiscontinued ? new Date() : null;
+        medicine.discontinueReason = isDiscontinued ? (reason || 'No reason provided') : '';
+
+        await prescription.save();
+        await prescription.populate('medicines.discontinuedBy', 'name');
+        res.json({ message: `Medicine ${isDiscontinued ? 'discontinued' : 'reactivated'} successfully`, prescription });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Error updating medicine status' });
+    }
+};
+
 module.exports = {
     createPrescription,
     getPrescriptions,
@@ -649,4 +686,5 @@ module.exports = {
     dispenseWithInventory,
     bulkDispenseWithInventory,
     deletePrescription,
+    toggleDiscontinueMedicine,
 };

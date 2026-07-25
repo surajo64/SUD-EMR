@@ -8,12 +8,18 @@ const prescriptionSchema = mongoose.Schema({
     medicines: [{
         name: { type: String, required: true },
         dosage: { type: String, required: true },
+        dosageText: { type: String },
+        note: { type: String },
         frequency: { type: String, required: true },
         duration: { type: String, required: true },
         route: { type: String },
         form: { type: String },
         quantity: { type: Number, default: 1 }, // Doctor's prescribed quantity
         buyOutside: { type: Boolean, default: false }, // If true, pharmacist won't charge or dispense from stock
+        isDiscontinued: { type: Boolean, default: false },
+        discontinuedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        discontinuedAt: { type: Date },
+        discontinueReason: { type: String }
     }],
     notes: { type: String },
     pharmacy: { type: mongoose.Schema.Types.ObjectId, ref: 'Pharmacy' }, // Target pharmacy
