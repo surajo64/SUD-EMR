@@ -4,7 +4,7 @@ import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import { AppContext } from '../context/AppContext';
 import Layout from '../components/Layout';
-import { FaUserMd, FaSearch, FaCheckCircle, FaNotesMedical, FaHeartbeat, FaMoneyBillWave, FaTrash, FaEdit, FaPlus, FaTimes, FaTable, FaClock, FaChevronDown, FaChevronRight, FaHistory } from 'react-icons/fa';
+import { FaUserMd, FaSearch, FaCheckCircle, FaNotesMedical, FaHeartbeat, FaMoneyBillWave, FaTrash, FaEdit, FaPlus, FaTimes, FaTable, FaClock, FaChevronDown, FaChevronRight, FaHistory, FaClipboardList } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import LoadingOverlay from '../components/loadingOverlay';
 import { formatAge } from '../utils/patientUtils';
@@ -201,6 +201,23 @@ const NurseTriage = () => {
         } catch (err) {
             console.error(err);
             toast.error('Error reactivating medication');
+        }
+    };
+
+    const handleUpdateOrderTaskStatus = async (taskId, newStatus = 'Completed') => {
+        if (!selectedEncounter) return;
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const response = await axios.put(
+                `${backendUrl}/api/visits/${selectedEncounter._id}/order-tasks/${taskId}/status`,
+                { status: newStatus },
+                config
+            );
+            toast.success(`Order task marked as ${newStatus.toLowerCase()}`);
+            setSelectedEncounter(response.data);
+        } catch (err) {
+            console.error('Error updating order task status:', err);
+            toast.error(err.response?.data?.message || 'Failed to update order task status');
         }
     };
 
@@ -1580,6 +1597,89 @@ const NurseTriage = () => {
                                             <FaClock className="text-blue-400" /> Compact observation chart. Prescribed and dispensed medications are displayed.
                                         </div>
                                     </div>
+                                </div>
+                            )}
+
+                            {/* Doctor Order Tasks for Nursing Action */}
+                            {selectedEncounter && (
+                                <div className="mb-6 bg-indigo-50/70 p-4 rounded-lg border border-indigo-200 shadow-sm">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <h4 className="text-sm font-bold text-indigo-900 flex items-center gap-2">
+                                            <FaClipboardList className="text-indigo-600" /> Doctor Order Tasks & Instructions
+                                        </h4>
+                                        {selectedEncounter.orderTasks && selectedEncounter.orderTasks.length > 0 && (
+                                            <span className="text-xs font-semibold px-2.5 py-0.5 bg-indigo-200 text-indigo-800 rounded-full">
+                                                {selectedEncounter.orderTasks.filter(t => t.status === 'Pending').length} Pending
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {(!selectedEncounter.orderTasks || selectedEncounter.orderTasks.length === 0) ? (
+                                        <p className="text-xs text-gray-500 italic bg-white p-3 rounded border border-indigo-100">
+                                            No order tasks recorded by doctor for this encounter yet.
+                                        </p>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {selectedEncounter.orderTasks.map((task, idx) => {
+                                                const isCompleted = task.status === 'Completed';
+                                                return (
+                                                    <div key={task._id || idx} className={`p-3.5 rounded-lg border bg-white shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 ${isCompleted ? 'border-green-300 bg-green-50/30' : 'border-indigo-200'}`}>
+                                                        <div className="space-y-1.5 flex-1">
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <span className={`text-xs font-bold px-2.5 py-0.5 rounded ${isCompleted ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-amber-100 text-amber-800 border border-amber-300'}`}>
+                                                                    {task.orderType}
+                                                                </span>
+                                                                {task.orderType === 'Others' && task.customOrderTask && (
+                                                                    <span className="text-xs font-bold text-gray-800 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">
+                                                                        Task: {task.customOrderTask}
+                                                                    </span>
+                                                                )}
+                                                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${isCompleted ? 'bg-green-600 text-white' : 'bg-amber-500 text-white'}`}>
+                                                                    {task.status || 'Pending'}
+                                                                </span>
+                                                            </div>
+
+                                                            <p className="text-xs text-gray-800 font-medium whitespace-pre-line bg-gray-50 p-2.5 rounded border border-gray-200 mt-1">
+                                                                {task.instructions}
+                                                            </p>
+
+                                                            <div className="flex items-center gap-3 text-[11px] text-gray-500 pt-1 flex-wrap">
+                                                                <span>Doctor: <strong className="text-gray-700">{task.doctorName || task.doctor?.name || 'Doctor'}</strong></span>
+                                                                <span>Ordered: {new Date(task.createdAt).toLocaleString()}</span>
+                                                                {isCompleted && (
+                                                                    <span className="text-green-700 font-medium bg-green-100/80 px-2 py-0.5 rounded border border-green-200">
+                                                                        • Completed by Nurse <strong>{task.completedByName || task.completedBy?.name || 'Nurse'}</strong> at {new Date(task.completedAt).toLocaleString()}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        {user && ['nurse', 'matron'].includes(user.role) && (
+                                                            <div className="flex items-center gap-2 self-start md:self-center">
+                                                                {!isCompleted ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleUpdateOrderTaskStatus(task._id, 'Completed')}
+                                                                        className="px-3.5 py-2 text-xs bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition flex items-center gap-1.5 shadow-sm active:scale-95"
+                                                                    >
+                                                                        <FaCheckCircle /> Mark as Completed
+                                                                    </button>
+                                                                ) : (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleUpdateOrderTaskStatus(task._id, 'Pending')}
+                                                                        className="px-2.5 py-1 text-[11px] bg-gray-200 text-gray-700 font-semibold rounded hover:bg-gray-300 transition"
+                                                                    >
+                                                                        Re-open Task
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 

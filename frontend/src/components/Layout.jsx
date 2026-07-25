@@ -8,6 +8,7 @@ import useHospitalSettings from '../hooks/useHospitalSettings';
 import PharmacyNotification from './PharmacyNotification';
 import DoctorNotification from './DoctorNotification';
 import LabNotification from './LabNotification';
+import NurseNotification from './NurseNotification';
 
 
 const Layout = ({ children }) => {
@@ -54,6 +55,7 @@ const Layout = ({ children }) => {
                         </h2>
                     </div>
                     <div className="flex items-center gap-6">
+                        <NurseNotification />
                         <PharmacyNotification />
                         <DoctorNotification />
                         <LabNotification />

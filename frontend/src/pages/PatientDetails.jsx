@@ -9,7 +9,7 @@ import { checkRange, getRangeColorClass } from '../utils/labUtils';
 import Layout from '../components/Layout';
 import LoadingOverlay from '../components/loadingOverlay';
 import AppointmentModal from '../components/AppointmentModal';
-import { FaTimes, FaFileMedical, FaPills, FaChevronDown, FaChevronUp, FaHeartbeat, FaNotesMedical, FaProcedures, FaXRay, FaVial, FaUserMd, FaCalendarPlus, FaPlus, FaTrash, FaEdit, FaSearch, FaClock, FaChevronRight, FaFileAlt, FaCheckCircle, FaInfoCircle, FaDollarSign, FaPrint, FaUpload, FaEye, FaDownload, FaStethoscope } from 'react-icons/fa';
+import { FaTimes, FaFileMedical, FaPills, FaChevronDown, FaChevronUp, FaHeartbeat, FaNotesMedical, FaProcedures, FaXRay, FaVial, FaUserMd, FaCalendarPlus, FaPlus, FaTrash, FaEdit, FaSearch, FaClock, FaChevronRight, FaFileAlt, FaCheckCircle, FaInfoCircle, FaDollarSign, FaPrint, FaUpload, FaEye, FaDownload, FaStethoscope, FaClipboardList } from 'react-icons/fa';
 import icd11Data from '../data/icd11.json';
 import useHospitalSettings from '../hooks/useHospitalSettings';
 
@@ -880,6 +880,70 @@ const PatientDetails = () => {
     const [showVitalsModal, setShowVitalsModal] = useState(false);
     const [showNurseNoteModal, setShowNurseNoteModal] = useState(false);
     const [nursingNote, setNursingNote] = useState('');
+
+    // Order Task States & Handlers
+    const [showOrderTaskModal, setShowOrderTaskModal] = useState(false);
+    const [orderType, setOrderType] = useState('Admission order');
+    const [customOrderTask, setCustomOrderTask] = useState('');
+    const [orderInstructions, setOrderInstructions] = useState('');
+    const [submittingOrderTask, setSubmittingOrderTask] = useState(false);
+
+    const handleSaveOrderTask = async (e) => {
+        e.preventDefault();
+        if (!orderType) {
+            toast.error('Please select an order type');
+            return;
+        }
+        if (orderType === 'Others' && !customOrderTask.trim()) {
+            toast.error('Please specify the order task');
+            return;
+        }
+        if (!orderInstructions.trim()) {
+            toast.error('Please enter instructions for the nurse');
+            return;
+        }
+
+        try {
+            setSubmittingOrderTask(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const response = await axios.post(
+                `${backendUrl}/api/visits/${encounter._id}/order-tasks`,
+                {
+                    orderType,
+                    customOrderTask: orderType === 'Others' ? customOrderTask.trim() : '',
+                    instructions: orderInstructions.trim()
+                },
+                config
+            );
+            toast.success('Order task created successfully!');
+            setEncounter(response.data);
+            setShowOrderTaskModal(false);
+            setOrderType('Admission order');
+            setCustomOrderTask('');
+            setOrderInstructions('');
+        } catch (err) {
+            console.error('Error saving order task:', err);
+            toast.error(err.response?.data?.message || 'Failed to save order task');
+        } finally {
+            setSubmittingOrderTask(false);
+        }
+    };
+
+    const handleUpdateOrderTaskStatus = async (taskId, newStatus = 'Completed') => {
+        try {
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const response = await axios.put(
+                `${backendUrl}/api/visits/${encounter._id}/order-tasks/${taskId}/status`,
+                { status: newStatus },
+                config
+            );
+            toast.success(`Order task marked as ${newStatus.toLowerCase()}`);
+            setEncounter(response.data);
+        } catch (err) {
+            console.error('Error updating order task status:', err);
+            toast.error(err.response?.data?.message || 'Failed to update order task status');
+        }
+    };
 
     useEffect(() => {
         if (showSoapModal && encounter && patient) {
@@ -3026,6 +3090,87 @@ const PatientDetails = () => {
                                                     }
                                                 })()}
 
+                                                {/* Doctor Order Tasks for Nursing Action */}
+                                                <div className="bg-indigo-50/70 p-4 rounded-lg mt-6 border border-indigo-200 shadow-sm">
+                                                    <div className="flex justify-between items-center mb-3">
+                                                        <h4 className="text-sm font-bold text-indigo-900 flex items-center gap-2">
+                                                            <FaClipboardList className="text-indigo-600" /> Doctor Order Tasks & Instructions for Nurse
+                                                        </h4>
+                                                        {encounter.orderTasks && encounter.orderTasks.length > 0 && (
+                                                            <span className="text-xs font-semibold px-2.5 py-0.5 bg-indigo-200 text-indigo-800 rounded-full">
+                                                                {encounter.orderTasks.filter(t => t.status === 'Pending').length} Pending
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    {(!encounter.orderTasks || encounter.orderTasks.length === 0) ? (
+                                                        <p className="text-xs text-gray-500 italic bg-white p-3 rounded border border-indigo-100">
+                                                            No order tasks recorded by doctor yet.
+                                                        </p>
+                                                    ) : (
+                                                        <div className="space-y-3">
+                                                            {encounter.orderTasks.map((task, idx) => {
+                                                                const isCompleted = task.status === 'Completed';
+                                                                return (
+                                                                    <div key={task._id || idx} className={`p-3.5 rounded-lg border bg-white shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 ${isCompleted ? 'border-green-300 bg-green-50/30' : 'border-indigo-200'}`}>
+                                                                        <div className="space-y-1.5 flex-1">
+                                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                                <span className={`text-xs font-bold px-2.5 py-0.5 rounded ${isCompleted ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-amber-100 text-amber-800 border border-amber-300'}`}>
+                                                                                    {task.orderType}
+                                                                                </span>
+                                                                                {task.orderType === 'Others' && task.customOrderTask && (
+                                                                                    <span className="text-xs font-bold text-gray-800 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">
+                                                                                        Task: {task.customOrderTask}
+                                                                                    </span>
+                                                                                )}
+                                                                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${isCompleted ? 'bg-green-600 text-white' : 'bg-amber-500 text-white'}`}>
+                                                                                    {task.status || 'Pending'}
+                                                                                </span>
+                                                                            </div>
+
+                                                                            <p className="text-xs text-gray-800 font-medium whitespace-pre-line bg-gray-50 p-2.5 rounded border border-gray-200 mt-1">
+                                                                                {task.instructions}
+                                                                            </p>
+
+                                                                            <div className="flex items-center gap-3 text-[11px] text-gray-500 pt-1 flex-wrap">
+                                                                                <span>Doctor: <strong className="text-gray-700">{task.doctorName || task.doctor?.name || 'Doctor'}</strong></span>
+                                                                                <span>Ordered: {new Date(task.createdAt).toLocaleString()}</span>
+                                                                                {isCompleted && (
+                                                                                    <span className="text-green-700 font-medium bg-green-100/80 px-2 py-0.5 rounded border border-green-200">
+                                                                                        • Completed by Nurse <strong>{task.completedByName || task.completedBy?.name || 'Nurse'}</strong> at {new Date(task.completedAt).toLocaleString()}
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+
+                                                                        {user && ['nurse', 'matron'].includes(user.role) && (
+                                                                            <div className="flex items-center gap-2 self-start md:self-center">
+                                                                                {!isCompleted ? (
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => handleUpdateOrderTaskStatus(task._id, 'Completed')}
+                                                                                        className="px-3.5 py-2 text-xs bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition flex items-center gap-1.5 shadow-sm active:scale-95"
+                                                                                    >
+                                                                                        <FaCheckCircle /> Mark as Completed
+                                                                                    </button>
+                                                                                ) : (
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => handleUpdateOrderTaskStatus(task._id, 'Pending')}
+                                                                                        className="px-2.5 py-1 text-[11px] bg-gray-200 text-gray-700 font-semibold rounded hover:bg-gray-300 transition"
+                                                                                    >
+                                                                                        Re-open Task
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </div>
+
                                                 {/* Drug Observation Chart (MAR) - For Inpatients */}
                                                 {encounter.type === 'Inpatient' && (
                                                     <div className="mt-8 border rounded-lg overflow-hidden shadow-sm bg-white">
@@ -3252,14 +3397,27 @@ const PatientDetails = () => {
                                                         ) : 'Clinical Documentation'}
                                                     </h3>
                                                     {canEdit && (
-                                                        <button
-                                                            onClick={() => { setEditingNoteId(null); setShowSoapModal(true); }}
-                                                            className={(encounter.type === 'ANC Visit' || encounter.encounterType === 'ANC Visit')
-                                                                ? "px-4 py-2 rounded flex items-center gap-2 bg-pink-600 text-white hover:bg-pink-700"
-                                                                : "px-4 py-2 rounded flex items-center gap-2 bg-green-600 text-white hover:bg-green-700"}
-                                                        >
-                                                            <FaPlus /> {(encounter.type === 'ANC Visit' || encounter.encounterType === 'ANC Visit') ? '🤰 Add ANC Note' : 'Add Clinical Note'}
-                                                        </button>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setOrderType('Admission order');
+                                                                    setCustomOrderTask('');
+                                                                    setOrderInstructions('');
+                                                                    setShowOrderTaskModal(true);
+                                                                }}
+                                                                className="px-4 py-2 rounded flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700 font-semibold shadow-sm text-sm"
+                                                            >
+                                                                <FaClipboardList /> Order Task
+                                                            </button>
+                                                            <button
+                                                                onClick={() => { setEditingNoteId(null); setShowSoapModal(true); }}
+                                                                className={(encounter.type === 'ANC Visit' || encounter.encounterType === 'ANC Visit')
+                                                                    ? "px-4 py-2 rounded flex items-center gap-2 bg-pink-600 text-white hover:bg-pink-700 text-sm"
+                                                                    : "px-4 py-2 rounded flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 text-sm"}
+                                                            >
+                                                                <FaPlus /> {(encounter.type === 'ANC Visit' || encounter.encounterType === 'ANC Visit') ? '🤰 Add ANC Note' : 'Add Clinical Note'}
+                                                            </button>
+                                                        </div>
                                                     )}
                                                 </div>
 
@@ -5632,6 +5790,97 @@ const PatientDetails = () => {
                                 </button>
                             )}
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Order Task Modal Popup */}
+            {showOrderTaskModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-150">
+                        {/* Modal Header */}
+                        <div className="bg-blue-600 text-white px-6 py-4 flex justify-between items-center">
+                            <h3 className="text-lg font-bold flex items-center gap-2">
+                                <FaClipboardList /> Order Task for Nurse
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={() => setShowOrderTaskModal(false)}
+                                className="text-white/80 hover:text-white transition"
+                            >
+                                <FaTimes size={20} />
+                            </button>
+                        </div>
+
+                        {/* Modal Form Body */}
+                        <form onSubmit={handleSaveOrderTask} className="p-6 space-y-4">
+                            {/* Order Type Dropdown */}
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                    Order Type <span className="text-red-500">*</span>
+                                </label>
+                                <select
+                                    value={orderType}
+                                    onChange={(e) => setOrderType(e.target.value)}
+                                    className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                    required
+                                >
+                                    <option value="Admission order">Admission order</option>
+                                    <option value="Discharge order">Discharge order</option>
+                                    <option value="Others">Others</option>
+                                </select>
+                            </div>
+
+                            {/* Custom Order Task Title - Appears when Others is selected */}
+                            {orderType === 'Others' && (
+                                <div className="animate-in fade-in duration-200">
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                        Order Task Title <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        required
+                                        placeholder="e.g. Catheterization, Wound Dressing, ECG Check..."
+                                        value={customOrderTask}
+                                        onChange={(e) => setCustomOrderTask(e.target.value)}
+                                        className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    />
+                                </div>
+                            )}
+
+                            {/* Doctor Instructions Textarea */}
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                    Doctor Instructions <span className="text-red-500">*</span>
+                                </label>
+                                <textarea
+                                    required
+                                    rows={4}
+                                    placeholder="Write detailed instructions for the nurse to carry out..."
+                                    value={orderInstructions}
+                                    onChange={(e) => setOrderInstructions(e.target.value)}
+                                    className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                />
+                            </div>
+
+                            {/* Modal Footer Buttons */}
+                            <div className="flex justify-end gap-3 pt-3 border-t">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowOrderTaskModal(false)}
+                                    className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-800 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={submittingOrderTask}
+                                    className="px-5 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition flex items-center gap-2 shadow disabled:opacity-50"
+                                >
+                                    {submittingOrderTask ? 'Saving...' : 'Save Order Task'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}

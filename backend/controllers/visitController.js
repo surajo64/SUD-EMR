@@ -286,6 +286,8 @@ const getVisits = async (req, res) => {
         .populate('doctor', 'name')
         .populate('consultingPhysician', 'name')
         .populate('clinicalNotes.doctor', 'name role')
+        .populate('orderTasks.doctor', 'name role')
+        .populate('orderTasks.completedBy', 'name role')
         .populate('clinic', 'name department')
         .populate('ward', 'name dailyRate')
         .populate('waivedBy', 'name')
@@ -475,6 +477,8 @@ const getVisitById = async (req, res) => {
         .populate('doctor', 'name')
         .populate('consultingPhysician', 'name')
         .populate('clinicalNotes.doctor', 'name role')
+        .populate('orderTasks.doctor', 'name role')
+        .populate('orderTasks.completedBy', 'name role')
         .populate('clinic', 'name department')
         .populate('ward', 'name dailyRate')
         .populate('waivedBy', 'name')
@@ -1360,6 +1364,102 @@ const savePostoperativeHandoverChecklist = async (req, res) => {
     }
 };
 
+// @desc    Add an order task to a visit (e.g. Admission order, Discharge order, Others)
+// @route   POST /api/visits/:id/order-tasks
+// @access  Private (Doctor/User)
+const saveOrderTask = async (req, res) => {
+    try {
+        const visit = await Visit.findById(req.params.id);
+        if (!visit) return res.status(404).json({ message: 'Visit not found' });
+
+        const { orderType, customOrderTask, instructions } = req.body;
+        if (!orderType || !instructions) {
+            return res.status(400).json({ message: 'Order type and instructions are required' });
+        }
+        if (orderType === 'Others' && (!customOrderTask || !customOrderTask.trim())) {
+            return res.status(400).json({ message: 'Order task title is required when Others is selected' });
+        }
+
+        const newTask = {
+            orderType,
+            customOrderTask: orderType === 'Others' ? customOrderTask.trim() : '',
+            instructions: instructions.trim(),
+            doctor: req.user._id,
+            doctorName: req.user.name,
+            status: 'Pending',
+            createdAt: new Date()
+        };
+
+        if (!visit.orderTasks) {
+            visit.orderTasks = [];
+        }
+
+        visit.orderTasks.push(newTask);
+        await visit.save();
+
+        const updatedVisit = await Visit.findById(visit._id)
+            .populate('patient', 'name mrn age gender contact')
+            .populate('doctor', 'name')
+            .populate('consultingPhysician', 'name')
+            .populate('clinicalNotes.doctor', 'name role')
+            .populate('orderTasks.doctor', 'name role')
+            .populate('orderTasks.completedBy', 'name role');
+
+        res.status(201).json(formatVisitWithClinicalNotes(updatedVisit));
+    } catch (error) {
+        console.error('saveOrderTask error:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Update order task status (e.g. Mark as Completed by Nurse)
+// @route   PUT /api/visits/:id/order-tasks/:taskId/status
+// @access  Private (Nurse/Doctor/User)
+const updateOrderTaskStatus = async (req, res) => {
+    try {
+        const visit = await Visit.findById(req.params.id);
+        if (!visit) return res.status(404).json({ message: 'Visit not found' });
+
+        const { taskId } = req.params;
+        const { status } = req.body;
+
+        if (!visit.orderTasks) {
+            return res.status(404).json({ message: 'No order tasks found for this visit' });
+        }
+
+        const task = visit.orderTasks.id(taskId) || visit.orderTasks.find(t => t._id.toString() === taskId);
+        if (!task) {
+            return res.status(404).json({ message: 'Order task not found' });
+        }
+
+        task.status = status || 'Completed';
+        if (task.status === 'Completed') {
+            task.completedBy = req.user._id;
+            task.completedByName = req.user.name;
+            task.completedAt = new Date();
+        } else if (task.status === 'Pending') {
+            task.completedBy = null;
+            task.completedByName = '';
+            task.completedAt = null;
+        }
+
+        await visit.save();
+
+        const updatedVisit = await Visit.findById(visit._id)
+            .populate('patient', 'name mrn age gender contact')
+            .populate('doctor', 'name')
+            .populate('consultingPhysician', 'name')
+            .populate('clinicalNotes.doctor', 'name role')
+            .populate('orderTasks.doctor', 'name role')
+            .populate('orderTasks.completedBy', 'name role');
+
+        res.json(formatVisitWithClinicalNotes(updatedVisit));
+    } catch (error) {
+        console.error('updateOrderTaskStatus error:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     createVisit,
     getVisits,
@@ -1376,7 +1476,9 @@ module.exports = {
     savePostoperativeHandoverChecklist,
     convertToInpatient,
     changeEncounterType,
-    saveClinicalNote
+    saveClinicalNote,
+    saveOrderTask,
+    updateOrderTaskStatus
 };
 
 

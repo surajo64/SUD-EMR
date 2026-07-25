@@ -26,5 +26,7 @@ router.route('/:id/postoperative-handover-checklists').post(protect, require('..
 router.route('/:id/clinical-notes').post(protect, require('../controllers/visitController').saveClinicalNote);
 router.route('/:id/convert-to-inpatient').put(protect, require('../controllers/visitController').convertToInpatient);
 router.route('/:id/change-type').put(protect, require('../controllers/visitController').changeEncounterType);
+router.route('/:id/order-tasks').post(protect, require('../controllers/visitController').saveOrderTask);
+router.route('/:id/order-tasks/:taskId/status').put(protect, require('../controllers/visitController').updateOrderTaskStatus);
 
 module.exports = router;

@@ -384,6 +384,18 @@ const visitSchema = mongoose.Schema({
     seenBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     seenAt: { type: Date },
     isActive: { type: Boolean },
+    orderTasks: [{
+        orderType: { type: String, required: true },
+        customOrderTask: { type: String },
+        instructions: { type: String, required: true },
+        doctor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        doctorName: { type: String },
+        status: { type: String, enum: ['Pending', 'In Progress', 'Completed', 'Cancelled'], default: 'Pending' },
+        completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        completedByName: { type: String },
+        completedAt: { type: Date },
+        createdAt: { type: Date, default: Date.now }
+    }],
 }, {
     timestamps: true,
 });
