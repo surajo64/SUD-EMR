@@ -2826,6 +2826,14 @@ const PatientDetails = () => {
                                                     className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'vitals' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600 hover:text-gray-800'}`}
                                                 >
                                                     <FaHeartbeat /> Nursing Triage
+                                                    {(() => {
+                                                        const nurseCount = (encounter?.clinicalNotes || []).filter(n => {
+                                                            const role = n.doctor?.role;
+                                                            const name = typeof n.doctor === 'object' ? n.doctor?.name : '';
+                                                            return (role && role.toLowerCase() === 'nurse') || (name && name.toLowerCase().startsWith('nurse'));
+                                                        }).length;
+                                                        return nurseCount > 0 ? <span className="ml-1 text-xs bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full font-bold">{nurseCount}</span> : null;
+                                                    })()}
                                                 </button>
                                                 <button
                                                     onClick={() => setActiveTab('soap')}
@@ -3483,6 +3491,151 @@ const PatientDetails = () => {
                                                         </div>
                                                     </div>
                                                 )}
+                                                {/* Nurse Recorded ANC / Clinical Notes in Nursing Triage */}
+                                                {(() => {
+                                                    const nurseNotes = (encounter?.clinicalNotes || []).filter(n => {
+                                                        const role = n.doctor?.role;
+                                                        const name = typeof n.doctor === 'object' ? n.doctor?.name : '';
+                                                        return (role && role.toLowerCase() === 'nurse') || (name && name.toLowerCase().startsWith('nurse'));
+                                                    });
+
+                                                    if (nurseNotes.length === 0) return null;
+
+                                                    return (
+                                                        <div className="bg-pink-50/50 p-4 rounded-xl mt-6 border border-pink-200 shadow-sm">
+                                                            <h4 className="text-base font-bold text-pink-900 mb-3 flex items-center gap-2">
+                                                                <span>🤰</span> Recorded ANC & Triage Notes (Nurse Documentation)
+                                                            </h4>
+                                                            <div className="space-y-4">
+                                                                {nurseNotes.map((note, noteIndex) => {
+                                                                    const noteId = note._id?.toString();
+                                                                    const noteDoctor = note.doctor;
+                                                                    const noteDoctorId = typeof noteDoctor === 'object' ? noteDoctor?._id?.toString() : noteDoctor?.toString();
+                                                                    const isNoteAuthor = noteDoctorId === user?._id;
+                                                                    const noteDoctorName = typeof noteDoctor === 'object' ? (noteDoctor?.name || 'Nurse') : (encounter.consultingPhysician?.name || 'Nurse');
+
+                                                                    return (
+                                                                        <div key={noteId || noteIndex} className="border border-pink-200 rounded-xl shadow-sm overflow-hidden bg-white">
+                                                                            {/* Note Header */}
+                                                                            <div className="bg-gradient-to-r from-pink-600 to-pink-700 text-white px-4 py-2.5 flex justify-between items-center">
+                                                                                <div className="flex items-center gap-3">
+                                                                                    <div className="w-7 h-7 rounded-full bg-white text-pink-700 flex items-center justify-center font-bold text-xs">
+                                                                                        {noteIndex + 1}
+                                                                                    </div>
+                                                                                    <div>
+                                                                                        <p className="font-semibold text-sm">
+                                                                                            {noteDoctorName.toLowerCase().startsWith('nurse') ? noteDoctorName : `Nurse ${noteDoctorName}`}
+                                                                                        </p>
+                                                                                        <p className="text-pink-100 text-xs">
+                                                                                            {note.createdAt ? new Date(note.createdAt).toLocaleString() : 'Date N/A'}
+                                                                                            {note.updatedAt && note.updatedAt !== note.createdAt && (
+                                                                                                <span className="ml-2">(updated {new Date(note.updatedAt).toLocaleString()})</span>
+                                                                                            )}
+                                                                                        </p>
+                                                                                    </div>
+                                                                                </div>
+                                                                                {canEdit && isNoteAuthor && (
+                                                                                    <button
+                                                                                        onClick={() => { setEditingNoteId(noteId); setShowSoapModal(true); }}
+                                                                                        className="flex items-center gap-1 bg-white text-pink-700 px-3 py-1 rounded-lg text-xs font-semibold hover:bg-pink-50 transition"
+                                                                                    >
+                                                                                        <FaEdit /> Edit
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+
+                                                                            <div className="p-4 space-y-3">
+                                                                                {/* ANC Note Display */}
+                                                                                {note.noteType === 'anc' && (
+                                                                                    <div className="space-y-3">
+                                                                                        <div className="bg-pink-50 border border-pink-200 rounded-lg p-3 flex items-center gap-2 text-sm text-pink-800">
+                                                                                            <span className="text-lg">🤰</span>
+                                                                                            <span><strong>ANC Visit Note</strong> — {note.gestation ? `${note.gestation} Gestation` : ''} {note.gravida ? `| ${note.gravida}` : ''}{note.para ? ` ${note.para}` : ''}</span>
+                                                                                        </div>
+                                                                                        {/* Booking Info Row */}
+                                                                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                                                                                            {[
+                                                                                                { label: 'Visit No.', val: note.ancVisitNumber },
+                                                                                                { label: 'Gravida', val: note.gravida },
+                                                                                                { label: 'Para', val: note.para },
+                                                                                                { label: 'LMP', val: note.lmp },
+                                                                                                { label: 'EDD', val: note.edd },
+                                                                                                { label: 'Gestation', val: note.gestation },
+                                                                                            ].filter(f => f.val).map(f => (
+                                                                                                <div key={f.label} className="bg-gray-50 rounded p-2 border">
+                                                                                                    <p className="text-gray-500 font-semibold text-[10px]">{f.label}</p>
+                                                                                                    <p className="font-bold text-gray-800">{f.val}</p>
+                                                                                                </div>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                        {note.ancComplaints && <div className="bg-gray-50 p-2 rounded border-l-4 border-pink-400"><p className="text-[11px] font-bold text-gray-600 mb-0.5">Chief Complaints</p><p className="text-sm text-gray-800 whitespace-pre-wrap">{note.ancComplaints}</p></div>}
+                                                                                        {note.ancRiskFactors && <div className="bg-red-50 p-2 rounded border-l-4 border-red-400"><p className="text-[11px] font-bold text-red-700 mb-0.5">⚠ Risk Factors</p><p className="text-sm text-gray-800 whitespace-pre-wrap">{note.ancRiskFactors}</p></div>}
+                                                                                        {/* Vitals Row */}
+                                                                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                                                                                            {[
+                                                                                                { label: 'Weight', val: note.maternalWeight, unit: 'kg' },
+                                                                                                { label: 'BP', val: note.maternalBP, unit: 'mmHg' },
+                                                                                                { label: 'Pulse', val: note.maternalPulse, unit: 'bpm' },
+                                                                                                { label: 'Temp', val: note.maternalTemp, unit: '°C' },
+                                                                                                { label: 'Hb', val: note.maternalHb, unit: 'g/dL' },
+                                                                                                { label: 'Urinalysis', val: note.urinalysis },
+                                                                                            ].filter(f => f.val).map(f => (
+                                                                                                <div key={f.label} className="bg-blue-50 rounded p-2 border border-blue-100">
+                                                                                                    <p className="text-blue-600 font-semibold text-[10px]">{f.label}</p>
+                                                                                                    <p className="font-bold text-gray-800">{f.val} {f.unit || ''}</p>
+                                                                                                </div>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                        {/* Obstetric Exam */}
+                                                                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                                                                                            {[
+                                                                                                { label: 'Fundal Height', val: note.fundalHeight },
+                                                                                                { label: 'Fetal Lie', val: note.fetalLie },
+                                                                                                { label: 'Presentation', val: note.fetalPresentation },
+                                                                                                { label: 'Position', val: note.fetalPosition },
+                                                                                                { label: 'FHR', val: note.fetalHeartRate, unit: 'bpm' },
+                                                                                                { label: 'Engagement', val: note.engagement },
+                                                                                                { label: 'Liquor', val: note.liquor },
+                                                                                                { label: 'Contractions', val: note.uterineContractions },
+                                                                                                { label: 'AFI', val: note.amnioticFluidIndex },
+                                                                                            ].filter(f => f.val).map(f => (
+                                                                                                <div key={f.label} className="bg-green-50 rounded p-2 border border-green-100">
+                                                                                                    <p className="text-green-700 font-semibold text-[10px]">{f.label}</p>
+                                                                                                    <p className="font-bold text-gray-800">{f.val} {f.unit || ''}</p>
+                                                                                                </div>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                        {/* Prophylaxis */}
+                                                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                                                                                            {[
+                                                                                                { label: 'Malaria Prophylaxis', val: note.malariaProphylaxis },
+                                                                                                { label: 'Tetanus Toxoid', val: note.tetanusToxoid },
+                                                                                                { label: 'Iron/Folic Acid', val: note.ironFolate },
+                                                                                                { label: 'HIV Status', val: note.hivStatus },
+                                                                                                { label: 'Syphilis', val: note.syphilisStatus },
+                                                                                                { label: 'Blood Group/Genotype', val: note.bloodGroupGenotype },
+                                                                                            ].filter(f => f.val).map(f => (
+                                                                                                <div key={f.label} className="bg-purple-50 rounded p-2 border border-purple-100">
+                                                                                                    <p className="text-purple-700 font-semibold text-[10px]">{f.label}</p>
+                                                                                                    <p className="text-gray-800">{f.val}</p>
+                                                                                                </div>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                        {note.assessment && <div className="bg-yellow-50 p-2 rounded border-l-4 border-yellow-400"><p className="text-[11px] font-bold text-yellow-700 mb-0.5">Nurse Assessment</p><p className="text-sm whitespace-pre-wrap">{note.assessment}</p></div>}
+                                                                                        {note.plan && <div className="bg-yellow-50 p-2 rounded border-l-4 border-orange-400"><p className="text-[11px] font-bold text-orange-700 mb-0.5">Nursing Plan</p><p className="text-sm whitespace-pre-wrap">{note.plan}</p></div>}
+                                                                                        {note.ancCounselling && <div className="bg-teal-50 p-2 rounded border-l-4 border-teal-400"><p className="text-[11px] font-bold text-teal-700 mb-0.5">Counselling Given</p><p className="text-sm whitespace-pre-wrap">{note.ancCounselling}</p></div>}
+                                                                                        {note.ancReferral && <div className="bg-red-50 p-2 rounded border-l-4 border-red-400"><p className="text-[11px] font-bold text-red-700 mb-0.5">Referral</p><p className="text-sm whitespace-pre-wrap">{note.ancReferral}</p></div>}
+                                                                                        {note.nextAppointment && <div className="bg-green-50 p-2 rounded border-l-4 border-green-400"><p className="text-[11px] font-bold text-green-700 mb-0.5">Next Appointment</p><p className="text-sm font-bold">{note.nextAppointment}</p></div>}
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })()}
                                             </div>
                                         )}
 
@@ -3525,11 +3678,16 @@ const PatientDetails = () => {
                                                 {/* List of clinical notes */}
                                                 {(() => {
                                                     const allNotes = encounter.clinicalNotes && encounter.clinicalNotes.length > 0
-                                                        ? encounter.clinicalNotes
+                                                        ? encounter.clinicalNotes.filter(n => {
+                                                            const role = n.doctor?.role;
+                                                            const name = typeof n.doctor === 'object' ? n.doctor?.name : '';
+                                                            const isNurse = (role && role.toLowerCase() === 'nurse') || (name && name.toLowerCase().startsWith('nurse'));
+                                                            return !isNurse;
+                                                        })
                                                         : [];
                                                     if (allNotes.length === 0) {
                                                         return (
-                                                            <p className="text-gray-500">No clinical notes recorded yet. Click "Add Clinical Note" to begin documentation.</p>
+                                                            <p className="text-gray-500">No doctor clinical notes recorded yet. Click "Add Clinical Note" to begin documentation.</p>
                                                         );
                                                     }
                                                     return (
@@ -3550,7 +3708,9 @@ const PatientDetails = () => {
                                                                                     {noteIndex + 1}
                                                                                 </div>
                                                                                 <div>
-                                                                                    <p className="font-semibold text-sm">Dr. {noteDoctorName}</p>
+                                                                                    <p className="font-semibold text-sm">
+                                                                                        {noteDoctorName.toLowerCase().startsWith('dr.') || noteDoctorName.toLowerCase().startsWith('nurse') ? noteDoctorName : `Dr. ${noteDoctorName}`}
+                                                                                    </p>
                                                                                     <p className="text-blue-200 text-xs">
                                                                                         {note.createdAt ? new Date(note.createdAt).toLocaleString() : 'Date N/A'}
                                                                                         {note.updatedAt && note.updatedAt !== note.createdAt && (
@@ -6263,34 +6423,121 @@ const PatientDetails = () => {
                                     </div>
 
                                     {/* Diagnosis (ICD-11 — same as standard note) */}
-                                    <div className="border rounded-lg p-4">
-                                        <h4 className="font-bold text-gray-700 mb-3 text-sm uppercase tracking-wide">🩻 E. Diagnosis (ICD-11) <span className="text-red-500">*</span></h4>
-                                        <div className="relative mb-2">
-                                            <input
-                                                className="w-full border p-2 rounded text-sm"
-                                                placeholder="Search ICD-11 diagnosis..."
-                                                value={diagSearchTerm}
-                                                onChange={e => { setDiagSearchTerm(e.target.value); setShowDiagDropdown(true); }}
-                                                onFocus={() => setShowDiagDropdown(true)}
-                                            />
+                                    <div className={`space-y-3 p-4 border rounded-lg ${ancNote.diagnosis.length === 0 ? 'bg-red-50 border-red-300' : 'bg-gray-50'}`}>
+                                        <h4 className="font-bold text-gray-700 text-sm uppercase tracking-wide">🩻 E. Diagnosis (ICD-11) <span className="text-red-500">*</span></h4>
+                                        <div className="relative">
+                                            <div className="flex gap-2">
+                                                <div className="relative flex-1">
+                                                    <FaSearch className="absolute left-3 top-3 text-gray-400" />
+                                                    <input
+                                                        type="text"
+                                                        className="w-full border p-2 pl-10 rounded text-sm shadow-sm focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                                                        placeholder="Search ICD-11 by code or diagnosis name..."
+                                                        value={diagSearchTerm}
+                                                        onChange={(e) => {
+                                                            setDiagSearchTerm(e.target.value);
+                                                            setShowDiagDropdown(true);
+                                                        }}
+                                                        onFocus={() => setShowDiagDropdown(true)}
+                                                    />
+                                                </div>
+                                            </div>
+
                                             {showDiagDropdown && diagSearchTerm && (
-                                                <div className="absolute z-10 w-full bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                                                    <div className="p-2 text-xs text-gray-500">Type to search ICD-11 codes...</div>
+                                                <div className="absolute z-20 w-full bg-white border rounded shadow-xl max-h-60 overflow-y-auto mt-1 border-gray-200">
+                                                    {(() => {
+                                                        const customCodes = JSON.parse(localStorage.getItem('kuntau_customIcdCodes') || '[]');
+                                                        const allDiagData = [...icd11Data, ...customCodes];
+                                                        const filtered = allDiagData.filter(d =>
+                                                            d.code.toLowerCase().includes(diagSearchTerm.toLowerCase()) ||
+                                                            d.description.toLowerCase().includes(diagSearchTerm.toLowerCase())
+                                                        );
+
+                                                        if (filtered.length > 0) {
+                                                            return filtered.map((diag, idx) => (
+                                                                <div
+                                                                    key={idx}
+                                                                    className="p-3 hover:bg-pink-50 cursor-pointer text-sm border-b last:border-0 flex justify-between items-center transition-colors"
+                                                                    onClick={() => {
+                                                                        if (!ancNote.diagnosis.find(d => d.code === diag.code)) {
+                                                                            setAncNote({
+                                                                                ...ancNote,
+                                                                                diagnosis: [...ancNote.diagnosis, diag]
+                                                                            });
+                                                                        }
+                                                                        setDiagSearchTerm('');
+                                                                        setShowDiagDropdown(false);
+                                                                    }}
+                                                                >
+                                                                    <div>
+                                                                        <span className={`font-bold mr-2 ${diag.code.startsWith('CUST-') ? 'text-orange-600' : 'text-pink-700'}`}>{diag.code}</span>
+                                                                        <span className="text-gray-700">{diag.description}</span>
+                                                                        {diag.code.startsWith('CUST-') && (
+                                                                            <span className="ml-2 text-xs bg-orange-100 text-orange-600 px-1 rounded">Custom</span>
+                                                                        )}
+                                                                    </div>
+                                                                    <FaPlus className="text-pink-500" />
+                                                                </div>
+                                                            ));
+                                                        }
+
+                                                        return (
+                                                            <div className="p-3">
+                                                                <p className="text-gray-400 text-xs text-center mb-2">No matching ICD-11 codes found for "<strong>{diagSearchTerm}</strong>"</p>
+                                                                <button
+                                                                    className="w-full bg-orange-500 text-white text-sm px-3 py-2 rounded hover:bg-orange-600 flex items-center justify-center gap-2 transition-colors font-semibold"
+                                                                    onClick={() => {
+                                                                        const stored = JSON.parse(localStorage.getItem('kuntau_customIcdCodes') || '[]');
+                                                                        const nextNum = stored.length + 1;
+                                                                        const newEntry = {
+                                                                            code: `CUST-${String(nextNum).padStart(3, '0')}`,
+                                                                            description: diagSearchTerm.trim()
+                                                                        };
+                                                                        const alreadyExists = stored.find(c => c.description.toLowerCase() === newEntry.description.toLowerCase());
+                                                                        const entryToAdd = alreadyExists || newEntry;
+                                                                        if (!alreadyExists) {
+                                                                            localStorage.setItem('kuntau_customIcdCodes', JSON.stringify([...stored, newEntry]));
+                                                                        }
+                                                                        if (!ancNote.diagnosis.find(d => d.description.toLowerCase() === entryToAdd.description.toLowerCase())) {
+                                                                            setAncNote({ ...ancNote, diagnosis: [...ancNote.diagnosis, entryToAdd] });
+                                                                        }
+                                                                        setDiagSearchTerm('');
+                                                                        setShowDiagDropdown(false);
+                                                                    }}
+                                                                >
+                                                                    <FaPlus /> Add "{diagSearchTerm}" as custom diagnosis
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </div>
                                             )}
                                         </div>
+
+                                        {/* Selected Diagnoses Tokens */}
                                         {ancNote.diagnosis.length > 0 && (
                                             <div className="flex flex-wrap gap-2 mt-2">
-                                                {ancNote.diagnosis.map((d, i) => (
-                                                    <span key={i} className="bg-pink-100 text-pink-800 text-xs px-2 py-1 rounded flex items-center gap-1">
-                                                        {d.code} — {d.description}
-                                                        <button onClick={() => setAncNote({ ...ancNote, diagnosis: ancNote.diagnosis.filter((_, idx) => idx !== i) })} className="text-pink-600 hover:text-pink-800 ml-1">✕</button>
+                                                {ancNote.diagnosis.map((diag, i) => (
+                                                    <span key={i} className="bg-pink-600 text-white px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2 shadow-sm">
+                                                        <span>{diag.code}: {diag.description}</span>
+                                                        <button
+                                                            onClick={() => setAncNote({
+                                                                ...ancNote,
+                                                                diagnosis: ancNote.diagnosis.filter((_, idx) => idx !== i)
+                                                            })}
+                                                            className="hover:text-pink-200 transition-colors"
+                                                        >
+                                                            <FaTimes />
+                                                        </button>
                                                     </span>
                                                 ))}
                                             </div>
                                         )}
+
                                         {ancNote.diagnosis.length === 0 && (
-                                            <p className="text-xs text-red-500 mt-1">⚠ At least one ICD-11 diagnosis is required before saving.</p>
+                                            <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                                                <span className="font-bold">⚠</span> At least one ICD-11 diagnosis is required before saving.
+                                            </p>
                                         )}
                                     </div>
 
