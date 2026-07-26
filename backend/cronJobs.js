@@ -28,6 +28,32 @@ const runDailyWardChargesJob = async () => {
     }
 };
 
+const autoCloseExpiredVisitsJob = async () => {
+    console.log('========================================');
+    console.log('Running auto-close expired outpatient visits job at:', new Date().toLocaleString());
+    console.log('========================================');
+    try {
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const result = await Visit.updateMany(
+            {
+                type: { $ne: 'Inpatient' },
+                encounterType: { $ne: 'Inpatient' },
+                encounterStatus: { $nin: ['completed', 'discharged', 'cancelled'] },
+                createdAt: { $lt: twentyFourHoursAgo }
+            },
+            {
+                $set: {
+                    encounterStatus: 'completed',
+                    isActive: false
+                }
+            }
+        );
+        console.log(`Auto-closed ${result.modifiedCount} expired non-inpatient visits.`);
+    } catch (error) {
+        console.error('Error running auto-close expired visits job:', error);
+    }
+};
+
 const mongoose = require('mongoose');
 
 const setupCronJobs = () => {
@@ -35,9 +61,11 @@ const setupCronJobs = () => {
     const runJobIfConnected = () => {
         if (mongoose.connection.readyState === 1) {
             runDailyWardChargesJob().catch(err => console.error('Startup daily ward charges job failed:', err));
+            autoCloseExpiredVisitsJob().catch(err => console.error('Startup auto-close expired visits job failed:', err));
         } else {
             mongoose.connection.once('connected', () => {
                 runDailyWardChargesJob().catch(err => console.error('Startup daily ward charges job failed:', err));
+                autoCloseExpiredVisitsJob().catch(err => console.error('Startup auto-close expired visits job failed:', err));
             });
         }
     };
@@ -47,6 +75,7 @@ const setupCronJobs = () => {
     // Run every hour
     cron.schedule('0 * * * *', async () => {
         await runDailyWardChargesJob();
+        await autoCloseExpiredVisitsJob();
     });
 };
 

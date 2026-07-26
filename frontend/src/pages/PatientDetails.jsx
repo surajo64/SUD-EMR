@@ -1164,10 +1164,23 @@ const PatientDetails = () => {
             patientVisits.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             setPastEncounters(patientVisits);
 
-            // Find active encounter
-            const activeEncounter = patientVisits.find(v =>
-                ['registered', 'payment_pending', 'in_nursing', 'with_doctor', 'awaiting_services', 'in_pharmacy', 'in_lab', 'in_radiology', 'in_ward', 'admitted'].includes(v.encounterStatus)
-            );
+            // Find active encounter (Inpatient active until discharged; non-inpatient active within 24h)
+            const oneDayMs = 24 * 60 * 60 * 1000;
+            const nowMs = Date.now();
+            const activeEncounter = patientVisits.find(v => {
+                if (['completed', 'cancelled', 'discharged'].includes(v.encounterStatus) || v.isActive === false) {
+                    return false;
+                }
+                const activeStatuses = ['registered', 'payment_pending', 'in_nursing', 'with_doctor', 'awaiting_services', 'in_pharmacy', 'in_lab', 'in_radiology', 'in_ward', 'admitted'];
+                if (!activeStatuses.includes(v.encounterStatus)) {
+                    return false;
+                }
+                if (v.type === 'Inpatient' || v.encounterType === 'Inpatient') {
+                    return true;
+                }
+                const createdMs = new Date(v.createdAt).getTime();
+                return (nowMs - createdMs) < oneDayMs;
+            });
             setEncounter(activeEncounter);
 
             // Fetch vitals & orders if encounter exists

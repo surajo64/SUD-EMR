@@ -590,6 +590,13 @@ const addNote = async (req, res) => {
             };
 
             visit.notes.push(newNote);
+
+            if (['doctor', 'admin'].includes(req.user.role)) {
+                visit.seen = true;
+                visit.seenBy = req.user._id;
+                visit.seenAt = new Date();
+            }
+
             await visit.save();
             res.status(201).json(visit.notes);
         } else {
@@ -1194,12 +1201,6 @@ const saveClinicalNote = async (req, res) => {
             }
 
             Object.assign(visit, noteData);
-            if (req.user.role === 'doctor') {
-                visit.consultingPhysician = req.user._id;
-                visit.seen = true;
-                visit.seenBy = req.user._id;
-                visit.seenAt = new Date();
-            }
         } else {
             // ADD: new clinical note
             const newNote = {
@@ -1212,12 +1213,6 @@ const saveClinicalNote = async (req, res) => {
             // If this is the first clinical note, also sync to root fields for backward compatibility
             if (visit.clinicalNotes.length === 1) {
                 Object.assign(visit, noteData);
-                if (req.user.role === 'doctor') {
-                    visit.consultingPhysician = req.user._id;
-                    visit.seen = true;
-                    visit.seenBy = req.user._id;
-                    visit.seenAt = new Date();
-                }
             }
         }
 
@@ -1225,6 +1220,16 @@ const saveClinicalNote = async (req, res) => {
             visit.diagnosis = diagnosis;
         } else if (diagnosis && noteId === 'legacy-root') {
             visit.diagnosis = diagnosis;
+        }
+
+        // Mark visit as seen whenever doctor or admin records or updates a clinical/ANC note
+        if (['doctor', 'admin'].includes(req.user.role)) {
+            visit.seen = true;
+            visit.seenBy = req.user._id;
+            visit.seenAt = new Date();
+            if (!visit.consultingPhysician) {
+                visit.consultingPhysician = req.user._id;
+            }
         }
 
         await visit.save();
