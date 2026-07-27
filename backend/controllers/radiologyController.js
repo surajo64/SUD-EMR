@@ -4,6 +4,7 @@ const Visit = require('../models/visitModel');
 const Patient = require('../models/patientModel');
 const Receipt = require('../models/receiptModel');
 const Charge = require('../models/chargeModel');
+const { isPatientAdmitted } = require('../utils/admissionUtils');
 
 // @desc    Create new radiology order
 // @route   POST /api/radiology
@@ -281,7 +282,7 @@ const processDirectSale = async (req, res) => {
                 return res.status(404).json({ message: 'Selected patient not found.' });
             }
 
-            const isRetainershipProvider = ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(salePatient.provider);
+            const isRetainershipProvider = ['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership'].includes(salePatient.provider);
 
             if (isRetainershipProvider && paymentMethod === 'retainership') {
                 const hmoBalance = salePatient.hmo ? await getHMOWalletBalance(salePatient.hmo) : 0;
@@ -293,7 +294,8 @@ const processDirectSale = async (req, res) => {
                     finalPaymentMethod = 'cash';
                 }
             } else if (!isRetainershipProvider && paymentMethod === 'deposit') {
-                if (salePatient.depositBalance >= totalAmount) {
+                const isAdmitted = await isPatientAdmitted(salePatient._id);
+                if (isAdmitted || salePatient.depositBalance >= totalAmount) {
                     finalPaymentMethod = 'deposit';
                     salePatient.depositBalance -= totalAmount;
                     await salePatient.save();

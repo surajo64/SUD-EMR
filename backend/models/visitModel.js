@@ -395,6 +395,7 @@ const visitSchema = mongoose.Schema({
         completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         completedByName: { type: String },
         completedAt: { type: Date },
+        nurseComment: { type: String },
         updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         updatedByName: { type: String },
         updatedAt: { type: Date },

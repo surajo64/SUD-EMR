@@ -1,5 +1,6 @@
 const Invoice = require('../models/invoiceModel');
 const Patient = require('../models/patientModel');
+const { isPatientAdmitted } = require('../utils/admissionUtils');
 
 // @desc    Create new invoice
 // @route   POST /api/invoices
@@ -52,10 +53,11 @@ const updateInvoiceStatus = async (req, res) => {
             if (!patient) {
                 return res.status(404).json({ message: 'Patient not found' });
             }
-            if (patient.depositBalance < invoice.totalAmount) {
+            const isAdmitted = await isPatientAdmitted(patient._id);
+            if (!isAdmitted && (patient.depositBalance || 0) < invoice.totalAmount) {
                 return res.status(400).json({ message: 'Insufficient deposit balance' });
             }
-            patient.depositBalance -= invoice.totalAmount;
+            patient.depositBalance = (patient.depositBalance || 0) - invoice.totalAmount;
             await patient.save();
             invoice.paymentMethod = 'deposit';
         }

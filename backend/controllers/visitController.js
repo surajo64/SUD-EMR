@@ -119,7 +119,7 @@ const createVisit = async (req, res) => {
             return res.status(404).json({ message: 'Patient not found' });
         }
 
-        const isRetainership = ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider);
+        const isRetainership = ['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership'].includes(patient.provider);
         let hasValidDeposit = (patient.depositBalance || 0) > 0;
 
         if (isRetainership) {
@@ -369,6 +369,15 @@ const updateVisit = async (req, res) => {
         // V5 Workflow Data
         if (encounterStatus) {
             if (encounterStatus === 'discharged' && visit.encounterStatus !== 'discharged') {
+                const Patient = require('../models/patientModel');
+                const patientDoc = await Patient.findById(visit.patient);
+                if (patientDoc && (patientDoc.depositBalance || 0) < 0) {
+                    const formattedNegative = Math.abs(patientDoc.depositBalance).toLocaleString();
+                    return res.status(400).json({
+                        message: `Cannot discharge patient. Patient has a negative wallet balance of ₦${formattedNegative}. The negative wallet balance must be cleared/paid before discharging.`
+                    });
+                }
+
                 visit.dischargeDate = new Date();
                 visit.dischargedBy = req.user._id;
                 if (req.body.dischargeNotes) visit.dischargeNotes = req.body.dischargeNotes;
@@ -626,7 +635,7 @@ const convertToInpatient = async (req, res) => {
             return res.status(404).json({ message: 'Patient not found' });
         }
 
-        const isRetainership = ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider);
+        const isRetainership = ['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership'].includes(patient.provider);
         let hasValidDeposit = (patient.depositBalance || 0) > 0;
 
         if (isRetainership) {
@@ -755,7 +764,7 @@ const changeEncounterType = async (req, res) => {
                 return res.status(404).json({ message: 'Patient not found' });
             }
 
-            const isRetainership = ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider);
+            const isRetainership = ['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership'].includes(patient.provider);
             let hasValidDeposit = (patient.depositBalance || 0) > 0;
 
             if (isRetainership) {
@@ -814,7 +823,7 @@ const changeEncounterType = async (req, res) => {
                 const EncounterCharge = require('../models/encounterChargeModel');
                 let patientPortion = dailyFee;
                 let hmoPortion = 0;
-                if (patient && ['Retainership', 'Corporate Retainership', 'Family Retainership', 'NHIA', 'KSCHMA'].includes(patient.provider)) {
+                if (patient && ['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership', 'NHIA', 'KSCHMA'].includes(patient.provider)) {
                     patientPortion = 0;
                     hmoPortion = dailyFee;
                 }
@@ -874,6 +883,7 @@ const changeEncounterType = async (req, res) => {
                         switch (patientObj.provider) {
                             case 'Retainership':
                             case 'Corporate Retainership':
+                            case 'Joud Alkhair Retainership':
                                 fee = ec.charge.retainershipFee;
                                 break;
                             case 'Family Retainership':
@@ -907,7 +917,7 @@ const changeEncounterType = async (req, res) => {
                         if (!isCovered) {
                             patientPortion = totalAmount;
                             hmoPortion = 0;
-                        } else if (patientObj.provider === 'Retainership' || patientObj.provider === 'Corporate Retainership' || patientObj.provider === 'Family Retainership') {
+                        } else if (patientObj.provider === 'Retainership' || patientObj.provider === 'Corporate Retainership' || patientObj.provider === 'Family Retainership' || patientObj.provider === 'Joud Alkhair Retainership') {
                             patientPortion = 0;
                             hmoPortion = totalAmount;
                         } else if (patientObj.provider === 'NHIA' || patientObj.provider === 'KSCHMA') {
@@ -1442,7 +1452,7 @@ const updateOrderTaskStatus = async (req, res) => {
         if (!visit) return res.status(404).json({ message: 'Visit not found' });
 
         const { taskId } = req.params;
-        const { status } = req.body;
+        const { status, nurseComment } = req.body;
 
         if (!visit.orderTasks) {
             return res.status(404).json({ message: 'No order tasks found for this visit' });
@@ -1458,10 +1468,14 @@ const updateOrderTaskStatus = async (req, res) => {
             task.completedBy = req.user._id;
             task.completedByName = req.user.name;
             task.completedAt = new Date();
+            if (nurseComment !== undefined) {
+                task.nurseComment = nurseComment;
+            }
         } else if (task.status === 'Pending') {
             task.completedBy = null;
             task.completedByName = '';
             task.completedAt = null;
+            task.nurseComment = '';
         }
 
         await visit.save();

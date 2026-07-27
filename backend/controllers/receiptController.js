@@ -2,6 +2,7 @@ const Receipt = require('../models/receiptModel');
 const Invoice = require('../models/invoiceModel');
 const Patient = require('../models/patientModel');
 const FamilyFile = require('../models/familyFileModel');
+const { isPatientAdmitted } = require('../utils/admissionUtils');
 
 // @desc    Create receipt (collect payment)
 // @route   POST /api/receipts
@@ -29,24 +30,15 @@ const createReceipt = async (req, res) => {
 
             const Visit = require('../models/visitModel');
             const visit = await Visit.findById(invoice.visit);
-            const isAdmitted = visit && (
-                visit.type === 'Inpatient' ||
-                visit.encounterType === 'Inpatient' ||
-                visit.encounterStatus === 'admitted' ||
-                visit.encounterStatus === 'in_ward' ||
-                visit.status === 'Admitted'
-            );
-            const creditLimit = isAdmitted ? 50000 : 0;
+            const isAdmitted = await isPatientAdmitted(patient._id, visit);
 
-            if ((patient.depositBalance || 0) + creditLimit < invoice.totalAmount) {
-                const errorMessage = isAdmitted
-                    ? `Insufficient funds. Admitted patients have a credit limit of ₦50,000. Balance: ₦${patient.depositBalance || 0}, Required: ₦${invoice.totalAmount}`
-                    : `Insufficient deposit balance. Balance: ₦${patient.depositBalance || 0}, Required: ₦${invoice.totalAmount}`;
+            if (!isAdmitted && (patient.depositBalance || 0) < invoice.totalAmount) {
+                const errorMessage = `Insufficient deposit balance. Balance: ₦${patient.depositBalance || 0}, Required: ₦${invoice.totalAmount}`;
                 return res.status(400).json({ message: errorMessage });
             }
 
-            // Deduct from deposit
-            patient.depositBalance -= invoice.totalAmount;
+            // Deduct from deposit (allows negative balance for admitted patients)
+            patient.depositBalance = (patient.depositBalance || 0) - invoice.totalAmount;
             await patient.save();
         }
 
@@ -219,26 +211,17 @@ const createReceiptForCharges = async (req, res) => {
             }
 
             const visit = await Visit.findById(encounterId);
-            const isAdmitted = visit && (
-                visit.type === 'Inpatient' ||
-                visit.encounterType === 'Inpatient' ||
-                visit.encounterStatus === 'admitted' ||
-                visit.encounterStatus === 'in_ward' ||
-                visit.status === 'Admitted'
-            );
-            const creditLimit = isAdmitted ? 50000 : 0;
+            const isAdmitted = await isPatientAdmitted(patientId, visit);
 
-            console.log('Payment Check:', { isAdmitted, balance: patient.depositBalance, creditLimit, totalAmount });
+            console.log('Payment Check:', { isAdmitted, balance: patient.depositBalance, totalAmount });
 
-            if ((patient.depositBalance || 0) + creditLimit < totalAmount) {
-                const errorMessage = isAdmitted
-                    ? `Insufficient funds. Admitted patients have a credit limit of ₦50,000. Balance: ₦${patient.depositBalance || 0}, Required: ₦${totalAmount}`
-                    : `Insufficient deposit balance. Balance: ₦${patient.depositBalance || 0}, Required: ₦${totalAmount}`;
+            if (!isAdmitted && (patient.depositBalance || 0) < totalAmount) {
+                const errorMessage = `Insufficient deposit balance. Balance: ₦${patient.depositBalance || 0}, Required: ₦${totalAmount}`;
                 return res.status(400).json({ message: errorMessage });
             }
 
-            // Deduct from deposit
-            patient.depositBalance -= totalAmount;
+            // Deduct from deposit (allows negative balance for admitted patients)
+            patient.depositBalance = (patient.depositBalance || 0) - totalAmount;
             console.log('Patient deposit after:', patient.depositBalance);
             await patient.save();
         }
@@ -250,7 +233,7 @@ const createReceiptForCharges = async (req, res) => {
                 return res.status(404).json({ message: 'Patient not found' });
             }
 
-            if (!['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider)) {
+            if (!['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership'].includes(patient.provider)) {
                 return res.status(400).json({ message: 'Patient is not a Retainership patient' });
             }
 

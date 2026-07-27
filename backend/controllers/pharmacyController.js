@@ -4,6 +4,7 @@ const Patient = require('../models/patientModel');
 const Visit = require('../models/visitModel');
 const EncounterCharge = require('../models/encounterChargeModel');
 const Receipt = require('../models/receiptModel');
+const { isPatientAdmitted } = require('../utils/admissionUtils');
 
 const getHMOWalletBalance = async (hmoName) => {
     const HMO = require('../models/hmoModel');
@@ -133,7 +134,7 @@ const processDirectSale = async (req, res) => {
                 return res.status(404).json({ message: 'Selected patient not found.' });
             }
 
-            const isRetainershipProvider = ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(salePatient.provider);
+            const isRetainershipProvider = ['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership'].includes(salePatient.provider);
 
             if (isRetainershipProvider && paymentMethod === 'retainership') {
                 const hmoBalance = salePatient.hmo ? await getHMOWalletBalance(salePatient.hmo) : 0;
@@ -145,7 +146,8 @@ const processDirectSale = async (req, res) => {
                     finalPaymentMethod = 'cash';
                 }
             } else if (!isRetainershipProvider && paymentMethod === 'deposit') {
-                if (salePatient.depositBalance >= totalAmount) {
+                const isAdmitted = await isPatientAdmitted(salePatient._id);
+                if (isAdmitted || salePatient.depositBalance >= totalAmount) {
                     finalPaymentMethod = 'deposit';
                     isWalletDeduction = true;
                     salePatient.depositBalance -= totalAmount;

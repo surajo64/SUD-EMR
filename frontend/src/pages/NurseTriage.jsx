@@ -4,7 +4,7 @@ import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import { AppContext } from '../context/AppContext';
 import Layout from '../components/Layout';
-import { FaUserMd, FaSearch, FaCheckCircle, FaNotesMedical, FaHeartbeat, FaMoneyBillWave, FaTrash, FaEdit, FaPlus, FaTimes, FaTable, FaClock, FaChevronDown, FaChevronRight, FaHistory, FaClipboardList, FaCheck, FaCommentAlt } from 'react-icons/fa';
+import { FaUserMd, FaSearch, FaCheckCircle, FaNotesMedical, FaHeartbeat, FaMoneyBillWave, FaTrash, FaEdit, FaPlus, FaTimes, FaTable, FaClock, FaChevronDown, FaChevronRight, FaHistory, FaClipboardList, FaCheck, FaCommentAlt, FaProcedures, FaDoorOpen } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import LoadingOverlay from '../components/loadingOverlay';
 import { formatAge } from '../utils/patientUtils';
@@ -157,10 +157,13 @@ const NurseTriage = () => {
     const [stopDrugTarget, setStopDrugTarget] = useState(null);
     const [stopDrugReason, setStopDrugReason] = useState('');
 
+    const [showCompleteTaskModal, setShowCompleteTaskModal] = useState(false);
+    const [taskToComplete, setTaskToComplete] = useState(null);
+    const [nurseTaskComment, setNurseTaskComment] = useState('');
+
     const handleConfirmStopDrug = async () => {
-        if (!stopDrugTarget) return;
-        if (!stopDrugReason.trim()) {
-            toast.error('Please enter a reason for stopping this medication');
+        if (!stopDrugTarget || !stopDrugReason.trim()) {
+            toast.error('Please enter a reason for stopping the medication.');
             return;
         }
 
@@ -168,17 +171,14 @@ const NurseTriage = () => {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             await axios.put(
                 `${backendUrl}/api/prescriptions/${stopDrugTarget.prescriptionId}/medicines/${stopDrugTarget.medIndex}/discontinue`,
-                { reason: stopDrugReason.trim() },
+                { reason: stopDrugReason },
                 config
             );
-            toast.success('Medication stopped! Reason logged for nurses.');
+            toast.success(`Medication "${stopDrugTarget.medName}" stopped successfully`);
             setShowStopDrugModal(false);
             setStopDrugTarget(null);
             setStopDrugReason('');
             fetchDrugAdministrationData(selectedEncounter._id);
-            if (selectedPatient) {
-                fetchPatientEncounters(selectedPatient._id);
-            }
         } catch (err) {
             console.error(err);
             toast.error('Error stopping medication');
@@ -189,32 +189,32 @@ const NurseTriage = () => {
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             await axios.put(
-                `${backendUrl}/api/prescriptions/${prescriptionId}/medicines/${medIndex}/discontinue`,
+                `${backendUrl}/api/prescriptions/${prescriptionId}/medicines/${medIndex}/reactivate`,
                 {},
                 config
             );
-            toast.success('Medication reactivated!');
+            toast.success('Medication reactivated successfully');
             fetchDrugAdministrationData(selectedEncounter._id);
-            if (selectedPatient) {
-                fetchPatientEncounters(selectedPatient._id);
-            }
         } catch (err) {
             console.error(err);
             toast.error('Error reactivating medication');
         }
     };
 
-    const handleUpdateOrderTaskStatus = async (taskId, newStatus = 'Completed') => {
+    const handleUpdateOrderTaskStatus = async (taskId, newStatus = 'Completed', nurseComment = '') => {
         if (!selectedEncounter) return;
         try {
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const response = await axios.put(
                 `${backendUrl}/api/visits/${selectedEncounter._id}/order-tasks/${taskId}/status`,
-                { status: newStatus },
+                { status: newStatus, nurseComment },
                 config
             );
             toast.success(`Order task marked as ${newStatus.toLowerCase()}`);
             setSelectedEncounter(response.data);
+            setShowCompleteTaskModal(false);
+            setTaskToComplete(null);
+            setNurseTaskComment('');
         } catch (err) {
             console.error('Error updating order task status:', err);
             toast.error(err.response?.data?.message || 'Failed to update order task status');
@@ -780,6 +780,9 @@ const NurseTriage = () => {
     const getChargePrice = (charge, patient) => {
         if (!charge) return 0;
         const provider = patient?.provider || 'Standard';
+        if (provider === 'Joud Alkhair Retainership') {
+            return charge.joudAlkhairFee ?? charge.retainershipFee ?? charge.standardFee ?? charge.basePrice ?? 0;
+        }
         if (['Retainership', 'Corporate Retainership'].includes(provider)) {
             return charge.retainershipFee ?? charge.standardFee ?? charge.basePrice ?? 0;
         }
@@ -1056,6 +1059,13 @@ const NurseTriage = () => {
             toast.error('Please write a discharge note / summary before discharging.');
             return;
         }
+
+        const patientBal = encounterToDischarge.patient?.depositBalance ?? selectedPatient?.depositBalance ?? 0;
+        if (patientBal < 0) {
+            toast.error(`Cannot discharge patient. Negative wallet balance of ₦${Math.abs(patientBal).toLocaleString()} must be settled before discharge.`);
+            return;
+        }
+
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
@@ -1075,13 +1085,14 @@ const NurseTriage = () => {
             }
         } catch (error) {
             console.error(error);
-            toast.error('Error discharging patient');
+            const msg = error.response?.data?.message || 'Error discharging patient';
+            toast.error(msg);
         } finally {
             setLoading(false);
         }
     };
 
-    const isRetainership = ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(selectedPatient?.provider);
+    const isRetainership = ['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership'].includes(selectedPatient?.provider);
     const hasPatientDeposit = (selectedPatient?.depositBalance || 0) > 0;
     const hmoDepositInfo = isRetainership && retainershipDepositStatus.find(s => s.name === selectedPatient?.hmo);
     const hasHmoDeposit = hmoDepositInfo ? hmoDepositInfo.hasDeposit : false;
@@ -1344,7 +1355,7 @@ const NurseTriage = () => {
                             )}
 
                             {/* Drug Observation Chart - Only for Admitted Inpatients */}
-                            {(selectedEncounter.type === 'Inpatient' && selectedEncounter.encounterStatus !== 'discharged' && selectedEncounter.encounterStatus !== 'cancelled') && (
+                            {((selectedEncounter.type === 'Inpatient' || selectedEncounter.encounterStatus === 'admitted' || selectedEncounter.status === 'Admitted' || Boolean(selectedEncounter.ward)) && selectedEncounter.encounterStatus !== 'discharged' && selectedEncounter.encounterStatus !== 'cancelled') && (
                                 <div className="mb-8">
                                     <div className="bg-gradient-to-r from-blue-700 to-blue-600 text-white p-3 rounded-t-lg flex justify-between items-center shadow-md">
                                         <h4 className="font-bold flex items-center gap-2">
@@ -1428,60 +1439,60 @@ const NurseTriage = () => {
                                                                                 </tr>
                                                                             </thead>
                                                                             <tbody>
-                                                                                 {(() => {
-                                                                                     let overallRowIdx = 0;
-                                                                                     return dispensedPrescriptions.flatMap(p => p.medicines.map(m => {
-                                                                                         const isFirstRow = overallRowIdx === 0;
-                                                                                         overallRowIdx++;
-                                                                                         const stoppedByName = (typeof m.discontinuedBy === 'object' && m.discontinuedBy?.name) 
-                                                                                             ? m.discontinuedBy.name 
-                                                                                             : (m.discontinuedBy && user && (m.discontinuedBy === user._id || m.discontinuedBy.toString() === user._id.toString())
-                                                                                                 ? user.name
-                                                                                                 : (user?.role === 'doctor' ? user.name : 'Doctor'));
-                                                                                         return (
-                                                                                             <tr key={`${p._id}-${m._id || m.name}`} className={`border-b last:border-0 transition-colors ${m.isDiscontinued ? 'bg-red-50/40 border-l-4 border-l-red-500' : 'hover:bg-blue-50/10'}`}>
-                                                                                                 <td className="p-2 border-r">
-                                                                                                     <div className="font-bold text-blue-950 leading-tight flex items-center justify-between gap-2">
-                                                                                                         <div className="flex items-center gap-2 flex-wrap">
-                                                                                                             <span className={m.isDiscontinued ? 'line-through text-red-700 font-bold' : ''}>{m.name}</span>
-                                                                                                             {m.buyOutside && (
-                                                                                                                 <span className="text-[9px] bg-orange-100 text-orange-800 px-1.5 py-0.5 rounded border border-orange-200 uppercase font-black">
-                                                                                                                     Buy Outside
-                                                                                                                 </span>
-                                                                                                             )}
-                                                                                                             {m.isDiscontinued && (
-                                                                                                                 <span className="text-[9px] bg-red-100 text-red-800 px-2 py-0.5 rounded border border-red-300 font-bold uppercase tracking-wide flex items-center gap-1">
-                                                                                                                     🛑 STOPPED BY {stoppedByName.toUpperCase().startsWith('DR') ? stoppedByName.toUpperCase() : `DR. ${stoppedByName.toUpperCase()}`}
-                                                                                                                 </span>
-                                                                                                             )}
-                                                                                                         </div>
+                                                                                {(() => {
+                                                                                    let overallRowIdx = 0;
+                                                                                    return dispensedPrescriptions.flatMap(p => p.medicines.map(m => {
+                                                                                        const isFirstRow = overallRowIdx === 0;
+                                                                                        overallRowIdx++;
+                                                                                        const stoppedByName = (typeof m.discontinuedBy === 'object' && m.discontinuedBy?.name)
+                                                                                            ? m.discontinuedBy.name
+                                                                                            : (m.discontinuedBy && user && (m.discontinuedBy === user._id || m.discontinuedBy.toString() === user._id.toString())
+                                                                                                ? user.name
+                                                                                                : (user?.role === 'doctor' ? user.name : 'Doctor'));
+                                                                                        return (
+                                                                                            <tr key={`${p._id}-${m._id || m.name}`} className={`border-b last:border-0 transition-colors ${m.isDiscontinued ? 'bg-red-50/40 border-l-4 border-l-red-500' : 'hover:bg-blue-50/10'}`}>
+                                                                                                <td className="p-2 border-r">
+                                                                                                    <div className="font-bold text-blue-950 leading-tight flex items-center justify-between gap-2">
+                                                                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                                                                            <span className={m.isDiscontinued ? 'line-through text-red-700 font-bold' : ''}>{m.name}</span>
+                                                                                                            {m.buyOutside && (
+                                                                                                                <span className="text-[9px] bg-orange-100 text-orange-800 px-1.5 py-0.5 rounded border border-orange-200 uppercase font-black">
+                                                                                                                    Buy Outside
+                                                                                                                </span>
+                                                                                                            )}
+                                                                                                            {m.isDiscontinued && (
+                                                                                                                <span className="text-[9px] bg-red-100 text-red-800 px-2 py-0.5 rounded border border-red-300 font-bold uppercase tracking-wide flex items-center gap-1">
+                                                                                                                    🛑 STOPPED BY {stoppedByName.toUpperCase().startsWith('DR') ? stoppedByName.toUpperCase() : `DR. ${stoppedByName.toUpperCase()}`}
+                                                                                                                </span>
+                                                                                                            )}
+                                                                                                        </div>
 
-                                                                                                         {/* Doctor Stop / Discontinue Checkbox */}
-                                                                                                         {user.role === 'doctor' && (
-                                                                                                             <label className="flex items-center gap-1.5 text-[10px] font-bold text-red-700 hover:text-red-800 bg-red-50 hover:bg-red-100 px-2 py-1 rounded border border-red-200 cursor-pointer transition shadow-2xs ml-auto whitespace-nowrap">
-                                                                                                                 <input
-                                                                                                                     type="checkbox"
-                                                                                                                     checked={!!m.isDiscontinued}
-                                                                                                                     onChange={() => {
-                                                                                                                         const medIdx = p.medicines.findIndex(item => (item._id && item._id === m._id) || item.name === m.name);
-                                                                                                                         if (!m.isDiscontinued) {
-                                                                                                                             setStopDrugTarget({
-                                                                                                                                 prescriptionId: p._id,
-                                                                                                                                 medIndex: medIdx >= 0 ? medIdx : 0,
-                                                                                                                                 medName: m.name
-                                                                                                                             });
-                                                                                                                             setStopDrugReason('');
-                                                                                                                             setShowStopDrugModal(true);
-                                                                                                                         } else {
-                                                                                                                             handleToggleReactivateDrug(p._id, medIdx >= 0 ? medIdx : 0);
-                                                                                                                         }
-                                                                                                                     }}
-                                                                                                                     className="accent-red-600 w-3.5 h-3.5 cursor-pointer"
-                                                                                                                 />
-                                                                                                                 <span>{m.isDiscontinued ? 'Stopped' : 'Stop Drug'}</span>
-                                                                                                             </label>
-                                                                                                         )}
-                                                                                                     </div>
+                                                                                                        {/* Doctor Stop / Discontinue Checkbox */}
+                                                                                                        {user.role === 'doctor' && (
+                                                                                                            <label className="flex items-center gap-1.5 text-[10px] font-bold text-red-700 hover:text-red-800 bg-red-50 hover:bg-red-100 px-2 py-1 rounded border border-red-200 cursor-pointer transition shadow-2xs ml-auto whitespace-nowrap">
+                                                                                                                <input
+                                                                                                                    type="checkbox"
+                                                                                                                    checked={!!m.isDiscontinued}
+                                                                                                                    onChange={() => {
+                                                                                                                        const medIdx = p.medicines.findIndex(item => (item._id && item._id === m._id) || item.name === m.name);
+                                                                                                                        if (!m.isDiscontinued) {
+                                                                                                                            setStopDrugTarget({
+                                                                                                                                prescriptionId: p._id,
+                                                                                                                                medIndex: medIdx >= 0 ? medIdx : 0,
+                                                                                                                                medName: m.name
+                                                                                                                            });
+                                                                                                                            setStopDrugReason('');
+                                                                                                                            setShowStopDrugModal(true);
+                                                                                                                        } else {
+                                                                                                                            handleToggleReactivateDrug(p._id, medIdx >= 0 ? medIdx : 0);
+                                                                                                                        }
+                                                                                                                    }}
+                                                                                                                    className="accent-red-600 w-3.5 h-3.5 cursor-pointer"
+                                                                                                                />
+                                                                                                                <span>{m.isDiscontinued ? 'Stopped' : 'Stop Drug'}</span>
+                                                                                                            </label>
+                                                                                                        )}
+                                                                                                    </div>
                                                                                                     <div className="text-[9px] text-gray-500 flex flex-wrap items-center gap-1 mt-0.5">
                                                                                                         <span className="font-medium text-gray-700">Strength: {m.dosage}</span>
                                                                                                         <span>|</span>
@@ -1553,7 +1564,7 @@ const NurseTriage = () => {
                                                                                                     const isPastDate = dateTimestamp < today.getTime();
 
                                                                                                     return (
-                                                                                                        <td className={`p-2 text-center ${m.isDiscontinued ? 'bg-red-50/40' : (isServedOnDate ? 'bg-gray-50/60' : 'bg-green-50/20')}`}>
+                                                                                                        <td className={`p-2 text-center ${m.isDiscontinued ? 'bg-red-50/40' : (isServedOnDate ? 'bg-blue-50/20' : 'bg-green-50/20')}`}>
                                                                                                             {m.isDiscontinued ? (
                                                                                                                 <div className="flex flex-col items-center justify-center">
                                                                                                                     <button
@@ -1565,42 +1576,47 @@ const NurseTriage = () => {
                                                                                                                     </button>
                                                                                                                     <span className="text-[7px] font-black text-red-600 uppercase mt-0.5">STOPPED</span>
                                                                                                                 </div>
-                                                                                                            ) : (isServedOnDate || isPastDate) ? (
+                                                                                                            ) : isPastDate ? (
                                                                                                                 <div className="flex flex-col items-center justify-center">
                                                                                                                     <button
                                                                                                                         disabled
                                                                                                                         className="w-6 h-6 flex items-center justify-center mx-auto bg-gray-200 text-gray-400 rounded-md cursor-not-allowed border border-gray-300 shadow-2xs"
-                                                                                                                        title={isServedOnDate ? "Medication already served for this date" : "Past date. Serving disabled."}
+                                                                                                                        title={isServedOnDate ? `${medAdminOnDate.length} dose(s) served on this date` : "Past date. Serving disabled."}
                                                                                                                     >
                                                                                                                         <FaCheck size={10} className="text-gray-500" />
                                                                                                                     </button>
                                                                                                                     <span className="text-[7px] font-bold text-gray-500 uppercase mt-0.5">
-                                                                                                                        {isServedOnDate ? 'SERVED' : 'PASSED'}
+                                                                                                                        {isServedOnDate ? `SERVED (${medAdminOnDate.length})` : 'PASSED'}
                                                                                                                     </span>
                                                                                                                 </div>
                                                                                                             ) : (
                                                                                                                 !isReadOnly && (
-                                                                                                                    <button
-                                                                                                                        onClick={() => {
-                                                                                                                            const d = new Date(dateTimestamp);
-                                                                                                                            const dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-                                                                                                                            setAdminForm({
-                                                                                                                                ...adminForm,
-                                                                                                                                prescriptionId: p._id,
-                                                                                                                                medicineId: m._id || m.name,
-                                                                                                                                medicineName: m.name,
-                                                                                                                                dosage: m.dosage || '',
-                                                                                                                                date: dateStr,
-                                                                                                                                time: new Date().toTimeString().slice(0, 5),
-                                                                                                                                remarks: ''
-                                                                                                                            });
-                                                                                                                            setShowDrugAdminModal(true);
-                                                                                                                        }}
-                                                                                                                        className="w-6 h-6 flex items-center justify-center mx-auto bg-green-600 text-white rounded-md hover:bg-green-700 transition hover:scale-110 shadow-sm"
-                                                                                                                        title="Record Dose / Serve Medication"
-                                                                                                                    >
-                                                                                                                        <FaPlus size={8} />
-                                                                                                                    </button>
+                                                                                                                    <div className="flex flex-col items-center justify-center gap-0.5">
+                                                                                                                        <button
+                                                                                                                            onClick={() => {
+                                                                                                                                const d = new Date(dateTimestamp);
+                                                                                                                                const dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+                                                                                                                                setAdminForm({
+                                                                                                                                    ...adminForm,
+                                                                                                                                    prescriptionId: p._id,
+                                                                                                                                    medicineId: m._id || m.name,
+                                                                                                                                    medicineName: m.name,
+                                                                                                                                    dosage: m.dosage || '',
+                                                                                                                                    date: dateStr,
+                                                                                                                                    time: new Date().toTimeString().slice(0, 5),
+                                                                                                                                    remarks: ''
+                                                                                                                                });
+                                                                                                                                setShowDrugAdminModal(true);
+                                                                                                                            }}
+                                                                                                                            className="w-6 h-6 flex items-center justify-center mx-auto bg-green-600 hover:bg-green-700 text-white rounded-md transition hover:scale-110 shadow-sm"
+                                                                                                                            title={isServedOnDate ? `Served ${medAdminOnDate.length} time(s) today. Click to serve another dose.` : "Record Dose / Serve Medication"}
+                                                                                                                        >
+                                                                                                                            <FaPlus size={8} />
+                                                                                                                        </button>
+                                                                                                                        <span className={`text-[7px] font-extrabold uppercase mt-0.5 ${isServedOnDate ? 'text-blue-700' : 'text-green-700'}`}>
+                                                                                                                            {isServedOnDate ? `SERVED (${medAdminOnDate.length})` : 'SERVE'}
+                                                                                                                        </span>
+                                                                                                                    </div>
                                                                                                                 )
                                                                                                             )}
                                                                                                         </td>
@@ -1671,25 +1687,35 @@ const NurseTriage = () => {
                                                                 </span>
                                                             </div>
 
-                                                            <p className="text-xs text-gray-800 font-medium whitespace-pre-line bg-gray-50 p-2.5 rounded border border-gray-200 mt-1">
-                                                                {task.instructions}
-                                                            </p>
+                                                            <div className="bg-gray-50 p-2.5 rounded border border-gray-200 mt-1">
+                                                                <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block mb-0.5">Doctor Instructions:</span>
+                                                                <p className="text-xs text-gray-800 font-medium whitespace-pre-line">
+                                                                    {task.instructions}
+                                                                </p>
+                                                            </div>
+
+                                                            {isCompleted && task.nurseComment && (
+                                                                <div className="bg-green-50 p-2.5 rounded border border-green-200 mt-1.5 shadow-2xs">
+                                                                    <span className="text-[10px] text-green-800 font-extrabold uppercase tracking-wider flex items-center gap-1 mb-0.5">
+                                                                        💬 Nurse Execution Notes / Comments:
+                                                                    </span>
+                                                                    <p className="text-xs text-green-950 font-medium whitespace-pre-line">
+                                                                        {task.nurseComment}
+                                                                    </p>
+                                                                </div>
+                                                            )}
 
                                                             <div className="flex items-center gap-3 text-[11px] text-gray-500 pt-1 flex-wrap">
                                                                 <span>Doctor: <strong className="text-gray-700">{task.doctorName || task.doctor?.name || 'Doctor'}</strong></span>
                                                                 <span>Ordered: {new Date(task.createdAt).toLocaleString()}</span>
-                                                                {task.expectedDischargeDate && (
-                                                                    <span className="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                                                                        • Exp. Discharge: {new Date(task.expectedDischargeDate).toLocaleDateString()}
-                                                                    </span>
-                                                                )}
+
                                                                 {task.updatedByName && (
                                                                     <span className="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
                                                                         • Modified by Dr. <strong>{task.updatedByName.replace(/^Dr\.\s*/i, '')}</strong> at {new Date(task.updatedAt).toLocaleString()}
                                                                     </span>
                                                                 )}
                                                                 {isCompleted && (
-                                                                    <span className="text-green-700 font-medium bg-green-100/80 px-2 py-0.5 rounded border border-green-200">
+                                                                    <span className="text-green-700 font-medium bg-green-100/80 px-2 py-0.5 rounded border border-green-200 text-[11px]">
                                                                         • Completed by Nurse <strong>{task.completedByName || task.completedBy?.name || 'Nurse'}</strong> at {new Date(task.completedAt).toLocaleString()}
                                                                     </span>
                                                                 )}
@@ -1701,7 +1727,11 @@ const NurseTriage = () => {
                                                                 {!isCompleted ? (
                                                                     <button
                                                                         type="button"
-                                                                        onClick={() => handleUpdateOrderTaskStatus(task._id, 'Completed')}
+                                                                        onClick={() => {
+                                                                            setTaskToComplete(task);
+                                                                            setNurseTaskComment('');
+                                                                            setShowCompleteTaskModal(true);
+                                                                        }}
                                                                         className="px-3.5 py-2 text-xs bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition flex items-center gap-1.5 shadow-sm active:scale-95"
                                                                     >
                                                                         <FaCheckCircle /> Mark as Completed
@@ -1893,27 +1923,38 @@ const NurseTriage = () => {
                                                 >
                                                     <FaNotesMedical /> Add Nurse Note
                                                 </button>
-                                                {(selectedEncounter.type === 'Outpatient' || selectedEncounter.type === 'Emergency') && (
-                                                    <button
-                                                        onClick={(e) => handleOpenConvertModal(e, selectedEncounter)}
-                                                        className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 flex items-center gap-2 text-sm"
-                                                    >
-                                                        Admit Patient
-                                                    </button>
-                                                )}
-                                                {selectedEncounter.type === 'Inpatient' && selectedEncounter.encounterStatus !== 'discharged' && (
-                                                    <button
-                                                        onClick={(e) => handleDischarge(e, selectedEncounter)}
-                                                        className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 flex items-center gap-2 text-sm"
-                                                    >
-                                                        Discharge Patient
-                                                    </button>
-                                                )}
-                                                {selectedEncounter.type === 'Inpatient' && selectedEncounter.encounterStatus === 'discharged' && (
-                                                    <div className="px-4 py-2 bg-green-600 text-white rounded flex items-center gap-2 text-sm">
-                                                        ✓ Discharged
-                                                    </div>
-                                                )}
+                                                {(() => {
+                                                    const isAdmitted = selectedEncounter.encounterStatus === 'admitted' || selectedEncounter.status === 'Admitted' || selectedEncounter.type === 'Inpatient' || selectedEncounter.encounterType === 'Inpatient' || Boolean(selectedEncounter.ward);
+                                                    const isDischarged = selectedEncounter.encounterStatus === 'discharged' || selectedEncounter.status === 'Discharged';
+
+                                                    if (isDischarged) {
+                                                        return (
+                                                            <div className="px-4 py-2 bg-green-600 text-white rounded flex items-center gap-2 text-sm font-semibold shadow-sm">
+                                                                <FaCheckCircle /> Discharged
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    if (isAdmitted) {
+                                                        return (
+                                                            <button
+                                                                onClick={(e) => handleDischarge(e, selectedEncounter)}
+                                                                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 flex items-center gap-2 text-sm font-semibold shadow-sm transition-all"
+                                                            >
+                                                                <FaDoorOpen /> Discharge Patient
+                                                            </button>
+                                                        );
+                                                    }
+
+                                                    return (
+                                                        <button
+                                                            onClick={(e) => handleOpenConvertModal(e, selectedEncounter)}
+                                                            className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 flex items-center gap-2 text-sm font-semibold shadow-sm transition-all"
+                                                        >
+                                                            <FaProcedures /> Admit Patient
+                                                        </button>
+                                                    );
+                                                })()}
                                             </>
                                         )}
                                     </div>
@@ -2689,6 +2730,56 @@ const NurseTriage = () => {
                                 className="px-5 py-2 bg-green-600 text-white rounded font-bold hover:bg-green-700 shadow-md flex items-center gap-2 transition"
                             >
                                 <FaPlus /> Save Record
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Complete Doctor Order Task Modal */}
+            {showCompleteTaskModal && taskToComplete && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4 animate-fade-in">
+                    <div className="bg-white rounded-lg shadow-2xl max-w-md w-full border-t-4 border-green-600">
+                        <div className="p-4 border-b flex justify-between items-center bg-green-50">
+                            <h3 className="font-bold text-lg text-green-800 flex items-center gap-2">
+                                <FaCheckCircle /> Complete Order Task
+                            </h3>
+                            <button onClick={() => { setShowCompleteTaskModal(false); setTaskToComplete(null); }} className="text-2xl text-gray-400 hover:text-gray-600">&times;</button>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <div className="bg-gray-50 p-3 rounded border border-gray-200 text-xs space-y-1">
+                                <div className="flex items-center gap-2">
+                                    <span className="font-bold text-indigo-900">{taskToComplete.orderType}</span>
+                                    <span className="text-gray-500">• Doctor: Dr. {taskToComplete.doctorName || taskToComplete.doctor?.name || 'Doctor'}</span>
+                                </div>
+                                <p className="text-gray-700 italic font-medium whitespace-pre-line mt-1">{taskToComplete.instructions}</p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">
+                                    Nurse Comments / Execution Notes
+                                </label>
+                                <textarea
+                                    className="w-full border p-2.5 rounded focus:ring-2 focus:ring-green-400 outline-none text-xs"
+                                    rows="3"
+                                    placeholder="Enter comments or execution notes before marking completed..."
+                                    value={nurseTaskComment}
+                                    onChange={(e) => setNurseTaskComment(e.target.value)}
+                                    autoFocus
+                                ></textarea>
+                            </div>
+                        </div>
+                        <div className="p-4 bg-gray-50 border-t flex justify-end gap-3 rounded-b-lg">
+                            <button
+                                onClick={() => { setShowCompleteTaskModal(false); setTaskToComplete(null); }}
+                                className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded font-semibold text-xs transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => handleUpdateOrderTaskStatus(taskToComplete._id, 'Completed', nurseTaskComment)}
+                                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-bold text-xs transition shadow flex items-center gap-1.5"
+                            >
+                                <FaCheckCircle size={12} /> Confirm & Mark Completed
                             </button>
                         </div>
                     </div>

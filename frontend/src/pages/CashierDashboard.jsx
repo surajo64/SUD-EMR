@@ -41,7 +41,7 @@ const CashierDashboard = () => {
         }
         if (charge.patientPortion > 0) return charge.patientPortion;
         const provider = charge.patient?.provider || selectedPatient?.provider || 'Standard';
-        const isInsurance = ['Retainership', 'Corporate Retainership', 'Family Retainership', 'NHIA', 'KSCHMA'].includes(provider);
+        const isInsurance = ['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership', 'NHIA', 'KSCHMA'].includes(provider);
         if (isInsurance) {
             if ((provider === 'NHIA' || provider === 'KSCHMA') && charge.itemType === 'Drug') {
                 return charge.totalAmount * 0.1;
@@ -150,11 +150,11 @@ const CashierDashboard = () => {
 
         // Set default payment method based on provider first, then deposit balance
         let initialPaymentMethod = 'cash';
-        if (['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider)) {
+        if (['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership'].includes(patient.provider)) {
             initialPaymentMethod = 'retainership';
         } else if (['NHIA', 'KSCHMA', 'State Scheme'].includes(patient.provider)) {
             initialPaymentMethod = 'insurance';
-        } else if (patient.depositBalance > 0) {
+        } else if (patient.depositBalance !== undefined && patient.depositBalance !== 0) {
             initialPaymentMethod = 'deposit';
         }
         setPaymentMethod(initialPaymentMethod);
@@ -599,10 +599,14 @@ const CashierDashboard = () => {
                                         >
                                             ← Change Patient
                                         </button>
-                                        {selectedPatient.depositBalance > 0 && (
-                                            <div className="mt-2 p-2 bg-green-100 border border-green-200 rounded">
-                                                <p className="text-xs font-bold text-green-800 uppercase">Available Deposit</p>
-                                                <p className="text-lg font-black text-green-900">₦{selectedPatient.depositBalance.toLocaleString()}</p>
+                                        {selectedPatient.depositBalance !== undefined && selectedPatient.depositBalance !== 0 && (
+                                            <div className={`mt-2 p-2 rounded border ${selectedPatient.depositBalance < 0 ? 'bg-red-100 border-red-200' : 'bg-green-100 border-green-200'}`}>
+                                                <p className={`text-xs font-bold uppercase ${selectedPatient.depositBalance < 0 ? 'text-red-800' : 'text-green-800'}`}>
+                                                    {selectedPatient.depositBalance < 0 ? 'Wallet Balance (Negative)' : 'Available Deposit'}
+                                                </p>
+                                                <p className={`text-lg font-black ${selectedPatient.depositBalance < 0 ? 'text-red-900' : 'text-green-900'}`}>
+                                                    ₦{selectedPatient.depositBalance.toLocaleString()}
+                                                </p>
                                             </div>
                                         )}
                                     </div>
