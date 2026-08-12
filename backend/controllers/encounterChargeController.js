@@ -37,7 +37,7 @@ const addChargeToEncounter = async (req, res) => {
 
             // Determine fee based on patient provider using ward rates
             const provider = patient.provider;
-            if (provider === 'Retainership' || provider === 'Corporate Retainership') {
+            if (provider === 'Retainership' || provider === 'Corporate Retainership' || provider === 'Joud Alkhair Retainership') {
                 fee = ward.rates?.Retainership || ward.dailyRate || 0;
             } else if (provider === 'Family Retainership') {
                 fee = ward.rates?.Retainership || ward.dailyRate || 0;
@@ -68,7 +68,10 @@ const addChargeToEncounter = async (req, res) => {
                 switch (patient.provider) {
                     case 'Retainership':
                     case 'Corporate Retainership':
-                        fee = chargeDoc.retainershipFee;
+                        fee = chargeDoc.retainershipFee || 0;
+                        break;
+                    case 'Joud Alkhair Retainership':
+                        fee = chargeDoc.joudAlkhairFee || chargeDoc.retainershipFee || 0;
                         break;
                     case 'Family Retainership':
                         fee = chargeDoc.familyRetainershipFee || 0;
@@ -117,7 +120,7 @@ const addChargeToEncounter = async (req, res) => {
             // If not covered (fee was 0), patient pays 100%
             patientPortion = totalAmount;
             hmoPortion = 0;
-        } else if (patient.provider === 'Retainership' || patient.provider === 'Corporate Retainership' || patient.provider === 'Family Retainership') {
+        } else if (patient.provider === 'Retainership' || patient.provider === 'Corporate Retainership' || patient.provider === 'Family Retainership' || patient.provider === 'Joud Alkhair Retainership') {
             // Retainership: HMO covers 100% of ALL charges
             patientPortion = 0;
             hmoPortion = totalAmount;
@@ -278,7 +281,7 @@ const updateEncounterCharge = async (req, res) => {
                 let patientPortion = totalAmount;
                 let hmoPortion = 0;
 
-                if (patient.provider === 'Retainership' || patient.provider === 'Corporate Retainership' || patient.provider === 'Family Retainership') {
+                if (patient.provider === 'Retainership' || patient.provider === 'Corporate Retainership' || patient.provider === 'Family Retainership' || patient.provider === 'Joud Alkhair Retainership') {
                     patientPortion = 0;
                     hmoPortion = totalAmount;
                 } else if (patient.provider === 'NHIA' || patient.provider === 'KSCHMA') {
@@ -326,24 +329,201 @@ const updateEncounterCharge = async (req, res) => {
     }
 };
 
-// @desc    Delete encounter charge
+// Helper function to process reversal logic for a single charge
+const processChargeReversalAndCleanup = async (charge) => {
+    const Receipt = require('../models/receiptModel');
+    const Inventory = require('../models/inventoryModel');
+    const Claim = require('../models/claimModel');
+    const Prescription = require('../models/prescriptionModel');
+    const LabOrder = require('../models/labOrderModel');
+    const RadiologyOrder = require('../models/radiologyOrderModel');
+
+    let amountRefunded = 0;
+
+    // 1. If paid, process money refund to patient deposit & receipt cleanup
+    if (charge.status === 'paid') {
+        amountRefunded = charge.patientPortion > 0 ? charge.patientPortion : charge.totalAmount;
+
+        // Refund money to patient deposit balance
+        if (amountRefunded > 0) {
+            const patient = await Patient.findById(charge.patient);
+            if (patient) {
+                patient.depositBalance = (patient.depositBalance || 0) + amountRefunded;
+                await patient.save();
+            }
+        }
+
+        // Handle linked Receipt
+        const receipt = charge.receipt
+            ? await Receipt.findById(charge.receipt)
+            : await Receipt.findOne({ charges: charge._id });
+
+        if (receipt) {
+            receipt.charges = (receipt.charges || []).filter(cId => cId.toString() !== charge._id.toString());
+            receipt.amountPaid = Math.max(0, (receipt.amountPaid || 0) - amountRefunded);
+
+            if (receipt.charges.length === 0 || receipt.amountPaid <= 0) {
+                await Receipt.findByIdAndDelete(receipt._id);
+            } else {
+                await receipt.save();
+            }
+        }
+
+        // Handle Inventory Return for Pharmacy/Drug items
+        const isPharmacyItem =
+            charge.itemType?.toLowerCase() === 'pharmacy' ||
+            charge.itemType?.toLowerCase() === 'drugs' ||
+            charge.itemType?.toLowerCase() === 'drug' ||
+            charge.department?.toLowerCase() === 'pharmacy';
+
+        if (isPharmacyItem && charge.quantity > 0) {
+            const drugName = charge.itemName || (charge.charge && charge.charge.name);
+            if (drugName) {
+                const inventoryItem = await Inventory.findOne({
+                    name: { $regex: new RegExp(`^${drugName}$`, 'i') },
+                    expiryDate: { $gte: new Date() }
+                }).sort({ expiryDate: -1 });
+
+                if (inventoryItem) {
+                    inventoryItem.quantity += charge.quantity;
+                    await inventoryItem.save();
+                }
+            }
+        }
+
+        // Handle HMO Claim cleanup
+        if (charge.encounter) {
+            const claim = await Claim.findOne({ encounter: charge.encounter });
+            if (claim && claim.claimItems && claim.claimItems.length > 0) {
+                const hmoPortion = charge.hmoPortion || 0;
+                claim.claimItems = claim.claimItems.filter(item => {
+                    const matchId = item.charge && item.charge.toString() === (charge.charge?._id || charge.charge)?.toString();
+                    const matchDesc = item.description && charge.itemName && item.description.toLowerCase() === charge.itemName.toLowerCase();
+                    return !(matchId || matchDesc);
+                });
+                claim.totalClaimAmount = Math.max(0, (claim.totalClaimAmount || 0) - hmoPortion);
+                if (claim.claimItems.length === 0) {
+                    await Claim.findByIdAndDelete(claim._id);
+                } else {
+                    await claim.save();
+                }
+            }
+        }
+    }
+
+    // 2. Clean up references in Prescriptions, LabOrders, RadiologyOrders
+    await Prescription.deleteMany({ charge: charge._id });
+    await LabOrder.deleteMany({ charge: charge._id });
+    await RadiologyOrder.deleteMany({ charge: charge._id });
+
+    // 3. Delete the charge document
+    await charge.deleteOne();
+
+    return amountRefunded;
+};
+
+// @desc    Delete encounter charge (Pending for non-admin, Paid & Pending for Admin)
 // @route   DELETE /api/encounter-charges/:id
 // @access  Private
 const deleteEncounterCharge = async (req, res) => {
     try {
-        const charge = await EncounterCharge.findById(req.params.id);
+        const charge = await EncounterCharge.findById(req.params.id).populate('charge');
 
         if (!charge) {
             return res.status(404).json({ message: 'Encounter charge not found' });
         }
 
-        if (charge.status !== 'pending') {
-            return res.status(400).json({ message: 'Cannot delete a processed charge' });
+        const isAdmin = req.user.role === 'admin' || req.user.role === 'super_admin';
+
+        if (charge.status !== 'pending' && !isAdmin) {
+            return res.status(400).json({ message: 'Cannot delete a processed charge. Admin access required.' });
         }
 
-        await charge.deleteOne();
-        res.json({ message: 'Charge removed' });
+        const refundedAmount = await processChargeReversalAndCleanup(charge);
+
+        res.json({
+            message: charge.status === 'paid'
+                ? `Charge reversed, ₦${refundedAmount.toLocaleString()} refunded to patient deposit, and charge removed successfully.`
+                : 'Charge removed successfully.',
+            refundedAmount
+        });
     } catch (error) {
+        console.error('Error deleting charge:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Reverse and remove all charges for a patient (Admin only)
+// @route   POST /api/encounter-charges/patient/:patientId/reverse-all
+// @access  Private (Admin)
+const reverseAllPatientCharges = async (req, res) => {
+    try {
+        const isAdmin = req.user.role === 'admin' || req.user.role === 'super_admin';
+        if (!isAdmin) {
+            return res.status(403).json({ message: 'Access denied. Admin rights required.' });
+        }
+
+        const charges = await EncounterCharge.find({ patient: req.params.patientId }).populate('charge');
+
+        if (!charges || charges.length === 0) {
+            return res.status(404).json({ message: 'No charges found for this patient' });
+        }
+
+        let totalRefunded = 0;
+        let chargesCount = charges.length;
+
+        for (const charge of charges) {
+            const refunded = await processChargeReversalAndCleanup(charge);
+            totalRefunded += refunded;
+        }
+
+        res.json({
+            message: `Successfully reversed ${chargesCount} charges and refunded ₦${totalRefunded.toLocaleString()} to patient deposit.`,
+            totalRefunded,
+            chargesCount
+        });
+    } catch (error) {
+        console.error('Error reversing all patient charges:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Reverse and remove selected charges (Admin only)
+// @route   POST /api/encounter-charges/reverse-selected
+// @access  Private (Admin)
+const reverseSelectedCharges = async (req, res) => {
+    try {
+        const isAdmin = req.user.role === 'admin' || req.user.role === 'super_admin';
+        if (!isAdmin) {
+            return res.status(403).json({ message: 'Access denied. Admin rights required.' });
+        }
+
+        const { chargeIds } = req.body;
+        if (!chargeIds || !Array.isArray(chargeIds) || chargeIds.length === 0) {
+            return res.status(400).json({ message: 'Please select at least one charge to reverse.' });
+        }
+
+        const charges = await EncounterCharge.find({ _id: { $in: chargeIds } }).populate('charge');
+
+        if (!charges || charges.length === 0) {
+            return res.status(404).json({ message: 'No matching charges found.' });
+        }
+
+        let totalRefunded = 0;
+        let chargesCount = charges.length;
+
+        for (const charge of charges) {
+            const refunded = await processChargeReversalAndCleanup(charge);
+            totalRefunded += refunded;
+        }
+
+        res.json({
+            message: `Successfully reversed ${chargesCount} selected charge(s) and refunded ₦${totalRefunded.toLocaleString()} to patient deposit.`,
+            totalRefunded,
+            chargesCount
+        });
+    } catch (error) {
+        console.error('Error reversing selected charges:', error);
         res.status(500).json({ message: error.message });
     }
 };
@@ -402,5 +582,9 @@ module.exports = {
     markChargePaid,
     updateEncounterCharge,
     deleteEncounterCharge,
+    reverseAllPatientCharges,
+    reverseSelectedCharges,
     triggerDailyWardCharges,
 };
+
+

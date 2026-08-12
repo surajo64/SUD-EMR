@@ -3,7 +3,7 @@ import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import { AppContext } from '../context/AppContext';
 import Layout from '../components/Layout';
-import { FaDollarSign, FaFileInvoiceDollar, FaSearch, FaUser, FaTrash, FaCalendarAlt, FaHistory, FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
+import { FaDollarSign, FaFileInvoiceDollar, FaSearch, FaUser, FaTrash, FaCalendarAlt, FaHistory, FaCheckCircle, FaExclamationCircle, FaUndo } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import LoadingOverlay from '../components/loadingOverlay';
 
@@ -13,6 +13,7 @@ const PatientFinancialStatement = () => {
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [charges, setCharges] = useState([]);
+    const [selectedChargeIds, setSelectedChargeIds] = useState([]);
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [showPatientSearch, setShowPatientSearch] = useState(false);
@@ -42,6 +43,7 @@ const PatientFinancialStatement = () => {
         if (!patientId) return;
         try {
             setLoading(true);
+            setSelectedChargeIds([]);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             let url = `${backendUrl}/api/encounter-charges/patient/${patientId}`;
             
@@ -66,23 +68,103 @@ const PatientFinancialStatement = () => {
     const handlePatientSelect = (patient) => {
         setSelectedPatient(patient);
         setShowPatientSearch(false);
+        setSelectedChargeIds([]);
         fetchPatientStatement(patient._id);
     };
 
-    const handleDeleteCharge = async (chargeId) => {
-        if (!window.confirm('Are you sure you want to delete this pending charge? This action cannot be undone.')) {
+    const handleSelectAll = (e) => {
+        if (e.target.checked) {
+            setSelectedChargeIds(charges.map(c => c._id));
+        } else {
+            setSelectedChargeIds([]);
+        }
+    };
+
+    const handleSelectCharge = (chargeId) => {
+        if (selectedChargeIds.includes(chargeId)) {
+            setSelectedChargeIds(selectedChargeIds.filter(id => id !== chargeId));
+        } else {
+            setSelectedChargeIds([...selectedChargeIds, chargeId]);
+        }
+    };
+
+    const handleDeleteCharge = async (charge) => {
+        const isPaid = charge.status === 'paid';
+        const confirmMsg = isPaid
+            ? `Are you sure you want to refund this paid charge (₦${charge.totalAmount.toLocaleString()}) and delete it from the patient ledger?\n\nThe money will be refunded to the patient's deposit balance, inventory restored if applicable, and the charge will be removed.`
+            : 'Are you sure you want to delete this pending charge? This action cannot be undone.';
+
+        if (!window.confirm(confirmMsg)) {
             return;
         }
 
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            await axios.delete(`${backendUrl}/api/encounter-charges/${chargeId}`, config);
-            toast.success('Charge deleted successfully');
+            const { data } = await axios.delete(`${backendUrl}/api/encounter-charges/${charge._id}`, config);
+            toast.success(data.message || 'Charge deleted successfully');
+            setSelectedChargeIds(prev => prev.filter(id => id !== charge._id));
             fetchPatientStatement(selectedPatient._id);
         } catch (error) {
             console.error(error);
             toast.error(error.response?.data?.message || 'Error deleting charge');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleReverseSelectedCharges = async () => {
+        if (selectedChargeIds.length === 0) return;
+
+        const selectedCharges = charges.filter(c => selectedChargeIds.includes(c._id));
+        const selectedTotal = selectedCharges.reduce((sum, c) => sum + c.totalAmount, 0);
+        const paidCount = selectedCharges.filter(c => c.status === 'paid').length;
+        const paidTotal = selectedCharges.filter(c => c.status === 'paid').reduce((sum, c) => sum + c.totalAmount, 0);
+
+        const confirmMsg = `Are you sure you want to reverse & delete ${selectedChargeIds.length} selected charge(s)?\n\n` +
+            `• Total Amount: ₦${selectedTotal.toLocaleString()}\n` +
+            `• Paid Charges (${paidCount}): ₦${paidTotal.toLocaleString()} will be refunded to patient deposit balance.\n` +
+            `• Inventory stock will be restored for any drug items.\n` +
+            `• The selected charges will be permanently removed from the ledger.`;
+
+        if (!window.confirm(confirmMsg)) {
+            return;
+        }
+
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.post(`${backendUrl}/api/encounter-charges/reverse-selected`, { chargeIds: selectedChargeIds }, config);
+            toast.success(data.message || 'Selected charges reversed & deleted successfully');
+            setSelectedChargeIds([]);
+            fetchPatientStatement(selectedPatient._id);
+        } catch (error) {
+            console.error(error);
+            toast.error(error.response?.data?.message || 'Error reversing selected charges');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleReverseAllPatientCharges = async () => {
+        if (!selectedPatient) return;
+        
+        const confirmMsg = `Are you sure you want to reverse all charges for ${selectedPatient.name}?\n\nThis will refund ₦${totalPaid.toLocaleString()} to the patient's deposit balance, restore inventory if applicable, and delete all ${charges.length} charges from the ledger.`;
+
+        if (!window.confirm(confirmMsg)) {
+            return;
+        }
+
+        try {
+            setLoading(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.post(`${backendUrl}/api/encounter-charges/patient/${selectedPatient._id}/reverse-all`, {}, config);
+            toast.success(data.message || 'Patient ledger reversed successfully');
+            setSelectedChargeIds([]);
+            fetchPatientStatement(selectedPatient._id);
+        } catch (error) {
+            console.error(error);
+            toast.error(error.response?.data?.message || 'Error reversing patient ledger');
         } finally {
             setLoading(false);
         }
@@ -97,6 +179,8 @@ const PatientFinancialStatement = () => {
     const totalPaid = charges.filter(c => c.status === 'paid').reduce((sum, c) => sum + c.totalAmount, 0);
     const totalPending = charges.filter(c => c.status === 'pending').reduce((sum, c) => sum + c.totalAmount, 0);
 
+    const selectedTotal = charges.filter(c => selectedChargeIds.includes(c._id)).reduce((sum, c) => sum + c.totalAmount, 0);
+
     const isAdmin = user.role === 'admin' || user.role === 'super_admin';
 
     return (
@@ -106,10 +190,28 @@ const PatientFinancialStatement = () => {
                 <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                     <FaFileInvoiceDollar className="text-green-600" /> Patient Financial Statement
                 </h2>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
+                    {isAdmin && selectedChargeIds.length > 0 && (
+                        <button
+                            onClick={handleReverseSelectedCharges}
+                            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-all shadow-md font-bold text-sm"
+                            title="Reverse and delete selected charges"
+                        >
+                            <FaUndo /> Reverse Selected ({selectedChargeIds.length})
+                        </button>
+                    )}
+                    {isAdmin && selectedPatient && charges.length > 0 && (
+                        <button
+                            onClick={handleReverseAllPatientCharges}
+                            className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 flex items-center gap-2 transition-all shadow-sm font-semibold text-sm"
+                            title="Reverse all charges for this patient and refund collected money"
+                        >
+                            <FaUndo /> Reverse Entire Ledger
+                        </button>
+                    )}
                     <button
                         onClick={() => setShowPatientSearch(true)}
-                        className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center gap-2 transition-colors"
+                        className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2 transition-colors font-semibold text-sm"
                     >
                         <FaSearch /> {selectedPatient ? 'Change Patient' : 'Select Patient'}
                     </button>
@@ -187,10 +289,23 @@ const PatientFinancialStatement = () => {
                     </div>
 
                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                        <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
-                            <h3 className="font-bold text-gray-800 flex items-center gap-2">
-                                <FaHistory className="text-blue-500" /> Transaction History
-                            </h3>
+                        <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center flex-wrap gap-2">
+                            <div className="flex items-center gap-4">
+                                <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                                    <FaHistory className="text-blue-500" /> Transaction History
+                                </h3>
+                                {isAdmin && selectedChargeIds.length > 0 && (
+                                    <div className="flex items-center gap-2 bg-red-50 text-red-700 border border-red-200 px-3 py-1 rounded-full text-xs font-semibold">
+                                        <span>Selected: <strong>{selectedChargeIds.length}</strong> (₦{selectedTotal.toLocaleString()})</span>
+                                        <button 
+                                            onClick={() => setSelectedChargeIds([])}
+                                            className="ml-1 text-red-500 hover:text-red-800 underline text-[10px]"
+                                        >
+                                            Clear
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                             <span className="text-xs font-bold text-gray-400 uppercase tracking-widest bg-white px-2 py-1 rounded border">
                                 {charges.length} Entries
                             </span>
@@ -199,6 +314,17 @@ const PatientFinancialStatement = () => {
                             <table className="w-full text-left">
                                 <thead className="bg-gray-50 text-gray-600 text-xs uppercase font-bold">
                                     <tr>
+                                        {isAdmin && (
+                                            <th className="px-4 py-3 text-center w-10">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={charges.length > 0 && selectedChargeIds.length === charges.length}
+                                                    onChange={handleSelectAll}
+                                                    className="rounded text-green-600 focus:ring-green-500 w-4 h-4 cursor-pointer"
+                                                    title="Select All Charges"
+                                                />
+                                            </th>
+                                        )}
                                         <th className="px-6 py-3 tracking-wider">Date</th>
                                         <th className="px-6 py-3 tracking-wider">Service/Item</th>
                                         <th className="px-6 py-3 tracking-wider">Type</th>
@@ -210,7 +336,17 @@ const PatientFinancialStatement = () => {
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
                                     {charges.length > 0 ? charges.map((charge) => (
-                                        <tr key={charge._id} className="hover:bg-gray-50 transition-colors group">
+                                        <tr key={charge._id} className={`hover:bg-gray-50 transition-colors group ${selectedChargeIds.includes(charge._id) ? 'bg-red-50/40' : ''}`}>
+                                            {isAdmin && (
+                                                <td className="px-4 py-4 text-center">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={selectedChargeIds.includes(charge._id)}
+                                                        onChange={() => handleSelectCharge(charge._id)}
+                                                        className="rounded text-green-600 focus:ring-green-500 w-4 h-4 cursor-pointer"
+                                                    />
+                                                </td>
+                                            )}
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                                 {new Date(charge.createdAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}
                                             </td>
@@ -242,11 +378,19 @@ const PatientFinancialStatement = () => {
                                                 <td className="px-6 py-4 whitespace-nowrap text-center">
                                                     {charge.status === 'pending' ? (
                                                         <button 
-                                                            onClick={() => handleDeleteCharge(charge._id)}
+                                                            onClick={() => handleDeleteCharge(charge)}
                                                             className="text-red-500 hover:text-red-700 transition-colors p-2 rounded-full hover:bg-red-50"
-                                                            title="Delete Charge"
+                                                            title="Delete Pending Charge"
                                                         >
                                                             <FaTrash />
+                                                        </button>
+                                                    ) : charge.status === 'paid' ? (
+                                                        <button 
+                                                            onClick={() => handleDeleteCharge(charge)}
+                                                            className="bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-800 transition-colors px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 mx-auto border border-red-200 shadow-sm"
+                                                            title="Refund money to deposit & delete charge"
+                                                        >
+                                                            <FaUndo className="text-[10px]" /> Reverse & Delete
                                                         </button>
                                                     ) : (
                                                         <span className="text-gray-300">-</span>
@@ -256,7 +400,7 @@ const PatientFinancialStatement = () => {
                                         </tr>
                                     )) : (
                                         <tr>
-                                            <td colSpan={isAdmin ? 7 : 6} className="px-6 py-12 text-center text-gray-500">
+                                            <td colSpan={isAdmin ? 8 : 6} className="px-6 py-12 text-center text-gray-500">
                                                 <div className="flex flex-col items-center gap-2">
                                                     <FaCalendarAlt className="text-gray-300 text-4xl" />
                                                     <p>No transactions found for the selected criteria.</p>
@@ -264,6 +408,7 @@ const PatientFinancialStatement = () => {
                                             </td>
                                         </tr>
                                     )}
+
                                 </tbody>
                             </table>
                         </div>

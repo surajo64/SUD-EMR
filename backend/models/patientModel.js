@@ -15,7 +15,7 @@ const patientSchema = mongoose.Schema({
     // Insurance/Provider Details
     provider: {
         type: String,
-        enum: ['Standard', 'Retainership', 'Corporate Retainership', 'Family Retainership', 'NHIA', 'KSCHMA'],
+        enum: ['Standard', 'Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership', 'NHIA', 'KSCHMA'],
         default: 'Standard'
     },
     hmo: { type: String }, // Only for NHIA patients
@@ -42,6 +42,7 @@ const patientSchema = mongoose.Schema({
     isFamilyMember: { type: Boolean, default: false },
     familyFile: { type: mongoose.Schema.Types.ObjectId, ref: 'FamilyFile' },
     registeredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    isWalkIn: { type: Boolean, default: false },
 }, {
     timestamps: true,
 });

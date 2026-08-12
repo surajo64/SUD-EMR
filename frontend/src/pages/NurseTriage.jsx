@@ -993,11 +993,6 @@ const NurseTriage = () => {
     const handleFinishTriage = async () => {
         if (!selectedEncounter || !user || isReadOnly) return;
 
-        if (!selectedDoctor) {
-            toast.warning('Please assign a consulting physician');
-            return;
-        }
-
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };

@@ -334,7 +334,8 @@ const processDirectSale = async (req, res) => {
                 gender: gender || 'Unknown',
                 contact: 'Walk-in',
                 provider: 'Standard',
-                depositBalance: 0
+                depositBalance: 0,
+                isWalkIn: true
             });
         }
 

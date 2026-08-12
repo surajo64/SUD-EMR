@@ -13,6 +13,19 @@ const checkUnpaidConsultation = async (visitId) => {
     return charges.some(c => c.charge && c.charge.type === 'consultation' && c.status === 'pending');
 };
 
+const isWalkInCustomerOrEncounter = (visit, patient) => {
+    const externalTypes = ['External Pharmacy', 'External Lab', 'External Radiology', 'External Investigation'];
+    if (visit && externalTypes.includes(visit.type)) return true;
+
+    const p = patient || (visit && visit.patient);
+    if (p) {
+        if (p.isWalkIn === true) return true;
+        if (p.contact === 'Walk-in') return true;
+        if (p.mrn && /^WI-|^LAB-|^RAD-/.test(p.mrn)) return true;
+    }
+    return false;
+};
+
 const formatVisitWithClinicalNotes = (visit) => {
     if (!visit) return null;
     const visitObj = visit.toObject ? visit.toObject() : visit;
@@ -81,6 +94,15 @@ const formatVisitWithClinicalNotes = (visit) => {
 const createVisit = async (req, res) => {
     const { patientId, appointmentId, type, clinic, encounterType, reasonForVisit, ward, bed, isANC,
         waiveConsultationFee, needSpeciality, specialityClinic, needSpecificDoctor, specificDoctor } = req.body;
+
+    const Patient = require('../models/patientModel');
+    const targetPatient = await Patient.findById(patientId);
+    if (!targetPatient) {
+        return res.status(404).json({ message: 'Patient not found' });
+    }
+    if (isWalkInCustomerOrEncounter(null, targetPatient)) {
+        return res.status(400).json({ message: 'Cannot create clinical encounters for a walk-in customer.' });
+    }
 
     // Check for existing visit today
     const startOfDay = new Date();
@@ -291,8 +313,13 @@ const getVisits = async (req, res) => {
         }
     }
 
-    const visits = await Visit.find(query)
-        .populate('patient', 'name mrn age gender contact')
+    const isClinicalRole = req.user && ['doctor', 'nurse', 'cashier', 'receptionist'].includes(req.user.role);
+    if (isClinicalRole || (req.query.includeWalkIn !== 'true' && (!type || !type.startsWith('External')))) {
+        query.type = { $nin: ['External Pharmacy', 'External Lab', 'External Radiology', 'External Investigation'] };
+    }
+
+    let visits = await Visit.find(query)
+        .populate('patient', 'name mrn age gender contact isWalkIn')
         .populate('doctor', 'name')
         .populate('consultingPhysician', 'name')
         .populate('clinicalNotes.doctor', 'name role')
@@ -303,6 +330,10 @@ const getVisits = async (req, res) => {
         .populate('waivedBy', 'name')
         .populate('seenBy', 'name')
         .populate('dischargedBy', 'name role');
+
+    if (isClinicalRole || req.query.includeWalkIn !== 'true') {
+        visits = visits.filter(v => !isWalkInCustomerOrEncounter(v, v.patient));
+    }
 
     // Fetch unpaid consultation status for each visit
     const visitsWithPaymentStatus = await Promise.all(visits.map(async (visit) => {
@@ -351,9 +382,14 @@ const updateVisit = async (req, res) => {
 
     console.log('updateVisit body restrictions:', { needSpeciality, specialityClinic, needSpecificDoctor, specificDoctor });
 
-    const visit = await Visit.findById(req.params.id);
+    const visit = await Visit.findById(req.params.id).populate('patient');
 
     if (visit) {
+        const isClinicalRole = req.user && ['doctor', 'nurse', 'cashier', 'receptionist'].includes(req.user.role);
+        if (isClinicalRole && isWalkInCustomerOrEncounter(visit, visit.patient)) {
+            return res.status(403).json({ message: 'Access denied: Cannot access or modify walk-in customer encounters.' });
+        }
+
         if (req.user.role === 'doctor') {
             const hasUnpaid = await checkUnpaidConsultation(visit._id);
             if (hasUnpaid) {
@@ -492,7 +528,7 @@ const updateVisit = async (req, res) => {
 // @access  Private
 const getVisitById = async (req, res) => {
     const visit = await Visit.findById(req.params.id)
-        .populate('patient', 'name age gender')
+        .populate('patient', 'name age gender mrn contact isWalkIn')
         .populate('doctor', 'name')
         .populate('consultingPhysician', 'name')
         .populate('clinicalNotes.doctor', 'name role')
@@ -505,6 +541,11 @@ const getVisitById = async (req, res) => {
         .populate('dischargedBy', 'name role');
 
     if (visit) {
+        const isClinicalRole = req.user && ['doctor', 'nurse', 'cashier', 'receptionist'].includes(req.user.role);
+        if (isClinicalRole && isWalkInCustomerOrEncounter(visit, visit.patient)) {
+            return res.status(403).json({ message: 'Access denied: Cannot access walk-in customer encounters.' });
+        }
+
         if (req.user && req.user.role === 'doctor') {
             // All doctors can access any admitted/inpatient encounter.
             if (visit.type !== 'Inpatient') {
@@ -553,14 +594,26 @@ const deleteVisit = async (req, res) => {
 // @access  Private
 const getVisitsByPatient = async (req, res) => {
     try {
-        const visits = await Visit.find({ patient: req.params.patientId })
+        const Patient = require('../models/patientModel');
+        const targetPatient = await Patient.findById(req.params.patientId);
+        const isClinicalRole = req.user && ['doctor', 'nurse', 'cashier', 'receptionist'].includes(req.user.role);
+        if (isClinicalRole && isWalkInCustomerOrEncounter(null, targetPatient)) {
+            return res.json([]);
+        }
+
+        let visits = await Visit.find({ patient: req.params.patientId })
             .sort({ createdAt: -1 })
+            .populate('patient', 'name mrn age gender contact isWalkIn')
             .populate('doctor', 'name')
             .populate('consultingPhysician', 'name')
             .populate('clinicalNotes.doctor', 'name role')
             .populate('clinic', 'name department')
             .populate('ward', 'name')
             .populate('waivedBy', 'name');
+
+        if (isClinicalRole || req.query.includeWalkIn !== 'true') {
+            visits = visits.filter(v => !isWalkInCustomerOrEncounter(v, v.patient));
+        }
 
         const visitsWithPaymentStatus = await Promise.all(visits.map(async (visit) => {
             const hasUnpaid = await checkUnpaidConsultation(visit._id);
@@ -582,9 +635,14 @@ const addNote = async (req, res) => {
     const { text } = req.body;
 
     try {
-        const visit = await Visit.findById(req.params.id);
+        const visit = await Visit.findById(req.params.id).populate('patient');
 
         if (visit) {
+            const isClinicalRole = req.user && ['doctor', 'nurse', 'cashier', 'receptionist'].includes(req.user.role);
+            if (isClinicalRole && isWalkInCustomerOrEncounter(visit, visit.patient)) {
+                return res.status(403).json({ message: 'Access denied: Cannot access or modify walk-in customer encounters.' });
+            }
+
             if (req.user.role === 'doctor') {
                 const hasUnpaid = await checkUnpaidConsultation(visit._id);
                 if (hasUnpaid) {
@@ -623,10 +681,14 @@ const convertToInpatient = async (req, res) => {
     const { ward, bed } = req.body;
 
     try {
-        const visit = await Visit.findById(req.params.id);
+        const visit = await Visit.findById(req.params.id).populate('patient');
 
         if (!visit) {
             return res.status(404).json({ message: 'Visit not found' });
+        }
+
+        if (isWalkInCustomerOrEncounter(visit, visit.patient)) {
+            return res.status(400).json({ message: 'Walk-in customer encounters cannot be converted to inpatient.' });
         }
 
         const Patient = require('../models/patientModel');
@@ -735,10 +797,14 @@ const changeEncounterType = async (req, res) => {
     } = req.body;
 
     try {
-        const visit = await Visit.findById(req.params.id);
+        const visit = await Visit.findById(req.params.id).populate('patient');
 
         if (!visit) {
             return res.status(404).json({ message: 'Visit not found' });
+        }
+
+        if (isWalkInCustomerOrEncounter(visit, visit.patient)) {
+            return res.status(400).json({ message: 'Walk-in customer encounters cannot be converted into clinical encounters.' });
         }
 
         if (req.user.role === 'doctor') {
@@ -1019,8 +1085,13 @@ const addWardRoundNote = async (req, res) => {
         return res.status(400).json({ message: 'Note text is required.' });
     }
     try {
-        const visit = await Visit.findById(req.params.id);
+        const visit = await Visit.findById(req.params.id).populate('patient');
         if (!visit) return res.status(404).json({ message: 'Visit not found' });
+
+        const isClinicalRole = req.user && ['doctor', 'nurse', 'cashier', 'receptionist'].includes(req.user.role);
+        if (isClinicalRole && isWalkInCustomerOrEncounter(visit, visit.patient)) {
+            return res.status(403).json({ message: 'Access denied: Cannot access or modify walk-in customer encounters.' });
+        }
 
         if (req.user.role === 'doctor') {
             const hasUnpaid = await checkUnpaidConsultation(visit._id);
@@ -1043,8 +1114,13 @@ const addWardRoundNote = async (req, res) => {
 // @access  Private (Doctor)
 const saveTheatreNote = async (req, res) => {
     try {
-        const visit = await Visit.findById(req.params.id);
+        const visit = await Visit.findById(req.params.id).populate('patient');
         if (!visit) return res.status(404).json({ message: 'Visit not found' });
+
+        const isClinicalRole = req.user && ['doctor', 'nurse', 'cashier', 'receptionist'].includes(req.user.role);
+        if (isClinicalRole && isWalkInCustomerOrEncounter(visit, visit.patient)) {
+            return res.status(403).json({ message: 'Access denied: Cannot access or modify walk-in customer encounters.' });
+        }
 
         const noteData = {
             ...req.body,
@@ -1139,8 +1215,13 @@ const saveConsentNote = async (req, res) => {
 // @access  Private (Doctor)
 const saveClinicalNote = async (req, res) => {
     try {
-        const visit = await Visit.findById(req.params.id);
+        const visit = await Visit.findById(req.params.id).populate('patient');
         if (!visit) return res.status(404).json({ message: 'Visit not found' });
+
+        const isClinicalRole = req.user && ['doctor', 'nurse', 'cashier', 'receptionist'].includes(req.user.role);
+        if (isClinicalRole && isWalkInCustomerOrEncounter(visit, visit.patient)) {
+            return res.status(403).json({ message: 'Access denied: Cannot access or modify walk-in customer encounters.' });
+        }
 
         // Doctors must pay consultation first
         if (req.user.role === 'doctor') {
@@ -1394,8 +1475,13 @@ const savePostoperativeHandoverChecklist = async (req, res) => {
 // @access  Private (Doctor/User)
 const saveOrderTask = async (req, res) => {
     try {
-        const visit = await Visit.findById(req.params.id);
+        const visit = await Visit.findById(req.params.id).populate('patient');
         if (!visit) return res.status(404).json({ message: 'Visit not found' });
+
+        const isClinicalRole = req.user && ['doctor', 'nurse', 'cashier', 'receptionist'].includes(req.user.role);
+        if (isClinicalRole && isWalkInCustomerOrEncounter(visit, visit.patient)) {
+            return res.status(403).json({ message: 'Access denied: Cannot access or modify walk-in customer encounters.' });
+        }
 
         const { orderType, customOrderTask, expectedDischargeDate, instructions } = req.body;
         if (!orderType || !instructions) {
@@ -1448,8 +1534,13 @@ const saveOrderTask = async (req, res) => {
 // @access  Private (Nurse/Doctor/User)
 const updateOrderTaskStatus = async (req, res) => {
     try {
-        const visit = await Visit.findById(req.params.id);
+        const visit = await Visit.findById(req.params.id).populate('patient');
         if (!visit) return res.status(404).json({ message: 'Visit not found' });
+
+        const isClinicalRole = req.user && ['doctor', 'nurse', 'cashier', 'receptionist'].includes(req.user.role);
+        if (isClinicalRole && isWalkInCustomerOrEncounter(visit, visit.patient)) {
+            return res.status(403).json({ message: 'Access denied: Cannot access or modify walk-in customer encounters.' });
+        }
 
         const { taskId } = req.params;
         const { status, nurseComment } = req.body;

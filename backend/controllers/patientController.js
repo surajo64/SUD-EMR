@@ -111,6 +111,12 @@ const getPatients = async (req, res) => {
         const limit = parseInt(req.query.limit) || 5; // Default limit match frontend PATIENTS_PER_PAGE
         let filter = {};
 
+        if (req.query.includeWalkIn !== 'true') {
+            filter.isWalkIn = { $ne: true };
+            filter.contact = { $ne: 'Walk-in' };
+            filter.mrn = { $not: /^WI-|^LAB-|^RAD-/ };
+        }
+
         if (familyFile) {
             // If familyFile query is provided, we strictly filter by it
             const mongoose = require('mongoose');
@@ -230,7 +236,7 @@ const getPatients = async (req, res) => {
             
             // Find unique HMO names of patients that need balance calculation
             const hmoNames = [...new Set(patients
-                .filter(patient => ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider) && patient.hmo)
+                .filter(patient => ['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership'].includes(patient.provider) && patient.hmo)
                 .map(patient => patient.hmo)
             )];
 
@@ -241,7 +247,7 @@ const getPatients = async (req, res) => {
 
             for (let patient of patients) {
                 let walletBalance = patient.depositBalance || 0;
-                if (['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider) && patient.hmo) {
+                if (['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership'].includes(patient.provider) && patient.hmo) {
                     walletBalance = hmoBalances[patient.hmo] || 0;
                 }
                 const pObj = patient.toObject();
@@ -279,7 +285,7 @@ const getPatients = async (req, res) => {
             
             // Find unique HMO names of patients that need balance calculation
             const hmoNames = [...new Set(patients
-                .filter(patient => ['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider) && patient.hmo)
+                .filter(patient => ['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership'].includes(patient.provider) && patient.hmo)
                 .map(patient => patient.hmo)
             )];
 
@@ -290,7 +296,7 @@ const getPatients = async (req, res) => {
 
             for (let patient of patients) {
                 let walletBalance = patient.depositBalance || 0;
-                if (['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider) && patient.hmo) {
+                if (['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership'].includes(patient.provider) && patient.hmo) {
                     walletBalance = hmoBalances[patient.hmo] || 0;
                 }
                 const pObj = patient.toObject();
@@ -493,7 +499,11 @@ const getDepositBalance = async (req, res) => {
 // @access  Private
 const getRecentPatients = async (req, res) => {
     try {
-        const recentPatients = await Patient.find({})
+        const recentPatients = await Patient.find({
+            isWalkIn: { $ne: true },
+            contact: { $ne: 'Walk-in' },
+            mrn: { $not: /^WI-|^LAB-|^RAD-/ }
+        })
             .sort({ updatedAt: -1 })
             .limit(5);
 
@@ -559,7 +569,7 @@ const getPatientById = async (req, res) => {
             }
 
             let walletBalance = patient.depositBalance || 0;
-            if (['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(patient.provider) && patient.hmo) {
+            if (['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership'].includes(patient.provider) && patient.hmo) {
                 walletBalance = await getHMOWalletBalance(patient.hmo);
             }
             const pObj = patient.toObject();

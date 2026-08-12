@@ -351,6 +351,10 @@ const PatientManagement = () => {
 
     const handleCreateEncounter = async () => {
         if (!encounterPatient) return;
+        if (encounterPatient.isWalkIn || encounterPatient.contact === 'Walk-in' || (encounterPatient.mrn && /^WI-|^LAB-|^RAD-/.test(encounterPatient.mrn))) {
+            toast.error('Cannot create a clinical encounter for a walk-in customer.');
+            return;
+        }
         if (!isANC && !waiveConsultationFee && !['External Investigation', 'External Pharmacy', 'External Lab/Radiology', 'Inpatient', 'ANC Visit'].includes(encounterType) && selectedCharges.length === 0) {
             toast.error('Please select at least one charge, or check ANC to skip charges');
             return;
@@ -1144,13 +1148,14 @@ const PatientManagement = () => {
                                             <option value="Standard">Standard</option>
                                             <option value="Corporate Retainership">Corporate Retainership</option>
                                             <option value="Family Retainership">Family Retainership</option>
+                                            <option value="Joud Alkhair Retainership">Joud Alkhair Retainership</option>
                                             <option value="NHIA">NHIA</option>
                                             <option value="KSCHMA">KSCHMA</option>
                                         </select>
                                     </div>
  
                                     {/* HMO - Shown for Retainership, NHIA and KSCHMA */}
-                                    {(['Retainership', 'Corporate Retainership', 'Family Retainership', 'NHIA', 'KSCHMA'].includes(editPatient.provider)) && (
+                                    {(['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership', 'NHIA', 'KSCHMA'].includes(editPatient.provider)) && (
                                         <div>
                                             <label className="block text-sm font-semibold mb-1">
                                                 HMO <span className="text-red-500">*</span>
@@ -1160,7 +1165,7 @@ const PatientManagement = () => {
                                                 name="hmo"
                                                 value={editPatient.hmo || ''}
                                                 onChange={handleEditChange}
-                                                required={['Retainership', 'Corporate Retainership', 'Family Retainership', 'NHIA', 'KSCHMA'].includes(editPatient.provider)}
+                                                required={['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership', 'NHIA', 'KSCHMA'].includes(editPatient.provider)}
                                             >
                                                 <option value="">Select HMO *</option>
                                                 {hmos
@@ -1174,6 +1179,9 @@ const PatientManagement = () => {
                                                         }
                                                         if (editPatient.provider === 'Family Retainership') {
                                                             return hmo.category === 'Retainership' && hmo.retainershipType === 'Family';
+                                                        }
+                                                        if (editPatient.provider === 'Joud Alkhair Retainership') {
+                                                            return hmo.category === 'Retainership' && hmo.retainershipType === 'Joud Alkhair';
                                                         }
                                                         if (editPatient.provider === 'Retainership') {
                                                             return hmo.category === 'Retainership';
