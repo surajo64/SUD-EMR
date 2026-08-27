@@ -1305,6 +1305,20 @@ const getDashboardStats = async (req, res) => {
     }
 };
 
+const isExternalPatientOrVisit = (v_or_item, patient) => {
+    const externalTypes = ['External Pharmacy', 'External Lab', 'External Radiology', 'External Investigation', 'External Lab/Radiology'];
+    if (v_or_item && externalTypes.includes(v_or_item.type)) return true;
+
+    const p = patient || (v_or_item && v_or_item.patient);
+    if (p) {
+        if (p.isWalkIn === true) return true;
+        if (p.contact === 'Walk-in') return true;
+        if (p.mrn && /^WI-|^LAB-|^RAD-|^EXT-/i.test(p.mrn)) return true;
+        if (p.name && /^WI-|^LAB-|^RAD-|^EXT-/i.test(p.name)) return true;
+    }
+    return false;
+};
+
 // @desc    Get clinical reports (Diagnosis, Gender, Age distribution)
 // @route   GET /api/reports/clinical-report?diagnosis=&gender=&minAge=&maxAge=&startDate=&endDate=
 // @access  Private (Admin)
@@ -1327,7 +1341,10 @@ const getClinicalReport = async (req, res) => {
         let grouped = {};
 
         if (reportType === 'diagnosis') {
-            let visitQuery = { ...dateQuery };
+            let visitQuery = {
+                ...dateQuery,
+                type: { $nin: ['External Pharmacy', 'External Lab', 'External Radiology', 'External Investigation', 'External Lab/Radiology'] }
+            };
             if (searchTerm) {
                 visitQuery.$or = [
                     { 'diagnosis.code': { $regex: searchTerm, $options: 'i' } },
@@ -1343,6 +1360,7 @@ const getClinicalReport = async (req, res) => {
                 .sort({ createdAt: -1 });
 
             results = results.filter(v => v.patient &&
+                !isExternalPatientOrVisit(v, v.patient) &&
                 (gender === 'All' || !gender || v.patient.gender?.toLowerCase() === gender.toLowerCase()) &&
                 (!minAge || v.patient.age >= parseInt(minAge)) &&
                 (!maxAge || v.patient.age <= parseInt(maxAge))
@@ -1401,6 +1419,7 @@ const getClinicalReport = async (req, res) => {
             results = await Prescription.find(rxQuery).populate('patient').populate('doctor', 'name').sort({ createdAt: -1 });
 
             results = results.filter(r => r.patient &&
+                !isExternalPatientOrVisit(r, r.patient) &&
                 (gender === 'All' || !gender || r.patient.gender?.toLowerCase() === gender.toLowerCase()) &&
                 (!minAge || r.patient.age >= parseInt(minAge)) &&
                 (!maxAge || r.patient.age <= parseInt(maxAge))
@@ -1428,6 +1447,7 @@ const getClinicalReport = async (req, res) => {
             results = await LabOrder.find(labQuery).populate('patient').populate('doctor', 'name').sort({ createdAt: -1 });
 
             results = results.filter(l => l.patient &&
+                !isExternalPatientOrVisit(l, l.patient) &&
                 (gender === 'All' || !gender || l.patient.gender?.toLowerCase() === gender.toLowerCase()) &&
                 (!minAge || l.patient.age >= parseInt(minAge)) &&
                 (!maxAge || l.patient.age <= parseInt(maxAge))
@@ -1452,6 +1472,7 @@ const getClinicalReport = async (req, res) => {
             results = await RadiologyOrder.find(radQuery).populate('patient').populate('doctor', 'name').sort({ createdAt: -1 });
 
             results = results.filter(r => r.patient &&
+                !isExternalPatientOrVisit(r, r.patient) &&
                 (gender === 'All' || !gender || r.patient.gender?.toLowerCase() === gender.toLowerCase()) &&
                 (!minAge || r.patient.age >= parseInt(minAge)) &&
                 (!maxAge || r.patient.age <= parseInt(maxAge))
@@ -1650,7 +1671,9 @@ const getVisitReport = async (req, res) => {
     try {
         const { startDate, endDate, searchTerm } = req.query;
 
-        let query = {};
+        let query = {
+            type: { $nin: ['External Pharmacy', 'External Lab', 'External Radiology', 'External Investigation', 'External Lab/Radiology'] }
+        };
         if (startDate || endDate) {
             query.createdAt = {};
             if (startDate) query.createdAt.$gte = new Date(startDate);
@@ -1669,6 +1692,8 @@ const getVisitReport = async (req, res) => {
             .populate('clinic', 'name')
             .populate('ward', 'name')
             .sort({ createdAt: -1 });
+
+        visits = visits.filter(v => v.patient && !isExternalPatientOrVisit(v, v.patient));
 
         if (searchTerm) {
             const regex = new RegExp(searchTerm, 'i');

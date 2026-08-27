@@ -256,6 +256,13 @@ const getVisits = async (req, res) => {
         }
     }
 
+    if (req.query.activeOnly === 'true') {
+        query.encounterStatus = { $nin: ['completed', 'discharged', 'cancelled'] };
+        query.status = { $nin: ['Discharged', 'Completed'] };
+        query.isActive = { $ne: false };
+        query.dischargeDate = { $exists: false };
+    }
+
     if (req.query.excludeInpatient === 'true') {
         query.type = { $ne: 'Inpatient' };
         query.encounterType = { $ne: 'Inpatient' };

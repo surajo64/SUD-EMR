@@ -42,16 +42,54 @@ const InpatientManagement = () => {
         try {
             setLoading(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
-            // Fetch all inpatient visits and filter for active ones in the frontend for maximum compatibility
-            const { data } = await axios.get(`${backendUrl}/api/visits?type=Inpatient`, config);
+            // Fetch active inpatient visits
+            const { data } = await axios.get(`${backendUrl}/api/visits?type=Inpatient&activeOnly=true`, config);
 
-            const activeInpatients = data.filter(v => v.patient && v.encounterStatus !== 'discharged' && v.encounterStatus !== 'cancelled');
+            const inactiveStatuses = ['discharged', 'cancelled', 'completed'];
+            const activeInpatients = (data || []).filter(v => {
+                if (!v || !v.patient) return false;
+                
+                const encStatus = (v.encounterStatus || '').toLowerCase();
+                if (inactiveStatuses.includes(encStatus)) return false;
+                
+                const statusStr = (v.status || '').toLowerCase();
+                if (['discharged', 'completed'].includes(statusStr)) return false;
+                
+                if (v.isActive === false) return false;
+                if (v.dischargeDate) return false;
+
+                return true;
+            });
 
             // Sort by admission date or created date (latest first)
-            activeInpatients.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            activeInpatients.sort((a, b) => new Date(b.admissionDate || b.createdAt) - new Date(a.admissionDate || a.createdAt));
 
-            setInpatients(activeInpatients);
-            setFilteredInpatients(activeInpatients);
+            // Deduplicate to show only the latest active admission for each unique patient
+            const uniqueMap = new Map();
+            activeInpatients.forEach(visit => {
+                const patientId = (visit.patient._id || visit.patient).toString();
+                if (!uniqueMap.has(patientId)) {
+                    uniqueMap.set(patientId, visit);
+                }
+            });
+            const uniqueActiveInpatients = Array.from(uniqueMap.values());
+
+            setInpatients(uniqueActiveInpatients);
+
+            // Apply active filters
+            let filtered = uniqueActiveInpatients;
+            if (selectedWard && selectedWard !== 'all') {
+                filtered = filtered.filter(visit => visit.ward?._id === selectedWard || visit.ward === selectedWard);
+            }
+            if (searchTerm) {
+                const lowerTerm = searchTerm.toLowerCase();
+                filtered = filtered.filter(visit =>
+                    (visit.patient?.name && visit.patient.name.toLowerCase().includes(lowerTerm)) ||
+                    (visit.patient?.mrn && visit.patient.mrn.toLowerCase().includes(lowerTerm)) ||
+                    (visit.ward?.name && visit.ward.name.toLowerCase().includes(lowerTerm))
+                );
+            }
+            setFilteredInpatients(filtered);
         } catch (error) {
             console.error('Error fetching inpatients:', error);
             toast.error('Error fetching inpatient list');
@@ -70,9 +108,9 @@ const InpatientManagement = () => {
         if (term) {
             const lowerTerm = term.toLowerCase();
             filtered = filtered.filter(visit =>
-                visit.patient.name.toLowerCase().includes(lowerTerm) ||
-                (visit.patient.mrn && visit.patient.mrn.toLowerCase().includes(lowerTerm)) ||
-                (visit.ward && visit.ward.name.toLowerCase().includes(lowerTerm))
+                (visit.patient?.name && visit.patient.name.toLowerCase().includes(lowerTerm)) ||
+                (visit.patient?.mrn && visit.patient.mrn.toLowerCase().includes(lowerTerm)) ||
+                (visit.ward?.name && visit.ward.name.toLowerCase().includes(lowerTerm))
             );
         }
 
@@ -202,7 +240,7 @@ const InpatientManagement = () => {
                                 <div className="pt-3 border-t border-gray-50 flex justify-between items-center text-xs text-gray-500">
                                     <span>Admitted: {new Date(visit.admissionDate || visit.createdAt).toLocaleDateString()}</span>
                                     <span className={`px-2 py-1 rounded font-bold uppercase ${visit.encounterStatus === 'in_ward' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                                        {visit.encounterStatus.replace('_', ' ')}
+                                        {(visit.encounterStatus || 'admitted').replace(/_/g, ' ')}
                                     </span>
                                 </div>
                             </div>
