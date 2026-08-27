@@ -728,16 +728,18 @@ const PatientManagement = () => {
                                                 >
                                                     <FaEye />
                                                 </button>
-                                                <button
-                                                    onClick={() => {
-                                                        setSelectedPatient(patient);
-                                                        fetchPatientEncounters(patient._id);
-                                                    }}
-                                                    className="text-purple-600 hover:text-purple-800"
-                                                    title="View Encounters"
-                                                >
-                                                    <FaHospital />
-                                                </button>
+                                                {user?.role === 'super_admin' && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setSelectedPatient(patient);
+                                                            fetchPatientEncounters(patient._id);
+                                                        }}
+                                                        className="text-purple-600 hover:text-purple-800"
+                                                        title="View Encounters"
+                                                    >
+                                                        <FaHospital />
+                                                    </button>
+                                                )}
                                                 {user.role !== 'readonly_admin' && (
                                                     <button
                                                         onClick={() => {
