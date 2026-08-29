@@ -1,11 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const { createVisit, getVisits, updateVisit, getVisitById, deleteVisit, getVisitsByPatient } = require('../controllers/visitController');
+const { createVisit, getVisits, getTodaysOutstandingVisits, updateVisit, getVisitById, deleteVisit, getVisitsByPatient } = require('../controllers/visitController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
 router.route('/')
     .post(protect, createVisit)
     .get(protect, getVisits);
+
+router.route('/todays-outstanding')
+    .get(protect, getTodaysOutstandingVisits);
 
 router.route('/patient/:patientId')
     .get(protect, getVisitsByPatient);

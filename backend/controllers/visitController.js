@@ -353,6 +353,88 @@ const getVisits = async (req, res) => {
     res.json(visitsWithPaymentStatus);
 };
 
+// @desc    Get today's active visits with outstanding charges in chronological order
+// @route   GET /api/visits/todays-outstanding
+// @access  Private (Cashier / Admin)
+const getTodaysOutstandingVisits = async (req, res) => {
+    try {
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+
+        const endOfDay = new Date();
+        endOfDay.setHours(23, 59, 59, 999);
+
+        // Find active encounters created today or active today
+        const visits = await Visit.find({
+            $or: [
+                { createdAt: { $gte: startOfDay, $lte: endOfDay } },
+                { status: 'Admitted' },
+                { encounterStatus: { $in: ['admitted', 'in_ward'] } }
+            ],
+            encounterStatus: { $nin: ['completed', 'discharged', 'cancelled'] },
+            isActive: { $ne: false }
+        })
+        .sort({ createdAt: 1 }) // Chronological order (earliest today first)
+        .populate('patient', 'name mrn age gender contact provider depositBalance isWalkIn')
+        .populate('doctor', 'name')
+        .populate('clinic', 'name');
+
+        // Filter out walk-in customers/external encounters
+        const filteredVisits = visits.filter(v => v.patient && !isWalkInCustomerOrEncounter(v, v.patient));
+
+        const visitIds = filteredVisits.map(v => v._id);
+
+        // Find pending charges for these visits
+        const EncounterCharge = require('../models/encounterChargeModel');
+        const pendingCharges = await EncounterCharge.find({
+            encounter: { $in: visitIds },
+            status: 'pending'
+        });
+
+        // Group pending charges by encounter ID
+        const chargesByEncounter = {};
+        pendingCharges.forEach(charge => {
+            const encId = charge.encounter.toString();
+            if (!chargesByEncounter[encId]) {
+                chargesByEncounter[encId] = [];
+            }
+            chargesByEncounter[encId].push(charge);
+        });
+
+        // Build list of visits with outstanding fees
+        const result = [];
+        for (const visit of filteredVisits) {
+            const charges = chargesByEncounter[visit._id.toString()] || [];
+            if (charges.length > 0) {
+                const totalPendingAmount = charges.reduce((sum, c) => {
+                    if (c.patientPortion > 0) return sum + c.patientPortion;
+                    const provider = visit.patient?.provider || 'Standard';
+                    const isInsurance = ['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership', 'NHIA', 'KSCHMA'].includes(provider);
+                    if (isInsurance && (provider !== 'NHIA' && provider !== 'KSCHMA')) {
+                        return sum + (c.patientPortion || 0);
+                    }
+                    if ((provider === 'NHIA' || provider === 'KSCHMA') && c.itemType === 'Drug') {
+                        return sum + (c.totalAmount * 0.1);
+                    }
+                    return sum + (c.totalAmount || 0);
+                }, 0);
+
+                result.push({
+                    visit: formatVisitWithClinicalNotes(visit),
+                    pendingCount: charges.length,
+                    totalPendingAmount
+                });
+            }
+        }
+
+        res.json(result);
+    } catch (error) {
+        console.error('Error fetching today\'s outstanding visits:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+
 // @desc    Update visit (Clinical Data & Workflow)
 // @route   PUT /api/visits/:id
 // @access  Private (Doctor/Nurse/Cashier)
@@ -1649,6 +1731,7 @@ const updateOrderTask = async (req, res) => {
 module.exports = {
     createVisit,
     getVisits,
+    getTodaysOutstandingVisits,
     updateVisit,
     getVisitById,
     deleteVisit,

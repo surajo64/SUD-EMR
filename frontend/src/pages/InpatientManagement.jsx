@@ -58,6 +58,10 @@ const InpatientManagement = () => {
                 if (v.isActive === false) return false;
                 if (v.dischargeDate) return false;
 
+                // Only include admitted patients with a ward and bed assigned
+                if (!v.ward) return false;
+                if (!v.bed || v.bed === 'N/A' || String(v.bed).trim() === '') return false;
+
                 return true;
             });
 

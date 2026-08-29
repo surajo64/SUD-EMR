@@ -4,7 +4,7 @@ import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import { AppContext } from '../context/AppContext';
 import Layout from '../components/Layout';
-import { FaUserMd, FaSearch, FaCheckCircle, FaNotesMedical, FaHeartbeat, FaMoneyBillWave, FaTrash, FaEdit, FaPlus, FaTimes, FaTable, FaClock, FaChevronDown, FaChevronRight, FaHistory, FaClipboardList, FaCheck, FaCommentAlt, FaProcedures, FaDoorOpen } from 'react-icons/fa';
+import { FaUserMd, FaSearch, FaCheckCircle, FaNotesMedical, FaHeartbeat, FaMoneyBillWave, FaTrash, FaEdit, FaPlus, FaTimes, FaTable, FaClock, FaChevronDown, FaChevronRight, FaHistory, FaClipboardList, FaCheck, FaCommentAlt, FaProcedures, FaDoorOpen, FaSync } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import LoadingOverlay from '../components/loadingOverlay';
 import { formatAge } from '../utils/patientUtils';
@@ -27,6 +27,9 @@ const NurseTriage = () => {
     const [loading, setLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [patients, setPatients] = useState([]);
+    const [hasSearched, setHasSearched] = useState(false);
+    const [activeVisits, setActiveVisits] = useState([]);
+    const [loadingVisits, setLoadingVisits] = useState(false);
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [encounters, setEncounters] = useState([]);
     const [selectedEncounter, setSelectedEncounter] = useState(null);
@@ -229,12 +232,41 @@ const NurseTriage = () => {
             fetchDoctors();
             fetchNursingCharges();
             fetchSpecialityClinics();
+            fetchActiveVisits();
 
             if (patientId) {
                 handleFetchAndSelectPatient(patientId, encounterId);
             }
         }
     }, [user, patientId, encounterId]);
+
+    const fetchActiveVisits = async () => {
+        if (!user) return;
+        try {
+            setLoadingVisits(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get(`${backendUrl}/api/visits?today=true&excludeInpatient=true&activeOnly=true`, config);
+            const externalTypes = ['External Pharmacy', 'External Lab', 'External Radiology', 'External Investigation'];
+            const filtered = data.filter(v => v.patient && !externalTypes.includes(v.type));
+            filtered.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+            setActiveVisits(filtered);
+        } catch (error) {
+            console.error('Error fetching active triage visits:', error);
+        } finally {
+            setLoadingVisits(false);
+        }
+    };
+
+    const handleSelectActiveVisit = async (visit) => {
+        if (!visit || !visit.patient) return;
+        const patientDoc = visit.patient;
+        setSelectedPatient(patientDoc);
+        setLoading(true);
+        await fetchPatientEncounters(patientDoc._id);
+        await handleSelectEncounter(visit);
+        setLoading(false);
+    };
+
 
     const handleFetchAndSelectPatient = async (pId, eId) => {
         try {
@@ -380,6 +412,7 @@ const NurseTriage = () => {
         if (!searchTerm || !user) return;
         try {
             setLoading(true);
+            setHasSearched(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const { data } = await axios.get(`${backendUrl}/api/patients?search=${searchTerm}`, config);
             setPatients(data);
@@ -554,6 +587,7 @@ const NurseTriage = () => {
                         paymentValidated: true,
                         receiptNumber: receiptNumber.trim()
                     });
+                    fetchActiveVisits();
                 }
             }
         } catch (error) {
@@ -1111,7 +1145,13 @@ const NurseTriage = () => {
                         placeholder="Search by Name, MRN or Phone Number..."
                         className="flex-1 border p-2 rounded"
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onChange={(e) => {
+                            setSearchTerm(e.target.value);
+                            if (!e.target.value.trim()) {
+                                setHasSearched(false);
+                                setPatients([]);
+                            }
+                        }}
                         onKeyPress={(e) => e.key === 'Enter' && searchPatients()}
                     />
                     <button
@@ -1122,22 +1162,120 @@ const NurseTriage = () => {
                     </button>
                 </div>
 
-                {/* Patient Results */}
-                {patients.length > 0 && !selectedPatient && (
-                    <div className="space-y-2">
-                        <p className="font-semibold text-gray-700">Search Results:</p>
-                        {patients.map(patient => (
-                            <div
-                                key={patient._id}
-                                onClick={() => handleSelectPatient(patient)}
-                                className="p-3 border rounded hover:bg-gray-50 cursor-pointer"
+                {/* Patient Results from Search */}
+                {hasSearched && !selectedPatient && (
+                    <div className="space-y-2 mb-4">
+                        <div className="flex justify-between items-center">
+                            <p className="font-semibold text-gray-700">Search Results ({patients.length}):</p>
+                            <button
+                                onClick={() => {
+                                    setSearchTerm('');
+                                    setHasSearched(false);
+                                    setPatients([]);
+                                }}
+                                className="text-xs text-blue-600 hover:underline font-semibold"
                             >
-                                <p className="font-semibold">{patient.name}</p>
-                                <p className="text-sm text-gray-600">
-                                    MRN: {patient.mrn} | Age: {formatAge(patient.age)} | {patient.gender}
-                                </p>
+                                ← Back to Active List
+                            </button>
+                        </div>
+                        {patients.length > 0 ? (
+                            patients.map(patient => (
+                                <div
+                                    key={patient._id}
+                                    onClick={() => handleSelectPatient(patient)}
+                                    className="p-3 border rounded hover:bg-gray-50 cursor-pointer"
+                                >
+                                    <p className="font-semibold">{patient.name}</p>
+                                    <p className="text-sm text-gray-600">
+                                        MRN: {patient.mrn} | Age: {formatAge(patient.age)} | {patient.gender}
+                                    </p>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="p-4 bg-gray-50 rounded text-center text-gray-500">
+                                No patients found matching "{searchTerm}".
                             </div>
-                        ))}
+                        )}
+                    </div>
+                )}
+
+                {/* Today's Active Encounters for Nurse Triage (Default View before Search, Excluding Inpatient) */}
+                {!hasSearched && !selectedPatient && (
+                    <div className="mt-4">
+                        <div className="flex justify-between items-center mb-3">
+                            <h4 className="font-bold text-gray-800 flex items-center gap-2">
+                                <FaClock className="text-pink-600" /> Active Patients for Triage (Today)
+                                <span className="bg-pink-100 text-pink-800 text-xs px-2 py-0.5 rounded-full font-semibold">
+                                    {activeVisits.length}
+                                </span>
+                            </h4>
+                            <button
+                                onClick={fetchActiveVisits}
+                                className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 font-semibold border px-2 py-1 rounded bg-white hover:bg-gray-50"
+                                title="Refresh list"
+                            >
+                                <FaSync className={loadingVisits ? 'animate-spin' : ''} /> Refresh
+                            </button>
+                        </div>
+
+                        {loadingVisits ? (
+                            <div className="p-6 text-center text-gray-500">Loading active triage patients...</div>
+                        ) : activeVisits.length === 0 ? (
+                            <div className="p-6 bg-green-50 text-green-700 rounded text-center border border-green-200 font-medium">
+                                ✓ No active non-inpatient encounters found for triage today.
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {activeVisits.map(visit => (
+                                    <div
+                                        key={visit._id}
+                                        onClick={() => handleSelectActiveVisit(visit)}
+                                        className="p-3 border rounded-lg hover:bg-pink-50 cursor-pointer transition-all border-l-4 border-l-pink-500 bg-white shadow-sm hover:shadow"
+                                    >
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-bold text-gray-900">{visit.patient?.name}</p>
+                                                    <span className="text-xs bg-gray-100 text-gray-700 font-mono px-2 py-0.5 rounded">
+                                                        {visit.patient?.mrn}
+                                                    </span>
+                                                    {visit.isANC && (
+                                                        <span className="text-[10px] bg-pink-100 text-pink-800 font-bold px-2 py-0.5 rounded-full">
+                                                            🤰 ANC
+                                                        </span>
+                                                    )}
+                                                    {visit.patient?.provider && visit.patient.provider !== 'Standard' && (
+                                                        <span className="text-[10px] bg-purple-100 text-purple-800 font-semibold px-2 py-0.5 rounded-full">
+                                                            {visit.patient.provider}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs text-gray-600 mt-1 flex items-center gap-3">
+                                                    <span><strong className="text-gray-700">Encounter:</strong> {visit.type}</span>
+                                                    <span><strong className="text-gray-700">Time:</strong> {new Date(visit.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                    <span><strong className="text-gray-700">Status:</strong> <span className="capitalize">{visit.encounterStatus?.replace(/_/g, ' ')}</span></span>
+                                                </p>
+                                            </div>
+                                            <div className="flex flex-col items-end gap-1">
+                                                <span className={`px-2.5 py-0.5 rounded text-xs font-semibold ${
+                                                    visit.waiveConsultationFee
+                                                        ? 'bg-blue-100 text-blue-800'
+                                                        : (visit.paymentValidated || visit.isANC)
+                                                            ? 'bg-green-100 text-green-800'
+                                                            : 'bg-yellow-100 text-yellow-800'
+                                                }`}>
+                                                    {visit.waiveConsultationFee
+                                                        ? 'Waived'
+                                                        : (visit.paymentValidated || visit.isANC)
+                                                            ? (visit.isANC ? 'ANC' : 'Paid')
+                                                            : 'Payment Pending'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
 

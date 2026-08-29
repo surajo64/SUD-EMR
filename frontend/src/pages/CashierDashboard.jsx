@@ -17,6 +17,9 @@ const CashierDashboard = () => {
     const [receipts, setReceipts] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [patients, setPatients] = useState([]);
+    const [hasSearched, setHasSearched] = useState(false);
+    const [todaysOutstanding, setTodaysOutstanding] = useState([]);
+    const [loadingOutstanding, setLoadingOutstanding] = useState(false);
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [encounters, setEncounters] = useState([]);
     const [selectedEncounter, setSelectedEncounter] = useState(null);
@@ -63,8 +66,6 @@ const CashierDashboard = () => {
 
     const [activeTab, setActiveTab] = useState('patient'); // 'patient', 'family', 'retainership'
 
-
-
     const [systemSettings, setSystemSettings] = useState(null);
 
     const { user } = useContext(AuthContext);
@@ -89,7 +90,21 @@ const CashierDashboard = () => {
         fetchReceipts();
         fetchSummary();
         fetchUserStats();
+        fetchTodaysOutstanding();
     }, []);
+
+    const fetchTodaysOutstanding = async () => {
+        try {
+            setLoadingOutstanding(true);
+            const config = { headers: { Authorization: `Bearer ${user.token}` } };
+            const { data } = await axios.get(`${backendUrl}/api/visits/todays-outstanding`, config);
+            setTodaysOutstanding(data);
+        } catch (error) {
+            console.error('Error fetching today\'s outstanding encounters:', error);
+        } finally {
+            setLoadingOutstanding(false);
+        }
+    };
 
     const fetchUserStats = async () => {
         try {
@@ -131,6 +146,7 @@ const CashierDashboard = () => {
         if (!searchTerm) return;
         try {
             setLoading(true);
+            setHasSearched(true);
             const config = { headers: { Authorization: `Bearer ${user.token}` } };
             const { data } = await axios.get(`${backendUrl}/api/patients?search=${searchTerm}`, config);
             setPatients(data);
@@ -141,6 +157,13 @@ const CashierDashboard = () => {
             setLoading(false);
         }
     };
+
+    const handleSelectTodaysOutstanding = async (item) => {
+        if (!item || !item.visit || !item.visit.patient) return;
+        await handleSelectPatient(item.visit.patient);
+        await handleSelectEncounter(item.visit);
+    };
+
 
     const handleSelectPatient = async (patient) => {
         setSelectedPatient(patient);
@@ -235,8 +258,9 @@ const CashierDashboard = () => {
             await handleSelectPatient(selectedPatient);
             // Re-select the encounter so the user stays on the charge list
             setSelectedEncounter(selectedEncounter);
-            // Refresh global summary
+            // Refresh global summary & today's list
             fetchSummary();
+            fetchTodaysOutstanding();
         } catch (error) {
             console.error(error);
             toast.error(error.response?.data?.message || 'Error deleting charge');
@@ -269,6 +293,7 @@ const CashierDashboard = () => {
             handleSelectEncounter(selectedEncounter);
             fetchReceipts();
             fetchSummary();
+            fetchTodaysOutstanding();
         } catch (error) {
             console.error(error);
             toast.error(error.response?.data?.message || 'Error collecting payment');
@@ -553,7 +578,13 @@ const CashierDashboard = () => {
                             placeholder="Search by Name, MRN or Phone Number..."
                             className="flex-1 border p-2 rounded"
                             value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onChange={(e) => {
+                                setSearchTerm(e.target.value);
+                                if (!e.target.value.trim()) {
+                                    setHasSearched(false);
+                                    setPatients([]);
+                                }
+                            }}
                             onKeyPress={(e) => e.key === 'Enter' && searchPatients()}
                         />
                         <button
@@ -564,22 +595,109 @@ const CashierDashboard = () => {
                         </button>
                     </div>
 
-                    {/* Patient Results */}
-                    {patients.length > 0 && !selectedPatient && (
-                        <div className="space-y-2">
-                            <p className="font-semibold text-gray-700">Search Results:</p>
-                            {patients.map(patient => (
-                                <div
-                                    key={patient._id}
-                                    onClick={() => handleSelectPatient(patient)}
-                                    className="p-3 border rounded hover:bg-gray-50 cursor-pointer"
+                    {/* Patient Results from Search */}
+                    {hasSearched && !selectedPatient && (
+                        <div className="space-y-2 mb-4">
+                            <div className="flex justify-between items-center">
+                                <p className="font-semibold text-gray-700">Search Results ({patients.length}):</p>
+                                <button
+                                    onClick={() => {
+                                        setSearchTerm('');
+                                        setHasSearched(false);
+                                        setPatients([]);
+                                    }}
+                                    className="text-xs text-blue-600 hover:underline font-semibold"
                                 >
-                                    <p className="font-semibold">{patient.name}</p>
-                                    <p className="text-sm text-gray-600">MRN: {patient.mrn} | Age: {formatAge(patient.age)} | {patient.gender}</p>
+                                    ← Back to Today's List
+                                </button>
+                            </div>
+                            {patients.length > 0 ? (
+                                patients.map(patient => (
+                                    <div
+                                        key={patient._id}
+                                        onClick={() => handleSelectPatient(patient)}
+                                        className="p-3 border rounded hover:bg-gray-50 cursor-pointer"
+                                    >
+                                        <p className="font-semibold">{patient.name}</p>
+                                        <p className="text-sm text-gray-600">MRN: {patient.mrn} | Age: {formatAge(patient.age)} | {patient.gender}</p>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="p-4 bg-gray-50 rounded text-center text-gray-500">
+                                    No patients found matching "{searchTerm}".
                                 </div>
-                            ))}
+                            )}
                         </div>
                     )}
+
+                    {/* Today's Active Encounters with Outstanding Fees (Default View before Search) */}
+                    {!hasSearched && !selectedPatient && (
+                        <div className="mt-4">
+                            <div className="flex justify-between items-center mb-3">
+                                <h4 className="font-bold text-gray-800 flex items-center gap-2">
+                                    <FaClock className="text-amber-600" /> Today's Active Encounters with Outstanding Fees
+                                    <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full font-semibold">
+                                        {todaysOutstanding.length}
+                                    </span>
+                                </h4>
+                                <button
+                                    onClick={fetchTodaysOutstanding}
+                                    className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 font-semibold border px-2 py-1 rounded bg-white hover:bg-gray-50"
+                                    title="Refresh list"
+                                >
+                                    <FaSync className={loadingOutstanding ? 'animate-spin' : ''} /> Refresh
+                                </button>
+                            </div>
+
+                            {loadingOutstanding ? (
+                                <div className="p-6 text-center text-gray-500">Loading today's active encounters...</div>
+                            ) : todaysOutstanding.length === 0 ? (
+                                <div className="p-6 bg-green-50 text-green-700 rounded text-center border border-green-200 font-medium">
+                                    ✓ No active encounters with outstanding fees found for today.
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {todaysOutstanding.map(({ visit, pendingCount, totalPendingAmount }) => (
+                                        <div
+                                            key={visit._id}
+                                            onClick={() => handleSelectTodaysOutstanding({ visit, pendingCount, totalPendingAmount })}
+                                            className="p-3 border rounded-lg hover:bg-blue-50 cursor-pointer transition-all border-l-4 border-l-amber-500 bg-white shadow-sm hover:shadow"
+                                        >
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="font-bold text-gray-900">{visit.patient?.name}</p>
+                                                        <span className="text-xs bg-gray-100 text-gray-700 font-mono px-2 py-0.5 rounded">
+                                                            {visit.patient?.mrn}
+                                                        </span>
+                                                        {visit.patient?.provider && visit.patient.provider !== 'Standard' && (
+                                                            <span className="text-[10px] bg-purple-100 text-purple-800 font-semibold px-2 py-0.5 rounded-full">
+                                                                {visit.patient.provider}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-xs text-gray-600 mt-1 flex items-center gap-3">
+                                                        <span><strong className="text-gray-700">Encounter:</strong> {visit.type}</span>
+                                                        <span><strong className="text-gray-700">Time:</strong> {new Date(visit.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                        <span><strong className="text-gray-700">Status:</strong> <span className="capitalize">{visit.encounterStatus?.replace(/_/g, ' ')}</span></span>
+                                                    </p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className="bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full inline-block mb-1">
+                                                        {pendingCount} Pending {pendingCount === 1 ? 'Charge' : 'Charges'}
+                                                    </span>
+                                                    <p className="text-sm font-bold text-red-700">
+                                                        ₦{totalPendingAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
 
                     {/* Selected Patient - Encounters */}
                     {selectedPatient && (
