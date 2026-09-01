@@ -14,6 +14,9 @@ const runDailyWardChargesJob = async () => {
                 { encounterType: 'Inpatient' }
             ],
             encounterStatus: { $nin: ['discharged', 'cancelled', 'completed'] },
+            status: { $ne: 'Discharged' },
+            dischargeDate: { $exists: false },
+            isActive: { $ne: false },
             ward: { $exists: true, $ne: null }
         });
 

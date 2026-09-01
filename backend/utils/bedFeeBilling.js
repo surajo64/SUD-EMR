@@ -225,6 +225,16 @@ const checkAndGenerateBedFeesForVisit = async (visitOrId, currentDate = new Date
             return;
         }
 
+        if (
+            ['discharged', 'completed', 'cancelled'].includes(visit.encounterStatus) ||
+            visit.status === 'Discharged' ||
+            visit.dischargeDate ||
+            visit.isActive === false
+        ) {
+            console.log(`[BedFeeBilling] Visit ${visit._id} is discharged or inactive. Skipping bed fee billing.`);
+            return;
+        }
+
         const admissionDate = visit.admissionDate || visit.createdAt;
         if (!admissionDate) {
             console.log(`[BedFeeBilling] Visit ${visit._id} has no admission/creation date.`);

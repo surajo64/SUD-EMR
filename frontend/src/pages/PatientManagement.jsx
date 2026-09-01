@@ -912,8 +912,8 @@ const PatientManagement = () => {
                                                     Admitted On: {encounter.admissionDate ? new Date(encounter.admissionDate).toLocaleString() : 'N/A'}
                                                 </p>
 
-                                                {/* Discharge information - only show when discharged */}
-                                                {encounter.encounterStatus === 'discharged' && (
+                                                {/* Discharge information - show when discharged or discharge note exists */}
+                                                {(encounter.encounterStatus === 'discharged' || encounter.status === 'Discharged' || Boolean(encounter.dischargeNotes)) && (
                                                     <div className="mt-3 pt-3 border-t border-blue-200">
                                                         <p className="font-semibold text-green-800">
                                                             Discharged On: {encounter.dischargeDate ? new Date(encounter.dischargeDate).toLocaleString() : (encounter.updatedAt ? new Date(encounter.updatedAt).toLocaleString() : 'N/A')}

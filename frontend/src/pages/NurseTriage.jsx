@@ -2093,8 +2093,8 @@ const NurseTriage = () => {
                                     </div>
                                 </div>
 
-                                {/* Discharge Summary Banner - shown when patient is discharged */}
-                                {selectedEncounter.encounterStatus === 'discharged' && (
+                                {/* Discharge Summary Banner - shown when patient is discharged or discharge note exists */}
+                                {(selectedEncounter.encounterStatus === 'discharged' || selectedEncounter.status === 'Discharged' || Boolean(selectedEncounter.dischargeNotes)) && (
                                     <div className="mb-5 rounded-xl border border-green-200 overflow-hidden shadow-sm">
                                         <div className="bg-green-600 text-white px-4 py-2 flex items-center justify-between text-sm font-semibold">
                                             <span>✓ Discharge Record</span>

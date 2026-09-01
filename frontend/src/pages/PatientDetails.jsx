@@ -2418,7 +2418,8 @@ const PatientDetails = () => {
             fetchPatient();
         } catch (error) {
             console.error(error);
-            toast.error('Error discharging patient');
+            const msg = error.response?.data?.message || 'Error discharging patient';
+            toast.error(msg);
         } finally {
             setLoading(false);
         }
@@ -4865,7 +4866,7 @@ const PatientDetails = () => {
                                                             </button>
                                                         )}
                                                         {/* Discharge button */}
-                                                        {encounter.encounterStatus !== 'discharged' && (
+                                                        {!(encounter.encounterStatus === 'discharged' || encounter.status === 'Discharged') && (
                                                             <button
                                                                 onClick={handleDischarge}
                                                                 disabled={!canEdit}
@@ -4876,7 +4877,7 @@ const PatientDetails = () => {
                                                                 {encounter.encounterStatus === 'admitted' ? 'Discharge Patient' : 'Mark as Discharged'}
                                                             </button>
                                                         )}
-                                                        {encounter.encounterStatus === 'discharged' && (
+                                                        {(encounter.encounterStatus === 'discharged' || encounter.status === 'Discharged') && (
                                                             <div className="px-4 py-2 bg-green-600 text-white rounded flex items-center gap-2 text-sm">
                                                                 <FaTimes /> Discharged
                                                             </div>
@@ -4885,18 +4886,18 @@ const PatientDetails = () => {
                                                 </div>
 
                                                 {/* Admission / Discharge Info Banner */}
-                                                {encounter.ward && (
-                                                    <div className={`p-4 rounded mb-5 border ${encounter.encounterStatus === 'discharged' ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
-                                                        <p className={`font-semibold ${encounter.encounterStatus === 'discharged' ? 'text-green-800' : 'text-blue-800'}`}>
+                                                {(encounter.ward || encounter.encounterStatus === 'discharged' || encounter.status === 'Discharged' || Boolean(encounter.dischargeNotes)) && (
+                                                    <div className={`p-4 rounded mb-5 border ${(encounter.encounterStatus === 'discharged' || encounter.status === 'Discharged') ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
+                                                        <p className={`font-semibold ${(encounter.encounterStatus === 'discharged' || encounter.status === 'Discharged') ? 'text-green-800' : 'text-blue-800'}`}>
                                                             <FaProcedures className="inline mr-2" />
-                                                            {encounter.encounterStatus === 'discharged' ? 'Discharge Record' : 'Admitted In:'}
+                                                            {(encounter.encounterStatus === 'discharged' || encounter.status === 'Discharged') ? 'Discharge Record' : 'Admitted In:'}
                                                         </p>
                                                         <p className="text-sm text-gray-700 ml-6 mt-1">
                                                             Ward: {typeof encounter.ward === 'object' && encounter.ward?.name ? encounter.ward.name : (typeof encounter.ward === 'string' ? `ID: ${encounter.ward}` : 'N/A')} |
                                                             Bed: {encounter.bed || 'N/A'} |
                                                             Admitted On: {encounter.admissionDate ? new Date(encounter.admissionDate).toLocaleString() : 'N/A'}
                                                         </p>
-                                                        {encounter.encounterStatus === 'discharged' && (
+                                                        {(encounter.encounterStatus === 'discharged' || encounter.status === 'Discharged' || Boolean(encounter.dischargeNotes)) && (
                                                             <div className="mt-3 pt-3 border-t border-green-200 space-y-3">
                                                                 <div className="flex flex-wrap gap-4 text-sm">
                                                                     <span className="text-green-800 font-semibold">

@@ -491,9 +491,15 @@ const updateVisit = async (req, res) => {
         if (diagnosis) visit.diagnosis = diagnosis;
         if (status) visit.status = status;
 
+        // Ensure encounterStatus and status stay in sync for discharge
+        let targetEncounterStatus = encounterStatus;
+        if (!targetEncounterStatus && (status === 'Discharged' || status === 'discharged')) {
+            targetEncounterStatus = 'discharged';
+        }
+
         // V5 Workflow Data
-        if (encounterStatus) {
-            if (encounterStatus === 'discharged' && visit.encounterStatus !== 'discharged') {
+        if (targetEncounterStatus) {
+            if (targetEncounterStatus === 'discharged' && visit.encounterStatus !== 'discharged') {
                 const Patient = require('../models/patientModel');
                 const patientDoc = await Patient.findById(visit.patient);
                 if (patientDoc && (patientDoc.depositBalance || 0) < 0) {
@@ -505,7 +511,9 @@ const updateVisit = async (req, res) => {
 
                 visit.dischargeDate = new Date();
                 visit.dischargedBy = req.user._id;
-                if (req.body.dischargeNotes) visit.dischargeNotes = req.body.dischargeNotes;
+                if (req.body.dischargeNotes || req.body.dischargeNote) {
+                    visit.dischargeNotes = req.body.dischargeNotes || req.body.dischargeNote;
+                }
                 if (visit.ward && visit.bed) {
                     const Ward = require('../models/wardModel');
                     const wardDoc = await Ward.findById(visit.ward);
@@ -527,15 +535,18 @@ const updateVisit = async (req, res) => {
             const wasInactive = inactiveStatuses.includes(visit.encounterStatus) || visit.isActive === false || wasExpired;
 
             const activeStatuses = ['registered', 'payment_pending', 'in_nursing', 'with_doctor', 'awaiting_services', 'in_pharmacy', 'in_lab', 'in_radiology', 'in_ward', 'admitted'];
-            if (activeStatuses.includes(encounterStatus)) {
+            if (activeStatuses.includes(targetEncounterStatus)) {
                 if (wasInactive) {
                     visit.isActive = true;
                 }
-            } else if (inactiveStatuses.includes(encounterStatus)) {
+            } else if (inactiveStatuses.includes(targetEncounterStatus)) {
                 visit.isActive = false;
             }
 
-            visit.encounterStatus = encounterStatus;
+            visit.encounterStatus = targetEncounterStatus;
+            if (targetEncounterStatus === 'discharged') {
+                visit.status = 'Discharged';
+            }
         }
 
         if (req.body.isActive !== undefined) {
@@ -1650,6 +1661,34 @@ const updateOrderTaskStatus = async (req, res) => {
             task.completedAt = new Date();
             if (nurseComment !== undefined) {
                 task.nurseComment = nurseComment;
+            }
+
+            // If this is a Discharge Order task, automatically discharge the visit if not already discharged
+            const isDischargeTask = (task.orderType || '').toLowerCase().includes('discharge');
+            if (isDischargeTask && visit.encounterStatus !== 'discharged') {
+                visit.encounterStatus = 'discharged';
+                visit.status = 'Discharged';
+                visit.isActive = false;
+                visit.dischargeDate = new Date();
+                visit.dischargedBy = req.user._id;
+
+                const noteText = (nurseComment || '').trim() || task.instructions || 'Discharged per doctor order.';
+                if (!visit.dischargeNotes) {
+                    visit.dischargeNotes = noteText;
+                }
+
+                if (visit.ward && visit.bed) {
+                    const Ward = require('../models/wardModel');
+                    const wardDoc = await Ward.findById(visit.ward);
+                    if (wardDoc) {
+                        const bedIndex = wardDoc.beds.findIndex(b => b.number === visit.bed);
+                        if (bedIndex !== -1) {
+                            wardDoc.beds[bedIndex].isOccupied = false;
+                            wardDoc.beds[bedIndex].occupiedBy = null;
+                            await wardDoc.save();
+                        }
+                    }
+                }
             }
         } else if (task.status === 'Pending') {
             task.completedBy = null;
