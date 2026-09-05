@@ -245,7 +245,7 @@ const createReceiptForCharges = async (req, res) => {
                 return res.status(404).json({ message: `HMO '${patient.hmo}' not found` });
             }
 
-            // Calculate HMO Balance
+            // Calculate HMO Balance (for logging only — overdraft allowed)
             // 1. Total Deposits
             const deposits = await HMOTransaction.find({ hmo: hmo._id });
             const totalDeposits = deposits.reduce((sum, d) => sum + d.amount, 0);
@@ -263,11 +263,8 @@ const createReceiptForCharges = async (req, res) => {
 
             const balance = totalDeposits - totalUtilized;
 
-            if (balance < totalAmount) {
-                return res.status(400).json({
-                    message: `Insufficient HMO Retainership balance. Balance: ₦${balance.toLocaleString()}, Required: ₦${totalAmount.toLocaleString()}`
-                });
-            }
+            // Overdraft allowed — log the balance but do not block payment
+            console.log(`[Retainership Payment] HMO: ${hmo.name}, Balance: ₦${balance.toLocaleString()}, Required: ₦${totalAmount.toLocaleString()}${balance < totalAmount ? ' (OVERDRAFT)' : ''}`);
 
             // Update charges to reflect HMO payment
             // We set hmoPortion to the total amount and patientPortion to 0
@@ -803,17 +800,8 @@ const createHMOReceipt = async (req, res) => {
             console.log('Required Amount:', requiredAmount);
             console.log('-------------------------------');
 
-            if (totalDepositsNum === 0) {
-                return res.status(400).json({
-                    message: "No initial deposit was found for this retainership. Please make a deposit first."
-                });
-            }
-
-            if (balanceNum < requiredAmount) {
-                return res.status(400).json({
-                    message: `Insufficient HMO Retainership balance. Balance: ₦${balanceNum.toLocaleString()}, Required: ₦${requiredAmount.toLocaleString()}`
-                });
-            }
+            // Overdraft allowed — log balance for audit but do not block registration payment
+            console.log(`[Retainership Registration] HMO: ${hmoId}, Balance: ₦${balanceNum.toLocaleString()}, Required: ₦${requiredAmount.toLocaleString()}${balanceNum < requiredAmount ? ' (OVERDRAFT)' : ''}`);
 
             // Create negative transaction (charge) for registration
             await HMOTransaction.create({

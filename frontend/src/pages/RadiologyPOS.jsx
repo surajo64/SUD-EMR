@@ -494,22 +494,10 @@ const RadiologyPOS = () => {
                                         {/* System Detection Banner */}
                                         <div className="mt-3 pt-2.5 border-t border-blue-200 text-xs font-semibold text-gray-700">
                                             {['Retainership', 'Corporate Retainership', 'Family Retainership'].includes(selectedPatient.provider) ? (
-                                                selectedPatient.depositBalance >= total ? (
-                                                    <div className="flex items-center gap-1.5 text-purple-700 bg-purple-100/50 p-2 rounded">
-                                                        <span className="inline-block w-2.5 h-2.5 bg-purple-500 rounded-full animate-pulse" />
-                                                        Retainership detected. Balance covers total via Retainership account.
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex flex-col gap-1 text-orange-700 bg-orange-100/40 p-2 rounded">
-                                                        <div className="flex items-center gap-1.5">
-                                                            <span className="inline-block w-2.5 h-2.5 bg-orange-500 rounded-full" />
-                                                            Retainership detected but Retainership deposit balance is insufficient (₦{selectedPatient.depositBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}).
-                                                        </div>
-                                                        <span className="font-normal text-[11px] text-orange-600 pl-4">
-                                                            Customer must pay ₦{total.toLocaleString(undefined, { minimumFractionDigits: 2 })} out of pocket.
-                                                        </span>
-                                                    </div>
-                                                )
+                                                <div className="flex items-center gap-1.5 text-purple-700 bg-purple-100/50 p-2 rounded">
+                                                    <span className="inline-block w-2.5 h-2.5 bg-purple-500 rounded-full animate-pulse" />
+                                                    Retainership detected. Charges will be billed to Retainership account ({selectedPatient.hmo}) — Balance: ₦{(selectedPatient.depositBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}. Overdraft allowed.
+                                                </div>
                                             ) : selectedPatient.depositBalance >= total ? (
                                                 <div className="flex items-center gap-1.5 text-blue-700 bg-blue-100/50 p-2 rounded">
                                                     <span className="inline-block w-2.5 h-2.5 bg-blue-500 rounded-full animate-pulse" />

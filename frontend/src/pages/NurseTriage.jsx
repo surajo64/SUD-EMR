@@ -1123,9 +1123,8 @@ const NurseTriage = () => {
 
     const isRetainership = ['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership'].includes(selectedPatient?.provider);
     const hasPatientDeposit = (selectedPatient?.depositBalance || 0) > 0;
-    const hmoDepositInfo = isRetainership && retainershipDepositStatus.find(s => s.name === selectedPatient?.hmo);
-    const hasHmoDeposit = hmoDepositInfo ? hmoDepositInfo.hasDeposit : false;
-    const isBlocked = isRetainership ? (!hasPatientDeposit && !hasHmoDeposit) : !hasPatientDeposit;
+    // Retainership patients are never blocked — charges bill to Retainership account (overdraft allowed)
+    const isBlocked = isRetainership ? false : !hasPatientDeposit;
 
     return (
         <Layout>
@@ -2584,21 +2583,35 @@ const NurseTriage = () => {
                             {/* Deposit Balance status */}
                             <div className="mb-4">
                                 <label className="block text-gray-700 font-bold mb-1">Financial Deposit Balance</label>
-                                <div className={`p-3 rounded border text-sm font-semibold flex flex-col gap-1 ${isBlocked
-                                    ? 'bg-red-50 text-red-800 border-red-200'
-                                    : 'bg-green-50 text-green-800 border-green-200'
-                                    }`}>
-                                    <div className="flex justify-between items-center">
-                                        <span>Patient Deposit:</span>
-                                        <span className="font-bold">₦{selectedPatient?.depositBalance?.toLocaleString() || '0'}</span>
-                                    </div>
-                                    {isRetainership && (
-                                        <div className="flex justify-between items-center border-t border-dashed border-gray-300 pt-1 mt-1">
-                                            <span>Retainership ({selectedPatient?.hmo}):</span>
-                                            <span className="font-bold">{hasHmoDeposit ? '✅ Active Deposit' : '❌ No Deposit'}</span>
+                                {isRetainership ? (
+                                    <div className="p-3 rounded border text-sm font-semibold flex flex-col gap-1 bg-blue-50 text-blue-800 border-blue-200">
+                                        <div className="flex justify-between items-center">
+                                            <span>Retainership Account:</span>
+                                            <span className="font-bold">{selectedPatient?.hmo || 'N/A'}</span>
                                         </div>
-                                    )}
-                                </div>
+                                        <div className="flex justify-between items-center border-t border-dashed border-blue-300 pt-1 mt-1">
+                                            <span>Retainership Wallet Balance:</span>
+                                            <span className={`font-bold ${(selectedPatient?.depositBalance || 0) >= 0 ? 'text-green-700' : 'text-orange-600'}`}>
+                                                ₦{(selectedPatient?.depositBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className={`p-3 rounded border text-sm font-semibold flex flex-col gap-1 ${isBlocked
+                                        ? 'bg-red-50 text-red-800 border-red-200'
+                                        : 'bg-green-50 text-green-800 border-green-200'
+                                        }`}>
+                                        <div className="flex justify-between items-center">
+                                            <span>Patient Deposit:</span>
+                                            <span className="font-bold">₦{selectedPatient?.depositBalance?.toLocaleString() || '0'}</span>
+                                        </div>
+                                    </div>
+                                )}
+                                {isRetainership && (
+                                    <p className="text-xs text-blue-600 mt-1 font-semibold">
+                                        ℹ️ Retainership patient — charges will be billed to the Retainership account. Overdraft allowed.
+                                    </p>
+                                )}
                                 {isBlocked && (
                                     <p className="text-xs text-red-600 mt-1 font-semibold">
                                         ⚠️ Patient has no deposit balance. Admission is blocked until a deposit is paid.

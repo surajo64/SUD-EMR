@@ -137,14 +137,9 @@ const processDirectSale = async (req, res) => {
             const isRetainershipProvider = ['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership'].includes(salePatient.provider);
 
             if (isRetainershipProvider && paymentMethod === 'retainership') {
-                const hmoBalance = salePatient.hmo ? await getHMOWalletBalance(salePatient.hmo) : 0;
-                if (hmoBalance >= totalAmount) {
-                    isRetainership = true;
-                    finalPaymentMethod = 'retainership';
-                } else {
-                    isRetainership = false; // reset to prevent HMO portions logic
-                    finalPaymentMethod = 'cash';
-                }
+                // Overdraft allowed — always charge Retainership account
+                isRetainership = true;
+                finalPaymentMethod = 'retainership';
             } else if (!isRetainershipProvider && paymentMethod === 'deposit') {
                 const isAdmitted = await isPatientAdmitted(salePatient._id);
                 if (isAdmitted || salePatient.depositBalance >= totalAmount) {

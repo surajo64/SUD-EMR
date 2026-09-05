@@ -72,60 +72,35 @@ const attemptPaymentForCharge = async (charge, visit, userId) => {
             console.log(`[BedFeeBilling] Auto-paid pending charge ${charge._id} from deposit. New Balance: ${patient.depositBalance}`);
             return true; // success
         } else if (['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership'].includes(provider)) {
-            // Deduct from HMO Retainership balance
+            // Deduct from HMO Retainership balance (overdraft allowed — balance may go negative)
             const hmo = await HMO.findOne({ name: patient.hmo });
             if (hmo) {
-                // 1. Total HMO Deposits
-                const deposits = await HMOTransaction.find({ hmo: hmo._id });
-                const totalDeposits = deposits.reduce((sum, d) => sum + d.amount, 0);
-
-                // 2. Total HMO Utilized (Charges for all patients of this HMO)
-                const hmoPatients = await Patient.find({ hmo: hmo.name }).select('_id');
-                const hmoPatientIds = hmoPatients.map(p => p._id);
-
-                const existingCharges = await EncounterCharge.find({
-                    patient: { $in: hmoPatientIds },
-                    hmoPortion: { $gt: 0 }
+                // Create Receipt (always — overdraft allowed)
+                const receiptNumber = `RCP-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
+                const receipt = await Receipt.create({
+                    patient: patient._id,
+                    encounter: visit._id,
+                    charges: [charge._id],
+                    amountPaid: amount,
+                    paymentMethod: 'retainership',
+                    hmo: hmo._id,
+                    cashier: cashierId,
+                    receiptNumber,
+                    validated: true,
+                    paymentDate: charge.createdAt,
+                    createdAt: charge.createdAt,
+                    updatedAt: charge.createdAt
                 });
 
-                // Filter out the current charge to calculate HMO balance BEFORE this charge
-                const totalUtilized = existingCharges
-                    .filter(c => c._id.toString() !== charge._id.toString())
-                    .reduce((sum, c) => sum + c.hmoPortion, 0);
+                // Update charge status to paid and confirm HMO coverage
+                charge.status = 'paid';
+                charge.receipt = receipt._id;
+                charge.hmoPortion = amount;
+                charge.patientPortion = 0;
+                await charge.save();
 
-                const balance = totalDeposits - totalUtilized;
-
-                if (balance >= amount) {
-                    // Create Receipt
-                    const receiptNumber = `RCP-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
-                    const receipt = await Receipt.create({
-                        patient: patient._id,
-                        encounter: visit._id,
-                        charges: [charge._id],
-                        amountPaid: amount,
-                        paymentMethod: 'retainership',
-                        hmo: hmo._id,
-                        cashier: cashierId,
-                        receiptNumber,
-                        validated: true,
-                        paymentDate: charge.createdAt,
-                        createdAt: charge.createdAt,
-                        updatedAt: charge.createdAt
-                    });
-
-                    // Update charge status to paid and confirm HMO coverage
-                    charge.status = 'paid';
-                    charge.receipt = receipt._id;
-                    charge.hmoPortion = amount;
-                    charge.patientPortion = 0;
-                    await charge.save();
-
-                    console.log(`[BedFeeBilling] Auto-paid pending charge ${charge._id} from HMO Retainership (${hmo.name}) deposit. Balance: ${balance - amount}`);
-                    return true; // success
-                } else {
-                    console.log(`[BedFeeBilling] Insufficient HMO Retainership (${hmo.name}) balance. Required: ${amount}, Balance: ${balance}`);
-                    return false; // failed
-                }
+                console.log(`[BedFeeBilling] Auto-paid pending charge ${charge._id} from HMO Retainership (${hmo.name}) — overdraft allowed.`);
+                return true; // success
             } else {
                 console.log(`[BedFeeBilling] HMO not found for name: ${patient.hmo}`);
                 return false;

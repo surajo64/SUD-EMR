@@ -326,7 +326,7 @@ const getVisits = async (req, res) => {
     }
 
     let visits = await Visit.find(query)
-        .populate('patient', 'name mrn age gender contact isWalkIn')
+        .populate('patient', 'name mrn age gender contact isWalkIn provider hmo depositBalance')
         .populate('doctor', 'name')
         .populate('consultingPhysician', 'name')
         .populate('clinicalNotes.doctor', 'name role')
@@ -343,10 +343,46 @@ const getVisits = async (req, res) => {
     }
 
     // Fetch unpaid consultation status for each visit
+    // Also overlay Retainership HMO wallet balance onto patient.depositBalance
+    const RETAINERSHIP_PROVIDERS = ['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership'];
+
+    // Collect unique HMO names for Retainership patients so we compute balances once
+    const hmoNamesNeeded = [...new Set(
+        visits
+            .filter(v => v.patient && RETAINERSHIP_PROVIDERS.includes(v.patient.provider) && v.patient.hmo)
+            .map(v => v.patient.hmo)
+    )];
+
+    const hmoBalances = {};
+    if (hmoNamesNeeded.length > 0) {
+        const HMO = require('../models/hmoModel');
+        const HMOTransaction = require('../models/hmoTransactionModel');
+        const EncounterCharge = require('../models/encounterChargeModel');
+        const Patient = require('../models/patientModel');
+
+        await Promise.all(hmoNamesNeeded.map(async (hmoName) => {
+            const hmo = await HMO.findOne({ name: hmoName });
+            if (!hmo) { hmoBalances[hmoName] = 0; return; }
+            const transactions = await HMOTransaction.find({ hmo: hmo._id });
+            const totalDeposits = transactions.filter(t => t.type === 'deposit').reduce((s, t) => s + t.amount, 0);
+            const manualCharges = transactions.filter(t => t.type === 'charge').reduce((s, t) => s + t.amount, 0);
+            const refunds = transactions.filter(t => t.type === 'refund').reduce((s, t) => s + t.amount, 0);
+            const hmoPatients = await Patient.find({ hmo: hmoName }).select('_id');
+            const hmoPatientIds = hmoPatients.map(p => p._id);
+            const charges = await EncounterCharge.find({ patient: { $in: hmoPatientIds }, hmoPortion: { $gt: 0 }, status: 'paid' });
+            const totalUtilized = charges.reduce((s, c) => s + c.hmoPortion, 0);
+            hmoBalances[hmoName] = totalDeposits - (totalUtilized + manualCharges + refunds);
+        }));
+    }
+
     const visitsWithPaymentStatus = await Promise.all(visits.map(async (visit) => {
         const hasUnpaid = await checkUnpaidConsultation(visit._id);
         const formattedVisit = formatVisitWithClinicalNotes(visit);
         formattedVisit.hasUnpaidConsultation = hasUnpaid;
+        // Overlay Retainership wallet balance onto patient.depositBalance
+        if (formattedVisit.patient && RETAINERSHIP_PROVIDERS.includes(formattedVisit.patient.provider) && formattedVisit.patient.hmo) {
+            formattedVisit.patient.depositBalance = hmoBalances[formattedVisit.patient.hmo] ?? 0;
+        }
         return formattedVisit;
     }));
 
@@ -628,7 +664,7 @@ const updateVisit = async (req, res) => {
 // @access  Private
 const getVisitById = async (req, res) => {
     const visit = await Visit.findById(req.params.id)
-        .populate('patient', 'name age gender mrn contact isWalkIn')
+        .populate('patient', 'name age gender mrn contact isWalkIn provider hmo depositBalance')
         .populate('doctor', 'name')
         .populate('consultingPhysician', 'name')
         .populate('clinicalNotes.doctor', 'name role')
@@ -703,7 +739,7 @@ const getVisitsByPatient = async (req, res) => {
 
         let visits = await Visit.find({ patient: req.params.patientId })
             .sort({ createdAt: -1 })
-            .populate('patient', 'name mrn age gender contact isWalkIn')
+            .populate('patient', 'name mrn age gender contact isWalkIn provider hmo depositBalance')
             .populate('doctor', 'name')
             .populate('consultingPhysician', 'name')
             .populate('clinicalNotes.doctor', 'name role')
@@ -798,25 +834,13 @@ const convertToInpatient = async (req, res) => {
         }
 
         const isRetainership = ['Retainership', 'Corporate Retainership', 'Family Retainership', 'Joud Alkhair Retainership'].includes(patient.provider);
-        let hasValidDeposit = (patient.depositBalance || 0) > 0;
 
-        if (isRetainership) {
-            const HMO = require('../models/hmoModel');
-            const HMOTransaction = require('../models/hmoTransactionModel');
-            const hmo = await HMO.findOne({ name: patient.hmo, category: 'Retainership' });
-            if (hmo) {
-                const depositCount = await HMOTransaction.countDocuments({
-                    hmo: hmo._id,
-                    type: 'deposit'
-                });
-                if (depositCount > 0) {
-                    hasValidDeposit = true;
-                }
+        // Retainership patients are always admitted — charges bill to Retainership account (overdraft allowed)
+        if (!isRetainership) {
+            const hasDeposit = (patient.depositBalance || 0) > 0;
+            if (!hasDeposit) {
+                return res.status(400).json({ message: 'Admission denied: Patient must make a deposit at the cashier before admission.' });
             }
-        }
-
-        if (!hasValidDeposit) {
-            return res.status(400).json({ message: 'Admission denied: Patient must make a deposit at the cashier before admission.' });
         }
 
         if (req.user.role === 'doctor') {
