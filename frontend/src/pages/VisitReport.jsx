@@ -115,7 +115,7 @@ const VisitReport = () => {
         toast.success('Report exported successfully!');
     };
 
-    if (user?.role !== 'admin' && user?.role !== 'super_admin' && user?.role !== 'readonly_admin') {
+    if (user?.role !== 'admin' && user?.role !== 'super_admin' && user?.role !== 'readonly_admin' && user?.role !== 'claim_officer') {
         return (
             <Layout>
                 <div className="bg-red-50 border border-red-200 p-6 rounded">

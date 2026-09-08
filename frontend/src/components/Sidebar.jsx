@@ -155,6 +155,18 @@ const Sidebar = () => {
                     </>
                 )}
 
+                {user.role === 'claim_officer' && (
+                    <>
+                        <Link to="/admin/claims-management" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/admin/claims-management')}`}>
+                            <FaFileInvoiceDollar /> HMO Claims
+                        </Link>
+                        <Link to="/admin/visit-report" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/admin/visit-report')}`}>
+                            <FaHospitalUser /> Visit Report
+                        </Link>
+                    </>
+                )}
+
+
                 {user.role === 'pharmacist' && (
                     <>
                         <Link to="/pharmacy/prescriptions" className={`flex items-center gap-3 p-3 rounded hover:bg-green-700 transition ${isActive('/pharmacy/prescriptions')}`}>

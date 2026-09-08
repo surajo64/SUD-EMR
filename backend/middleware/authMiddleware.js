@@ -74,4 +74,12 @@ const scientist = (req, res, next) => {
     }
 };
 
-module.exports = { protect, admin, superAdmin, pharmacy, adminOrReceptionist, scientist, checkNotReadOnly };
+const claimOfficer = (req, res, next) => {
+    if (req.user && (req.user.role === 'claim_officer' || req.user.role === 'admin' || req.user.role === 'super_admin' || req.user.role === 'readonly_admin' || req.user.role === 'cashier')) {
+        next();
+    } else {
+        res.status(403).json({ message: 'Not authorized. Claim Officer access required.' });
+    }
+};
+
+module.exports = { protect, admin, superAdmin, pharmacy, adminOrReceptionist, scientist, checkNotReadOnly, claimOfficer };

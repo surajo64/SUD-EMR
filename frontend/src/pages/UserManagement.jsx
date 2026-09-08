@@ -272,6 +272,7 @@ const UserManagement = () => {
                             <option value="radiologist">Radiologists</option>
                             <option value="cashier">Cashiers</option>
                             <option value="receptionist">Receptionists</option>
+                            <option value="claim_officer">Claim Officers</option>
                         </select>
                     </div>
                     {user.role !== 'readonly_admin' && (
@@ -480,6 +481,7 @@ const UserManagement = () => {
                                     <option value="radiologist">Radiologist</option>
                                     <option value="cashier">Cashier</option>
                                     <option value="receptionist">Receptionist</option>
+                                    <option value="claim_officer">Claim Officer</option>
                                 </select>
                             </div>
                             {(newUser.role === 'lab_technician' || newUser.role === 'lab_scientist') && (
@@ -610,6 +612,7 @@ const UserManagement = () => {
                                     <option value="radiologist">Radiologist</option>
                                     <option value="cashier">Cashier</option>
                                     <option value="receptionist">Receptionist</option>
+                                    <option value="claim_officer">Claim Officer</option>
                                 </select>
                             </div>
                             {(selectedUser.role === 'lab_technician' || selectedUser.role === 'lab_scientist') && (

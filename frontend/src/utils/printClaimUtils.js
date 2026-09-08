@@ -64,6 +64,8 @@ export const handlePrintClaim = async (claimId, userToken, defaultBank, toast) =
                                 <th>Quantity</th>
                                 <th>Unit Price</th>
                                 <th>Total Amount</th>
+                                <th>Patient (10%)</th>
+                                <th>HMO Claim</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -72,13 +74,15 @@ export const handlePrintClaim = async (claimId, userToken, defaultBank, toast) =
                                     <td>${item.description}</td>
                                     <td>${item.chargeType}</td>
                                     <td>${item.quantity}</td>
-                                    <td>₦${item.unitPrice.toLocaleString()}</td>
-                                    <td>₦${item.totalAmount.toLocaleString()}</td>
+                                    <td>₦${(item.unitPrice || 0).toLocaleString()}</td>
+                                    <td>₦${(item.totalAmount || 0).toLocaleString()}</td>
+                                    <td style="color: #ea580c;">₦${(item.patientPortion || 0).toLocaleString()}</td>
+                                    <td style="color: #15803d; font-weight: bold;">₦${(item.hmoPortion || 0).toLocaleString()}</td>
                                 </tr>
                             `).join('')}
                             <tr class="total-row">
-                                <td colspan="4" style="text-align: right;">Total Claim Amount:</td>
-                                <td>₦${data.totalClaimAmount.toLocaleString()}</td>
+                                <td colspan="6" style="text-align: right;">Total Claim Amount:</td>
+                                <td style="color: #15803d; font-weight: bold;">₦${data.totalClaimAmount.toLocaleString()}</td>
                             </tr>
                         </tbody>
                     </table>

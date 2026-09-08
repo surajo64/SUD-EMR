@@ -288,18 +288,26 @@ const ClaimsManagement = () => {
                                 <th class="amount-col">Qty</th>
                                 <th class="amount-col">Unit Price</th>
                                 <th class="amount-col">Total</th>
+                                <th class="amount-col">Patient (10%)</th>
+                                <th class="amount-col">HMO Claim</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${data.claimItems.map(item => `
                                 <tr>
                                     <td>${item.description}</td>
-                                    <td>${item.chargeType}</td>
+                                    <td><span style="background-color: #dbeafe; color: #1e40af; padding: 2px 6px; border-radius: 4px; font-size: 11px;">${item.chargeType}</span></td>
                                     <td class="amount-col">${item.quantity}</td>
-                                    <td class="amount-col">₦${item.unitPrice.toLocaleString()}</td>
-                                    <td class="amount-col">₦${item.totalAmount.toLocaleString()}</td>
+                                    <td class="amount-col">₦${(item.unitPrice || 0).toLocaleString()}</td>
+                                    <td class="amount-col" style="font-weight: 500;">₦${(item.totalAmount || 0).toLocaleString()}</td>
+                                    <td class="amount-col" style="color: #ea580c;">₦${(item.patientPortion || 0).toLocaleString()}</td>
+                                    <td class="amount-col" style="color: #15803d; font-weight: bold;">₦${(item.hmoPortion || 0).toLocaleString()}</td>
                                 </tr>
                             `).join('')}
+                            <tr class="total-row" style="font-weight: bold;">
+                                <td colspan="6" class="amount-col">Total Claimable:</td>
+                                <td class="amount-col" style="color: #15803d; font-weight: bold;">₦${hmoPayable.toLocaleString()}</td>
+                            </tr>
                         </tbody>
                     </table>
 
@@ -436,21 +444,25 @@ const ClaimsManagement = () => {
                                         <th class="amount-col">Qty</th>
                                         <th class="amount-col">Unit Price</th>
                                         <th class="amount-col">Total</th>
+                                        <th class="amount-col">Patient (10%)</th>
+                                        <th class="amount-col">HMO Claim</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     ${claim.claimItems.map(item => `
                                         <tr>
                                             <td>${item.description}</td>
-                                            <td>${item.chargeType}</td>
+                                            <td><span style="background-color: #dbeafe; color: #1e40af; padding: 2px 6px; border-radius: 4px; font-size: 11px;">${item.chargeType}</span></td>
                                             <td class="amount-col">${item.quantity}</td>
-                                            <td class="amount-col">₦${item.unitPrice.toLocaleString()}</td>
-                                            <td class="amount-col">₦${item.totalAmount.toLocaleString()}</td>
+                                            <td class="amount-col">₦${(item.unitPrice || 0).toLocaleString()}</td>
+                                            <td class="amount-col" style="font-weight: 500;">₦${(item.totalAmount || 0).toLocaleString()}</td>
+                                            <td class="amount-col" style="color: #ea580c;">₦${(item.patientPortion || 0).toLocaleString()}</td>
+                                            <td class="amount-col" style="color: #15803d; font-weight: bold;">₦${(item.hmoPortion || 0).toLocaleString()}</td>
                                         </tr>
                                     `).join('')}
                                     <tr class="total-row">
-                                        <td colspan="4" class="amount-col">Subtotal:</td>
-                                        <td class="amount-col">₦${claim.totalClaimAmount.toLocaleString()}</td>
+                                        <td colspan="6" class="amount-col">Subtotal:</td>
+                                        <td class="amount-col" style="color: #15803d; font-weight: bold;">₦${claim.totalClaimAmount.toLocaleString()}</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -496,7 +508,7 @@ const ClaimsManagement = () => {
         return classes[status] || 'bg-gray-100 text-gray-800';
     };
 
-    if (user?.role !== 'admin' && user?.role !== 'super_admin' && user?.role !== 'cashier' && user?.role !== 'readonly_admin') {
+    if (user?.role !== 'admin' && user?.role !== 'super_admin' && user?.role !== 'cashier' && user?.role !== 'readonly_admin' && user?.role !== 'claim_officer') {
         return (
             <Layout>
                 <div className="bg-red-50 border border-red-200 p-6 rounded">
@@ -646,7 +658,10 @@ const ClaimsManagement = () => {
                                         <td className="p-3 font-semibold text-blue-600">{claim.claimNumber}</td>
                                         <td className="p-3">
                                             <p className="font-semibold">{claim.patient?.name || 'N/A'}</p>
-                                            <p className="text-xs text-gray-600">{claim.patient?.mrn || 'N/A'}</p>
+                                            <p className="text-xs text-gray-600">
+                                                {claim.patient?.mrn || 'N/A'}
+                                                {claim.patient?.insuranceNumber ? ` | Insurance No: ${claim.patient.insuranceNumber}` : ''}
+                                            </p>
                                         </td>
                                         <td className="p-3">{claim.hmo.name}</td>
                                         <td className="p-3">{new Date(claim.encounter.createdAt).toLocaleDateString()}</td>

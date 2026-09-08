@@ -9,10 +9,10 @@ const {
     exportClaimsToExcel,
     getClaimsSummary
 } = require('../controllers/claimController');
-const { protect, admin } = require('../middleware/authMiddleware');
+const { protect, claimOfficer } = require('../middleware/authMiddleware');
 
-// All routes require authentication
-router.use(protect);
+// All routes require authentication + claim officer access
+router.use(protect, claimOfficer);
 
 // Generate claim from encounter
 router.post('/generate/:encounterId', generateClaimFromEncounter);
