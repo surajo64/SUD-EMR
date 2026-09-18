@@ -21,6 +21,7 @@ const LabTestManagement = () => {
         standardFee: '',
         retainershipFee: '',
         familyRetainershipFee: '',
+        joudAlkhairFee: '',
         nhiaFee: '',
         kschmaFee: '',
         description: '',
@@ -69,6 +70,7 @@ const LabTestManagement = () => {
                 standardFee: parseFloat(formData.standardFee) || 0,
                 retainershipFee: parseFloat(formData.retainershipFee) || 0,
                 familyRetainershipFee: parseFloat(formData.familyRetainershipFee) || 0,
+                joudAlkhairFee: parseFloat(formData.joudAlkhairFee) || 0,
                 nhiaFee: parseFloat(formData.nhiaFee) || 0,
                 kschmaFee: parseFloat(formData.kschmaFee) || 0,
                 department: 'Laboratory',
@@ -106,6 +108,7 @@ const LabTestManagement = () => {
             standardFee: (test.standardFee || 0).toString(),
             retainershipFee: (test.retainershipFee || 0).toString(),
             familyRetainershipFee: (test.familyRetainershipFee || 0).toString(),
+            joudAlkhairFee: (test.joudAlkhairFee || 0).toString(),
             nhiaFee: (test.nhiaFee || 0).toString(),
             kschmaFee: (test.kschmaFee || 0).toString(),
             description: test.description || '',
@@ -389,8 +392,63 @@ NORMAL RANGES:
 
 RESULT:
 - Malaria: _____ (Normal: Negative)
+`,
+        urineCulture: `URINE CULTURE
+
+PHYSICAL EXAMINATION:
+- Color: _____ (Normal: Yellow to amber)
+- Appearance: _____ (Normal: Clear)
+- Specific Gravity: _____ (Normal: 1.005-1.030)
+
+CHEMICAL EXAMINATION:
+- pH: _____ (Normal: 5.0-8.0)
+- Protein: _____ (Normal: Negative)
+- Glucose: _____ (Normal: Negative)
+- Ketones: _____ (Normal: Negative)
+- Blood: _____ (Normal: Negative)
+- Bilirubin: _____ (Normal: Negative)
+- Urobilinogen: _____ mg/dL (Normal: 0.1-1.0)
+- Nitrite: _____ (Normal: Negative)
+- Leukocyte Esterase: _____ (Normal: Negative)
+
+MICROSCOPIC EXAMINATION:
+- WBC: _____ /hpf (Normal: 0-5)
+- RBC: _____ /hpf (Normal: 0-2)
+- Epithelial Cells: _____ /hpf (Normal: Few)
+- Bacteria: _____ (Normal: None/Few)
+- Crystals: _____ (Normal: None)
+- Casts: _____ (Normal: None)
+- Others: _____
+
+ANTIBIOTIC SENSITIVITY:
+- Penicillin: _____ (Normal: S/R)
+- Flucloxacillin: _____ (Normal: S/R)
+- Tetracycline: _____ (Normal: S/R)
+- Ampicillin: _____ (Normal: S/R)
+- Erythromycin: _____ (Normal: S/R)
+- Roxithromycin: _____ (Normal: S/R)
+- Azithromycin: _____ (Normal: S/R)
+- Augmentin (Amoxicillin-Clavulanate): _____ (Normal: S/R)
+- Cotrimoxazole: _____ (Normal: S/R)
+- Cephalexin: _____ (Normal: S/R)
+- Colistin: _____ (Normal: S/R)
+- Gentamycin: _____ (Normal: S/R)
+- Streptomycin: _____ (Normal: S/R)
+- Ceftriaxone: _____ (Normal: S/R)
+- Chloramphenicol: _____ (Normal: S/R)
+- Nitrofurantoin: _____ (Normal: S/R)
+- Nalidixic Acid: _____ (Normal: S/R)
+- Cefuroxime: _____ (Normal: S/R)
+- Ceftazidime: _____ (Normal: S/R)
+- Ofloxacin: _____ (Normal: S/R)
+- Ciprofloxacin: _____ (Normal: S/R)
+- Imipenem: _____ (Normal: S/R)
+
+COMMENT:
+- Comment: _____________________________
 `
     };
+
 
     const insertTemplate = (templateKey) => {
         setFormData(prev => ({
@@ -545,6 +603,19 @@ RESULT:
                                     />
                                 </div>
                                 <div>
+                                    <label className="block text-xs font-semibold mb-1 text-teal-600">Joud Alkhair Ret.</label>
+                                    <input
+                                        type="number"
+                                        name="joudAlkhairFee"
+                                        value={formData.joudAlkhairFee}
+                                        onChange={handleInputChange}
+                                        className="w-full border p-2 rounded text-sm border-teal-200 focus:border-teal-500"
+                                        placeholder="0.00"
+                                        step="0.01"
+                                        min="0"
+                                    />
+                                </div>
+                                <div>
                                     <label className="block text-xs font-semibold mb-1 text-green-600">NHIA Fee</label>
                                     <input
                                         type="number"
@@ -622,6 +693,7 @@ RESULT:
                                     <button type="button" onClick={() => insertTemplate('hba1c')} className="text-xs bg-lime-100 text-lime-700 px-2 py-1 rounded hover:bg-lime-200">HbA1c</button>
                                     <button type="button" onClick={() => insertTemplate('esr')} className="text-xs bg-cyan-100 text-cyan-700 px-2 py-1 rounded hover:bg-cyan-200">ESR</button>
                                     <button type="button" onClick={() => insertTemplate('mal')} className="text-xs bg-cyan-100 text-cyan-700 px-2 py-1 rounded hover:bg-cyan-200">Malaria</button>
+                                    <button type="button" onClick={() => insertTemplate('urineCulture')} className="text-xs bg-violet-100 text-violet-700 px-2 py-1 rounded hover:bg-violet-200 font-semibold">Urine Culture</button>
                                 </div>
                             </div>
                             <textarea
@@ -722,7 +794,7 @@ _____________________________________"
                                                     <span className="text-gray-500">Standard:</span>
                                                     <span className="font-semibold text-gray-800">₦{(test.standardFee || 0).toLocaleString()}</span>
                                                 </div>
-                                                {(test.standardFee > 0 || test.retainershipFee > 0 || test.familyRetainershipFee > 0 || test.nhiaFee > 0 || test.kschmaFee > 0) && (
+                                                {(test.standardFee > 0 || test.retainershipFee > 0 || test.familyRetainershipFee > 0 || test.joudAlkhairFee > 0 || test.nhiaFee > 0 || test.kschmaFee > 0) && (
                                                     <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
                                                         {test.standardFee > 0 && (
                                                             <div className="flex justify-between gap-1">

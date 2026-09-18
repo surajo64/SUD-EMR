@@ -46,6 +46,7 @@ const createRadiologyOrder = async (req, res) => {
 const getRadiologyOrders = async (req, res) => {
     const orders = await RadiologyOrder.find({})
         .populate('patient', 'name mrn age gender contact')
+        .populate('doctor', 'name')
         .populate('visit', 'type createdAt')
         .populate('charge', 'status')
         .populate('signedBy', 'name');

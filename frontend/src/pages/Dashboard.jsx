@@ -5,7 +5,7 @@ import { AppContext } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import AdminDashboard from './AdminDashboard';
-import { FaUserMd, FaPrescription, FaVials, FaCreditCard, FaUserNurse, FaCalendarDay, FaUserCheck, FaNotesMedical, FaClock, FaCalendarAlt, FaFlask, FaMicroscope, FaHistory, FaBriefcaseMedical, FaChartBar, FaFileInvoiceDollar, FaReceipt, FaCheckCircle, FaXRay } from 'react-icons/fa';
+import { FaUserMd, FaPrescription, FaVials, FaCreditCard, FaUserNurse, FaCalendarDay, FaUserCheck, FaNotesMedical, FaClock, FaCalendarAlt, FaFlask, FaMicroscope, FaHistory, FaBriefcaseMedical, FaChartBar, FaFileInvoiceDollar, FaReceipt, FaCheckCircle, FaXRay, FaHospitalUser, FaFileMedicalAlt } from 'react-icons/fa';
 import { formatCompactNumber, formatCurrency } from '../utils/formatters';
 
 const Dashboard = () => {
@@ -154,6 +154,14 @@ const Dashboard = () => {
                                 <StatCard title="Total Reach" value={stats.totalScansSigned || 0} icon={FaXRay || FaMicroscope} color="cyan" subtitle="CUMULATIVE CARE" />
                             </>
                         )}
+                        {(user.role === 'claims_officer' || user.role === 'claim_officer') && (
+                            <>
+                                <StatCard title="Total Claims" value={stats.totalClaims} icon={FaFileInvoiceDollar} color="blue" subtitle="ALL CLAIMS" />
+                                <StatCard title="Pending Claims" value={stats.pendingClaims} icon={FaClock} color="orange" subtitle="DRAFT / PENDING" />
+                                <StatCard title="Submitted Claims" value={stats.submittedClaims} icon={FaChartBar} color="purple" subtitle="SUBMITTED" />
+                                <StatCard title="Paid Claims" value={stats.paidClaims} icon={FaCheckCircle} color="green" subtitle="SETTLED" />
+                            </>
+                        )}
                     </div>
                 )}
 
@@ -210,13 +218,22 @@ const Dashboard = () => {
                         )}
 
                         {user.role === 'receptionist' && (
-                            <div onClick={() => navigate('/front-desk')} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 cursor-pointer hover:shadow-lg hover:border-green-400 transition group">
-                                <div className="w-12 h-12 bg-green-50 text-green-600 rounded-lg flex items-center justify-center mb-4 group-hover:bg-green-600 group-hover:text-white transition">
-                                    <FaUserCheck size={20} />
+                            <>
+                                <div onClick={() => navigate('/front-desk')} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 cursor-pointer hover:shadow-lg hover:border-green-400 transition group">
+                                    <div className="w-12 h-12 bg-green-50 text-green-600 rounded-lg flex items-center justify-center mb-4 group-hover:bg-green-600 group-hover:text-white transition">
+                                        <FaUserCheck size={20} />
+                                    </div>
+                                    <h3 className="text-lg font-bold mb-2 text-green-700">Front Desk</h3>
+                                    <p className="text-gray-500 text-sm">Register & check-in patients.</p>
                                 </div>
-                                <h3 className="text-lg font-bold mb-2 text-green-700">Front Desk</h3>
-                                <p className="text-gray-500 text-sm">Register & check-in patients.</p>
-                            </div>
+                                <div onClick={() => navigate('/front-desk/investigation-results')} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 cursor-pointer hover:shadow-lg hover:border-emerald-400 transition group">
+                                    <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center mb-4 group-hover:bg-emerald-600 group-hover:text-white transition">
+                                        <FaFileMedicalAlt size={20} />
+                                    </div>
+                                    <h3 className="text-lg font-bold mb-2 text-emerald-700">Investigation Results</h3>
+                                    <p className="text-gray-500 text-sm">Search and print completed lab & radiology results.</p>
+                                </div>
+                            </>
                         )}
 
                         {user.role === 'nurse' && (
@@ -257,6 +274,25 @@ const Dashboard = () => {
                                 <h3 className="text-lg font-bold mb-2 text-indigo-700">Radiology</h3>
                                 <p className="text-gray-500 text-sm">View & update radiology orders.</p>
                             </div>
+                        )}
+
+                        {(user.role === 'claims_officer' || user.role === 'claim_officer') && (
+                            <>
+                                <div onClick={() => navigate('/admin/claims-management')} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 cursor-pointer hover:shadow-lg hover:border-blue-400 transition group">
+                                    <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center mb-4 group-hover:bg-blue-600 group-hover:text-white transition">
+                                        <FaFileInvoiceDollar size={20} />
+                                    </div>
+                                    <h3 className="text-lg font-bold mb-2 text-blue-700">HMO Claims</h3>
+                                    <p className="text-gray-500 text-sm">Review, generate & process HMO claims.</p>
+                                </div>
+                                <div onClick={() => navigate('/admin/visit-report')} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 cursor-pointer hover:shadow-lg hover:border-green-400 transition group">
+                                    <div className="w-12 h-12 bg-green-50 text-green-600 rounded-lg flex items-center justify-center mb-4 group-hover:bg-green-600 group-hover:text-white transition">
+                                        <FaHospitalUser size={20} />
+                                    </div>
+                                    <h3 className="text-lg font-bold mb-2 text-green-700">Visit Reports</h3>
+                                    <p className="text-gray-500 text-sm">View and export patient visit summaries.</p>
+                                </div>
+                            </>
                         )}
 
                         {(user.role === 'admin' || user.role === 'super_admin' || user.role === 'readonly_admin') && (

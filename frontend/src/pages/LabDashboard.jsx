@@ -63,6 +63,7 @@ const LabDashboard = () => {
 
 
     // Parse text-based template or saved result into table format
+    // Handles section headers (lines ending with ':' that are not parameter lines)
     const parseTextTemplate = (template) => {
         if (!template) return [];
 
@@ -70,9 +71,22 @@ const LabDashboard = () => {
         const params = [];
 
         for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+
+            // Detect section headers: non-parameter lines ending with ':'
+            // e.g. "PHYSICAL EXAMINATION:", "ANTIBIOTIC SENSITIVITY:"
+            if (!trimmed.startsWith('-') && trimmed.endsWith(':')) {
+                const sectionName = trimmed.slice(0, -1).trim();
+                if (sectionName.length > 0) {
+                    params.push({ type: 'section', name: sectionName, value: '', unit: '', normalRange: '' });
+                    continue;
+                }
+            }
+
             // Match patterns like "- WBC: _____ x10^3/μL (Normal: 4.0-11.0)"
             // OR "- Malaria: ++ Positive/Negative"
-            const match = line.match(/^\s*-\s*([^:]+):\s*(.*?)(?:\s*\(?(?:Normal:\s*)?([^)]*)\)?)?$/);
+            const match = trimmed.match(/^-\s*([^:]+):\s*(.*?)(?:\s*\(?(?:Normal:\s*)?([^)]*)\)?)?$/);
             if (match) {
                 const name = match[1].trim();
                 let fullValue = match[2].trim();
@@ -85,7 +99,7 @@ const LabDashboard = () => {
                 params.push({
                     name,
                     value: value === '_____' ? '' : value,
-                    unit: '', // Text templates usually don't have separate unit column
+                    unit: '',
                     normalRange
                 });
             }
@@ -392,30 +406,40 @@ const LabDashboard = () => {
                                                     <th style="text-align: center; padding: 12px; border: 1px solid #d1d5db; font-weight: 600; width: 80px;">Status</th>
                                                 </tr>
                                             </thead>
-                                            <tbody>
-                                                ${parsed.parameters.map(param => {
-                            const rangeStatus = checkRange(param.value, param.normalRange);
-                            let bgColor = '#f9fafb';
-                            let statusText = '';
-                            let statusColor = '';
+                                            <tbody>                                                 ${parsed.parameters.map(param => {
+                                                // Section header row
+                                                if (param.type === 'section') {
+                                                    return `
+                                                        <tr>
+                                                            <td colspan="5" style="padding: 10px 12px; background: #ede9fe; font-weight: bold; color: #5b21b6; text-transform: uppercase; letter-spacing: 0.05em; font-size: 12px; border: 1px solid #d1d5db;">
+                                                                ${param.name}
+                                                            </td>
+                                                        </tr>
+                                                    `;
+                                                }
 
-                            if (param.value) {
-                                if (rangeStatus === 'low') {
-                                    bgColor = '#fed7aa';
-                                    statusText = '↓ LOW';
-                                    statusColor = '#9a3412';
-                                } else if (rangeStatus === 'high') {
-                                    bgColor = '#fecaca';
-                                    statusText = '↑ HIGH';
-                                    statusColor = '#991b1b';
-                                } else {
-                                    bgColor = '#d1fae5';
-                                    statusText = '✓ Normal';
-                                    statusColor = '#065f46';
-                                }
-                            }
+                                            const rangeStatus = checkRange(param.value, param.normalRange);
+                                            let bgColor = '#f9fafb';
+                                            let statusText = '';
+                                            let statusColor = '';
 
-                            return `
+                                            if (param.value) {
+                                                if (rangeStatus === 'low') {
+                                                    bgColor = '#fed7aa';
+                                                    statusText = '↓ LOW';
+                                                    statusColor = '#9a3412';
+                                                } else if (rangeStatus === 'high') {
+                                                    bgColor = '#fecaca';
+                                                    statusText = '↑ HIGH';
+                                                    statusColor = '#991b1b';
+                                                } else {
+                                                    bgColor = '#d1fae5';
+                                                    statusText = '✓ Normal';
+                                                    statusColor = '#065f46';
+                                                }
+                                            }
+
+                                            return `
                                                         <tr style="background: ${bgColor};">
                                                             <td style="padding: 10px; border: 1px solid #d1d5db; font-weight: 500;">${param.name}</td>
                                                             <td style="padding: 10px; border: 1px solid #d1d5db; font-weight: 600;">${param.value || '-'}</td>
@@ -426,7 +450,7 @@ const LabDashboard = () => {
                                                             </td>
                                                         </tr>
                                                     `;
-                        }).join('')}
+                                        }).join('')}
                                             </tbody>
                                         </table>
                                     `;
@@ -971,6 +995,17 @@ const LabDashboard = () => {
                                                 </thead>
                                                 <tbody>
                                                     {tableResults.map((param, index) => {
+                                                        // Section header row
+                                                        if (param.type === 'section') {
+                                                            return (
+                                                                <tr key={index} className="bg-purple-100 border-b border-purple-200">
+                                                                    <td colSpan="5" className="p-3 font-bold text-purple-900 uppercase tracking-wide text-sm">
+                                                                        {param.name}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        }
+
                                                         const rangeStatus = checkRange(param.value, param.normalRange);
                                                         const colorClass = getRangeColorClass(rangeStatus);
 
@@ -1159,6 +1194,17 @@ const LabDashboard = () => {
                                                             </thead>
                                                             <tbody>
                                                                 {parsed.parameters.map((param, index) => {
+                                                                    // Section header row
+                                                                    if (param.type === 'section') {
+                                                                        return (
+                                                                            <tr key={index} className="bg-purple-100">
+                                                                                <td colSpan="5" className="p-3 font-bold text-purple-900 uppercase tracking-wide text-sm border">
+                                                                                    {param.name}
+                                                                                </td>
+                                                                            </tr>
+                                                                        );
+                                                                    }
+
                                                                     const rangeStatus = checkRange(param.value, param.normalRange);
                                                                     const colorClass = getRangeColorClass(rangeStatus);
 
@@ -1334,6 +1380,17 @@ const LabDashboard = () => {
                                             </thead>
                                             <tbody>
                                                 {editTableResults.map((param, index) => {
+                                                    // Section header row
+                                                    if (param.type === 'section') {
+                                                        return (
+                                                            <tr key={index} className="bg-purple-100 border-b border-purple-200">
+                                                                <td colSpan="5" className="p-3 font-bold text-purple-900 uppercase tracking-wide text-sm">
+                                                                    {param.name}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    }
+
                                                     const rangeStatus = checkRange(param.value, param.normalRange);
                                                     const colorClass = getRangeColorClass(rangeStatus);
 

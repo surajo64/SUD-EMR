@@ -29,6 +29,7 @@ import RadiologyDashboard from './pages/RadiologyDashboard';
 import RadiologyTestManagement from './pages/RadiologyTestManagement';
 import BillingDashboard from './pages/BillingDashboard';
 import FrontDeskDashboard from './pages/FrontDeskDashboard';
+import InvestigationResults from './pages/InvestigationResults';
 import CashierDashboard from './pages/CashierDashboard';
 
 // Admin Pages
@@ -88,6 +89,8 @@ function App() {
             <Route path="/front-desk/patients" element={<PatientManagement />} />
             <Route path="/front-desk/family-files" element={<FamilyFileManagement />} />
             <Route path="/front-desk/speciality-clinics" element={<SpecialityClinicManagement />} />
+            <Route path="/front-desk/investigation-results" element={<InvestigationResults />} />
+            <Route path="/investigation-results" element={<InvestigationResults />} />
             <Route path="/cashier" element={<CashierDashboard />} />
 
             {/* Admin Routes */}
