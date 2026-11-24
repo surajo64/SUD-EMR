@@ -1333,6 +1333,7 @@ const PatientManagement = () => {
                                     <option value="Emergency">Emergency</option>
                                     <option value="Follow-up">Follow-up</option>
                                     <option value="ANC Visit">🤰 ANC Visit</option>
+                                    <option value="Ophthalmology Visit">👁️ Ophthalmology Visit</option>
                                     <option value="External Lab/Radiology">External Lab/Radiology</option>
                                     <option value="External Pharmacy">External Pharmacy</option>
                                     <option value="Consultation">Consultation</option>

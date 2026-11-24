@@ -314,6 +314,98 @@ const PatientDetails = () => {
         assessment: true // Assessment & Plan expanded by default
     });
 
+    // Blank Eye Examination Fields (Nigerian Ophthalmic Clerking Standard)
+    const blankEyeExamFields = {
+        vaDistanceUnaidedOD: '',
+        vaDistanceUnaidedOS: '',
+        vaDistancePinholeOD: '',
+        vaDistancePinholeOS: '',
+        vaDistanceAidedOD: '',
+        vaDistanceAidedOS: '',
+        vaNearOD: '',
+        vaNearOS: '',
+        refractionOD: '',
+        refractionOS: '',
+        iopOD: '',
+        iopOS: '',
+        iopMethod: '',
+        iopTime: '',
+        dilatingDrops: '',
+        adnexaOD: '',
+        adnexaOS: '',
+        conjunctivaScleraOD: '',
+        conjunctivaScleraOS: '',
+        corneaOD: '',
+        corneaOS: '',
+        anteriorChamberOD: '',
+        anteriorChamberOS: '',
+        irisPupilOD: '',
+        irisPupilOS: '',
+        lensOD: '',
+        lensOS: '',
+        vitreousOD: '',
+        vitreousOS: '',
+        opticDiscOD: '',
+        opticDiscOS: '',
+        maculaOD: '',
+        maculaOS: '',
+        retinaVesselsOD: '',
+        retinaVesselsOS: '',
+        retinaBackgroundOD: '',
+        retinaBackgroundOS: '',
+        ocularMotility: '',
+        gonioscopySpecialOD: '',
+        gonioscopySpecialOS: '',
+        ocularHistoryNotes: '',
+        generalPhysicalExam: ''
+    };
+
+    // Nigerian Normal Eye Examination Findings Preset
+    const normalEyeExamPreset = {
+        vaDistanceUnaidedOD: '6/6',
+        vaDistanceUnaidedOS: '6/6',
+        vaDistancePinholeOD: '6/6',
+        vaDistancePinholeOS: '6/6',
+        vaDistanceAidedOD: '6/6',
+        vaDistanceAidedOS: '6/6',
+        vaNearOD: 'N5',
+        vaNearOS: 'N5',
+        refractionOD: 'Plano',
+        refractionOS: 'Plano',
+        iopOD: '14',
+        iopOS: '15',
+        iopMethod: 'Goldmann Applanation Tonometry (GAT)',
+        iopTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        dilatingDrops: 'Tropicamide 1% + Phenylephrine 2.5%',
+        adnexaOD: 'Normal eyelids, lashes, and orbital margins. No ptosis, no trichiasis, lacrimal puncta patent.',
+        adnexaOS: 'Normal eyelids, lashes, and orbital margins. No ptosis, no trichiasis, lacrimal puncta patent.',
+        conjunctivaScleraOD: 'Quiet, normal lustre, no hyperaemia/ciliary flush, no follicles, white sclera.',
+        conjunctivaScleraOS: 'Quiet, normal lustre, no hyperaemia/ciliary flush, no follicles, white sclera.',
+        corneaOD: 'Clear, smooth, bright, intact epithelium, normal corneal sensation.',
+        corneaOS: 'Clear, smooth, bright, intact epithelium, normal corneal sensation.',
+        anteriorChamberOD: 'Deep and quiet, Van Herick Grade IV, no cells, no flare, no hyphema/hypopyon.',
+        anteriorChamberOS: 'Deep and quiet, Van Herick Grade IV, no cells, no flare, no hyphema/hypopyon.',
+        irisPupilOD: 'Normal pattern & color. Pupil round, regular, reactive to light (PERRLA), no RAPD.',
+        irisPupilOS: 'Normal pattern & color. Pupil round, regular, reactive to light (PERRLA), no RAPD.',
+        lensOD: 'Clear, normal transparency, no cataractous opacities.',
+        lensOS: 'Clear, normal transparency, no cataractous opacities.',
+        vitreousOD: 'Clear, optically empty, no cells, no floaters or hemorrhage.',
+        vitreousOS: 'Clear, optically empty, no cells, no floaters or hemorrhage.',
+        opticDiscOD: 'Pink, well-defined margins, CDR 0.3, healthy neuroretinal rim (ISNT rule followed).',
+        opticDiscOS: 'Pink, well-defined margins, CDR 0.3, healthy neuroretinal rim (ISNT rule followed).',
+        maculaOD: 'Normal foveal light reflex, no macular edema, drusen, or scars.',
+        maculaOS: 'Normal foveal light reflex, no macular edema, drusen, or scars.',
+        retinaVesselsOD: 'Normal calibre and branching, A:V ratio 2:3, no AV nipping, no neovascularization.',
+        retinaVesselsOS: 'Normal calibre and branching, A:V ratio 2:3, no AV nipping, no neovascularization.',
+        retinaBackgroundOD: 'Attached, uniform pink reflex, no retinal hemorrhages, exudates, or tears.',
+        retinaBackgroundOS: 'Attached, uniform pink reflex, no retinal hemorrhages, exudates, or tears.',
+        ocularMotility: 'Full and free ocular movements in all 9 cardinal positions of gaze. Orthophoric at near and distance.',
+        gonioscopySpecialOD: 'Shaffer Grade IV (open angle, all structures visible to ciliary body band).',
+        gonioscopySpecialOS: 'Shaffer Grade IV (open angle, all structures visible to ciliary body band).',
+        ocularHistoryNotes: 'No previous ocular trauma or surgery. No traditional eye medication (TEM) use.',
+        generalPhysicalExam: 'Patient alert and ambulatory. No pallor, no jaundice, systemic vital signs stable.'
+    };
+
     // SOAP Note - Structured Clinical Documentation
     const [soapNote, setSoapNote] = useState({
         presentingComplaints: '',
@@ -338,6 +430,7 @@ const PatientDetails = () => {
         neuro: '',
         msk: '',
         skin: '',
+        ...blankEyeExamFields,
         assessment: '',
         plan: '',
         diagnosis: [] // Array of {code, description}
@@ -1042,6 +1135,7 @@ const PatientDetails = () => {
                 neuro: '',
                 msk: '',
                 skin: '',
+                ...blankEyeExamFields,
                 assessment: '',
                 plan: '',
                 diagnosis: []
@@ -1076,6 +1170,48 @@ const PatientDetails = () => {
                         neuro: noteSource.neuro || '',
                         msk: noteSource.msk || '',
                         skin: noteSource.skin || '',
+                        vaDistanceUnaidedOD: noteSource.vaDistanceUnaidedOD || '',
+                        vaDistanceUnaidedOS: noteSource.vaDistanceUnaidedOS || '',
+                        vaDistancePinholeOD: noteSource.vaDistancePinholeOD || '',
+                        vaDistancePinholeOS: noteSource.vaDistancePinholeOS || '',
+                        vaDistanceAidedOD: noteSource.vaDistanceAidedOD || '',
+                        vaDistanceAidedOS: noteSource.vaDistanceAidedOS || '',
+                        vaNearOD: noteSource.vaNearOD || '',
+                        vaNearOS: noteSource.vaNearOS || '',
+                        refractionOD: noteSource.refractionOD || '',
+                        refractionOS: noteSource.refractionOS || '',
+                        iopOD: noteSource.iopOD || '',
+                        iopOS: noteSource.iopOS || '',
+                        iopMethod: noteSource.iopMethod || '',
+                        iopTime: noteSource.iopTime || '',
+                        dilatingDrops: noteSource.dilatingDrops || '',
+                        adnexaOD: noteSource.adnexaOD || '',
+                        adnexaOS: noteSource.adnexaOS || '',
+                        conjunctivaScleraOD: noteSource.conjunctivaScleraOD || '',
+                        conjunctivaScleraOS: noteSource.conjunctivaScleraOS || '',
+                        corneaOD: noteSource.corneaOD || '',
+                        corneaOS: noteSource.corneaOS || '',
+                        anteriorChamberOD: noteSource.anteriorChamberOD || '',
+                        anteriorChamberOS: noteSource.anteriorChamberOS || '',
+                        irisPupilOD: noteSource.irisPupilOD || '',
+                        irisPupilOS: noteSource.irisPupilOS || '',
+                        lensOD: noteSource.lensOD || '',
+                        lensOS: noteSource.lensOS || '',
+                        vitreousOD: noteSource.vitreousOD || '',
+                        vitreousOS: noteSource.vitreousOS || '',
+                        opticDiscOD: noteSource.opticDiscOD || '',
+                        opticDiscOS: noteSource.opticDiscOS || '',
+                        maculaOD: noteSource.maculaOD || '',
+                        maculaOS: noteSource.maculaOS || '',
+                        retinaVesselsOD: noteSource.retinaVesselsOD || '',
+                        retinaVesselsOS: noteSource.retinaVesselsOS || '',
+                        retinaBackgroundOD: noteSource.retinaBackgroundOD || '',
+                        retinaBackgroundOS: noteSource.retinaBackgroundOS || '',
+                        ocularMotility: noteSource.ocularMotility || '',
+                        gonioscopySpecialOD: noteSource.gonioscopySpecialOD || '',
+                        gonioscopySpecialOS: noteSource.gonioscopySpecialOS || '',
+                        ocularHistoryNotes: noteSource.ocularHistoryNotes || '',
+                        generalPhysicalExam: noteSource.generalPhysicalExam || '',
                         assessment: noteSource.assessment || '',
                         plan: noteSource.plan || '',
                         diagnosis: noteSource.diagnosis || []
@@ -1887,8 +2023,9 @@ const PatientDetails = () => {
         }
 
         const isAncVisit = encounter.type === 'ANC Visit' || encounter.encounterType === 'ANC Visit';
+        const isEyeVisit = encounter.type === 'Ophthalmology Visit' || encounter.encounterType === 'Ophthalmology Visit';
 
-        // For ANC visits, use ancNote diagnosis; for standard, use soapNote diagnosis
+        // For ANC visits, use ancNote diagnosis; for standard / ophthalmology, use soapNote diagnosis
         const activeDiagnosis = isAncVisit ? ancNote.diagnosis : soapNote.diagnosis;
 
         if (!activeDiagnosis || activeDiagnosis.length === 0) {
@@ -1906,9 +2043,17 @@ const PatientDetails = () => {
                     diagnosis: ancNote.diagnosis,
                     ...(editingNoteId ? { noteId: editingNoteId } : {})
                 };
+            } else if (isEyeVisit) {
+                payload = {
+                    ...soapNote,
+                    noteType: 'ophthalmology',
+                    diagnosis: soapNote.diagnosis,
+                    ...(editingNoteId ? { noteId: editingNoteId } : {})
+                };
             } else {
                 payload = {
                     ...soapNote,
+                    noteType: 'standard',
                     diagnosis: soapNote.diagnosis,
                     ...(editingNoteId ? { noteId: editingNoteId } : {})
                 };
@@ -1918,7 +2063,7 @@ const PatientDetails = () => {
                 payload,
                 config
             );
-            toast.success(editingNoteId ? 'Clinical note updated!' : (isAncVisit ? 'ANC note saved!' : 'Clinical note added!'));
+            toast.success(editingNoteId ? (isEyeVisit ? 'Ophthalmology note updated!' : 'Clinical note updated!') : (isAncVisit ? 'ANC note saved!' : (isEyeVisit ? 'Ophthalmology note saved!' : 'Clinical note added!')));
             localStorage.removeItem(`draft_soap_${patient._id}_${encounter._id}`);
             setShowSoapModal(false);
             setEditingNoteId(null);
@@ -1950,6 +2095,7 @@ const PatientDetails = () => {
                 neuro: '',
                 msk: '',
                 skin: '',
+                ...blankEyeExamFields,
                 assessment: '',
                 plan: '',
                 diagnosis: []
@@ -3757,10 +3903,12 @@ const PatientDetails = () => {
                                                             <button
                                                                 onClick={() => { setEditingNoteId(null); setShowSoapModal(true); }}
                                                                 className={(encounter.type === 'ANC Visit' || encounter.encounterType === 'ANC Visit')
-                                                                    ? "px-4 py-2 rounded flex items-center gap-2 bg-pink-600 text-white hover:bg-pink-700 text-sm"
-                                                                    : "px-4 py-2 rounded flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 text-sm"}
+                                                                    ? "px-4 py-2 rounded flex items-center gap-2 bg-pink-600 text-white hover:bg-pink-700 text-sm font-semibold shadow-sm"
+                                                                    : (encounter.type === 'Ophthalmology Visit' || encounter.encounterType === 'Ophthalmology Visit')
+                                                                    ? "px-4 py-2 rounded flex items-center gap-2 bg-teal-600 text-white hover:bg-teal-700 text-sm font-semibold shadow-sm"
+                                                                    : "px-4 py-2 rounded flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 text-sm font-semibold shadow-sm"}
                                                             >
-                                                                <FaPlus /> {(encounter.type === 'ANC Visit' || encounter.encounterType === 'ANC Visit') ? '🤰 Add ANC Note' : 'Add Clinical Note'}
+                                                                <FaPlus /> {(encounter.type === 'ANC Visit' || encounter.encounterType === 'ANC Visit') ? '🤰 Add ANC Note' : (encounter.type === 'Ophthalmology Visit' || encounter.encounterType === 'Ophthalmology Visit') ? '👁️ Add Eye Clinical Note' : 'Add Clinical Note'}
                                                             </button>
                                                         </div>
                                                     )}
@@ -4001,44 +4149,219 @@ const PatientDetails = () => {
                                                                                     </div>
                                                                                 )}
 
-                                                                            {/* Physical Examination - Collapsible */}
-                                                                            {(note.generalAppearance || note.heent || note.neck || note.cvs || note.resp || note.abd || note.neuro || note.msk || note.skin) && (
-                                                                                <div className="border rounded-lg overflow-hidden">
-                                                                                    <button
-                                                                                        onClick={() => setExpandedSections(prev => ({ ...prev, [`physEx_${noteId}`]: !prev[`physEx_${noteId}`] }))}
-                                                                                        className="w-full bg-gradient-to-r from-teal-100 to-teal-50 hover:from-teal-200 hover:to-teal-100 p-3 flex justify-between items-center transition-colors"
-                                                                                    >
-                                                                                        <h4 className="text-base font-bold text-gray-800 flex items-center gap-2">
-                                                                                            <FaHeartbeat className="text-teal-600" /> Physical Examination
-                                                                                        </h4>
-                                                                                        {expandedSections[`physEx_${noteId}`] ? <FaChevronUp className="text-gray-600" /> : <FaChevronDown className="text-gray-600" />}
-                                                                                    </button>
-                                                                                    {expandedSections[`physEx_${noteId}`] && (
-                                                                                        <div className="p-4 space-y-3 bg-white">
-                                                                                            {note.generalAppearance && (
-                                                                                                <div className="bg-teal-50 p-3 rounded border-l-4 border-teal-500">
-                                                                                                    <p className="font-semibold text-gray-700 mb-1 text-sm">A. General Appearance</p>
-                                                                                                    <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.generalAppearance}</p>
-                                                                                                </div>
-                                                                                            )}
-                                                                                            {(note.heent || note.neck || note.cvs || note.resp || note.abd || note.neuro || note.msk || note.skin) && (
-                                                                                                <div className="bg-teal-50 p-3 rounded border-l-4 border-teal-400">
-                                                                                                    <p className="font-semibold text-gray-700 mb-2 text-sm">B. Systemic Examination</p>
-                                                                                                    <div className="grid grid-cols-2 gap-2 text-sm">
-                                                                                                        {note.heent && <div><span className="font-semibold text-gray-600">HEENT: </span><span className="text-gray-800">{note.heent}</span></div>}
-                                                                                                        {note.neck && <div><span className="font-semibold text-gray-600">Neck: </span><span className="text-gray-800">{note.neck}</span></div>}
-                                                                                                        {note.cvs && <div><span className="font-semibold text-gray-600">CVS: </span><span className="text-gray-800">{note.cvs}</span></div>}
-                                                                                                        {note.resp && <div><span className="font-semibold text-gray-600">Resp: </span><span className="text-gray-800">{note.resp}</span></div>}
-                                                                                                        {note.abd && <div><span className="font-semibold text-gray-600">Abd: </span><span className="text-gray-800">{note.abd}</span></div>}
-                                                                                                        {note.neuro && <div><span className="font-semibold text-gray-600">Neuro: </span><span className="text-gray-800">{note.neuro}</span></div>}
-                                                                                                        {note.msk && <div><span className="font-semibold text-gray-600">MSK: </span><span className="text-gray-800">{note.msk}</span></div>}
-                                                                                                        {note.skin && <div><span className="font-semibold text-gray-600">Skin: </span><span className="text-gray-800">{note.skin}</span></div>}
+                                                                            {/* Examination Section: Eye Examination for Ophthalmology notes/visits, or Physical Examination for Standard notes */}
+                                                                            {(note.noteType === 'ophthalmology' || (encounter && (encounter.type === 'Ophthalmology Visit' || encounter.encounterType === 'Ophthalmology Visit') && note.noteType !== 'anc') || Boolean(note.vaDistanceUnaidedOD || note.vaDistanceUnaidedOS || note.iopOD || note.iopOS || note.corneaOD || note.corneaOS || note.opticDiscOD || note.opticDiscOS || note.lensOD || note.lensOS)) ? (
+                                                                                /* Eye Examination - Collapsible */
+                                                                                (note.vaDistanceUnaidedOD || note.vaDistanceUnaidedOS || note.iopOD || note.iopOS || note.corneaOD || note.corneaOS || note.opticDiscOD || note.opticDiscOS || note.lensOD || note.lensOS || note.adnexaOD || note.adnexaOS || note.conjunctivaScleraOD || note.conjunctivaScleraOS || note.anteriorChamberOD || note.anteriorChamberOS || note.irisPupilOD || note.irisPupilOS || note.vitreousOD || note.vitreousOS || note.maculaOD || note.maculaOS || note.retinaVesselsOD || note.retinaVesselsOS || note.retinaBackgroundOD || note.retinaBackgroundOS || note.ocularMotility || note.gonioscopySpecialOD || note.gonioscopySpecialOS || note.ocularHistoryNotes || note.generalPhysicalExam || note.generalAppearance) && (
+                                                                                    <div className="border border-teal-200 rounded-lg overflow-hidden shadow-sm">
+                                                                                        <button
+                                                                                            onClick={() => setExpandedSections(prev => ({ ...prev, [`eyeEx_${noteId}`]: !prev[`eyeEx_${noteId}`] }))}
+                                                                                            className="w-full bg-gradient-to-r from-teal-700 to-emerald-700 hover:from-teal-800 hover:to-emerald-800 text-white p-3 flex justify-between items-center transition-colors"
+                                                                                        >
+                                                                                            <h4 className="text-base font-bold flex items-center gap-2">
+                                                                                                <FaEye className="text-teal-200" /> Eye Examination (Ophthalmic Assessment)
+                                                                                            </h4>
+                                                                                            {expandedSections[`eyeEx_${noteId}`] !== false ? <FaChevronUp className="text-white" /> : <FaChevronDown className="text-white" />}
+                                                                                        </button>
+                                                                                        {expandedSections[`eyeEx_${noteId}`] !== false && (
+                                                                                            <div className="p-4 space-y-4 bg-white">
+                                                                                                {/* 1. Visual Acuity & Refraction Table */}
+                                                                                                {(note.vaDistanceUnaidedOD || note.vaDistanceUnaidedOS || note.vaDistancePinholeOD || note.vaDistancePinholeOS || note.vaDistanceAidedOD || note.vaDistanceAidedOS || note.vaNearOD || note.vaNearOS || note.refractionOD || note.refractionOS) && (
+                                                                                                    <div className="bg-slate-50 border rounded-lg p-3">
+                                                                                                        <p className="font-bold text-teal-800 mb-2 text-sm flex items-center gap-1">
+                                                                                                            <FaEye /> 1. Visual Acuity & Refraction
+                                                                                                        </p>
+                                                                                                        <div className="overflow-x-auto">
+                                                                                                            <table className="w-full text-xs text-left border-collapse bg-white rounded border">
+                                                                                                                <thead>
+                                                                                                                    <tr className="bg-slate-100 border-b text-gray-700">
+                                                                                                                        <th className="p-2 font-semibold">Test Parameter</th>
+                                                                                                                        <th className="p-2 font-bold text-blue-700 bg-blue-50/50">Right Eye (OD)</th>
+                                                                                                                        <th className="p-2 font-bold text-emerald-700 bg-emerald-50/50">Left Eye (OS)</th>
+                                                                                                                    </tr>
+                                                                                                                </thead>
+                                                                                                                <tbody className="divide-y text-gray-800">
+                                                                                                                    {(note.vaDistanceUnaidedOD || note.vaDistanceUnaidedOS) && (
+                                                                                                                        <tr>
+                                                                                                                            <td className="p-2 font-medium text-gray-600">Distance VA (Unaided)</td>
+                                                                                                                            <td className="p-2 font-bold text-blue-900 bg-blue-50/20">{note.vaDistanceUnaidedOD || '—'}</td>
+                                                                                                                            <td className="p-2 font-bold text-emerald-900 bg-emerald-50/20">{note.vaDistanceUnaidedOS || '—'}</td>
+                                                                                                                        </tr>
+                                                                                                                    )}
+                                                                                                                    {(note.vaDistancePinholeOD || note.vaDistancePinholeOS) && (
+                                                                                                                        <tr>
+                                                                                                                            <td className="p-2 font-medium text-gray-600">Pinhole VA (PH)</td>
+                                                                                                                            <td className="p-2 bg-blue-50/20">{note.vaDistancePinholeOD || '—'}</td>
+                                                                                                                            <td className="p-2 bg-emerald-50/20">{note.vaDistancePinholeOS || '—'}</td>
+                                                                                                                        </tr>
+                                                                                                                    )}
+                                                                                                                    {(note.vaDistanceAidedOD || note.vaDistanceAidedOS) && (
+                                                                                                                        <tr>
+                                                                                                                            <td className="p-2 font-medium text-gray-600">Aided / BCVA</td>
+                                                                                                                            <td className="p-2 bg-blue-50/20">{note.vaDistanceAidedOD || '—'}</td>
+                                                                                                                            <td className="p-2 bg-emerald-50/20">{note.vaDistanceAidedOS || '—'}</td>
+                                                                                                                        </tr>
+                                                                                                                    )}
+                                                                                                                    {(note.vaNearOD || note.vaNearOS) && (
+                                                                                                                        <tr>
+                                                                                                                            <td className="p-2 font-medium text-gray-600">Near Vision</td>
+                                                                                                                            <td className="p-2 bg-blue-50/20">{note.vaNearOD || '—'}</td>
+                                                                                                                            <td className="p-2 bg-emerald-50/20">{note.vaNearOS || '—'}</td>
+                                                                                                                        </tr>
+                                                                                                                    )}
+                                                                                                                    {(note.refractionOD || note.refractionOS) && (
+                                                                                                                        <tr>
+                                                                                                                            <td className="p-2 font-medium text-gray-600">Refraction</td>
+                                                                                                                            <td className="p-2 font-mono text-xs bg-blue-50/20">{note.refractionOD || '—'}</td>
+                                                                                                                            <td className="p-2 font-mono text-xs bg-emerald-50/20">{note.refractionOS || '—'}</td>
+                                                                                                                        </tr>
+                                                                                                                    )}
+                                                                                                                </tbody>
+                                                                                                            </table>
+                                                                                                        </div>
                                                                                                     </div>
-                                                                                                </div>
-                                                                                            )}
-                                                                                        </div>
-                                                                                    )}
-                                                                                </div>
+                                                                                                )}
+
+                                                                                                {/* 2. Intraocular Pressure (IOP) */}
+                                                                                                {(note.iopOD || note.iopOS || note.iopMethod) && (
+                                                                                                    <div className="bg-teal-50/60 border border-teal-200 rounded-lg p-3">
+                                                                                                        <p className="font-bold text-teal-800 mb-2 text-sm flex items-center justify-between">
+                                                                                                            <span>🩺 2. Intraocular Pressure (Tonometry)</span>
+                                                                                                            {note.iopMethod && <span className="text-xs font-normal text-teal-700 bg-teal-100 px-2 py-0.5 rounded">{note.iopMethod} {note.iopTime ? `@ ${note.iopTime}` : ''}</span>}
+                                                                                                        </p>
+                                                                                                        <div className="grid grid-cols-2 gap-3 text-sm">
+                                                                                                            <div className="bg-white p-2.5 rounded border border-blue-200 text-center">
+                                                                                                                <span className="text-xs text-blue-600 font-bold block uppercase">Right Eye (OD)</span>
+                                                                                                                <span className="text-xl font-black text-gray-800">{note.iopOD ? `${note.iopOD} mmHg` : '—'}</span>
+                                                                                                            </div>
+                                                                                                            <div className="bg-white p-2.5 rounded border border-emerald-200 text-center">
+                                                                                                                <span className="text-xs text-emerald-600 font-bold block uppercase">Left Eye (OS)</span>
+                                                                                                                <span className="text-xl font-black text-gray-800">{note.iopOS ? `${note.iopOS} mmHg` : '—'}</span>
+                                                                                                            </div>
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                )}
+
+                                                                                                {/* 3. Anterior Segment Findings */}
+                                                                                                {(note.adnexaOD || note.adnexaOS || note.conjunctivaScleraOD || note.conjunctivaScleraOS || note.corneaOD || note.corneaOS || note.anteriorChamberOD || note.anteriorChamberOS || note.irisPupilOD || note.irisPupilOS || note.lensOD || note.lensOS) && (
+                                                                                                    <div className="border rounded-lg p-3 bg-white">
+                                                                                                        <p className="font-bold text-teal-800 mb-2 text-sm">🔬 3. Anterior Segment (Slit Lamp Biomicroscopy)</p>
+                                                                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                                                                            {/* OD */}
+                                                                                                            <div className="bg-blue-50/40 border border-blue-200 rounded p-3 space-y-2 text-xs">
+                                                                                                                <p className="font-bold text-blue-800 border-b pb-1 text-sm">Right Eye (OD)</p>
+                                                                                                                {note.adnexaOD && <div><span className="font-semibold text-gray-600">Adnexa/Lids: </span><span>{note.adnexaOD}</span></div>}
+                                                                                                                {note.conjunctivaScleraOD && <div><span className="font-semibold text-gray-600">Conjunctiva/Sclera: </span><span>{note.conjunctivaScleraOD}</span></div>}
+                                                                                                                {note.corneaOD && <div><span className="font-semibold text-gray-600">Cornea: </span><span>{note.corneaOD}</span></div>}
+                                                                                                                {note.anteriorChamberOD && <div><span className="font-semibold text-gray-600">Anterior Chamber: </span><span>{note.anteriorChamberOD}</span></div>}
+                                                                                                                {note.irisPupilOD && <div><span className="font-semibold text-gray-600">Iris & Pupil: </span><span>{note.irisPupilOD}</span></div>}
+                                                                                                                {note.lensOD && <div><span className="font-semibold text-gray-600">Lens: </span><span>{note.lensOD}</span></div>}
+                                                                                                            </div>
+                                                                                                            {/* OS */}
+                                                                                                            <div className="bg-emerald-50/40 border border-emerald-200 rounded p-3 space-y-2 text-xs">
+                                                                                                                <p className="font-bold text-emerald-800 border-b pb-1 text-sm">Left Eye (OS)</p>
+                                                                                                                {note.adnexaOS && <div><span className="font-semibold text-gray-600">Adnexa/Lids: </span><span>{note.adnexaOS}</span></div>}
+                                                                                                                {note.conjunctivaScleraOS && <div><span className="font-semibold text-gray-600">Conjunctiva/Sclera: </span><span>{note.conjunctivaScleraOS}</span></div>}
+                                                                                                                {note.corneaOS && <div><span className="font-semibold text-gray-600">Cornea: </span><span>{note.corneaOS}</span></div>}
+                                                                                                                {note.anteriorChamberOS && <div><span className="font-semibold text-gray-600">Anterior Chamber: </span><span>{note.anteriorChamberOS}</span></div>}
+                                                                                                                {note.irisPupilOS && <div><span className="font-semibold text-gray-600">Iris & Pupil: </span><span>{note.irisPupilOS}</span></div>}
+                                                                                                                {note.lensOS && <div><span className="font-semibold text-gray-600">Lens: </span><span>{note.lensOS}</span></div>}
+                                                                                                            </div>
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                )}
+
+                                                                                                {/* 4. Posterior Segment / Funduscopy */}
+                                                                                                {(note.dilatingDrops || note.opticDiscOD || note.opticDiscOS || note.maculaOD || note.maculaOS || note.retinaVesselsOD || note.retinaVesselsOS || note.retinaBackgroundOD || note.retinaBackgroundOS || note.vitreousOD || note.vitreousOS) && (
+                                                                                                    <div className="border rounded-lg p-3 bg-white">
+                                                                                                        <p className="font-bold text-teal-800 mb-2 text-sm flex items-center justify-between">
+                                                                                                            <span>👁️ 4. Posterior Segment / Fundus Examination</span>
+                                                                                                            {note.dilatingDrops && <span className="text-xs font-normal text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">Drops: {note.dilatingDrops}</span>}
+                                                                                                        </p>
+                                                                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                                                                            {/* OD */}
+                                                                                                            <div className="bg-blue-50/40 border border-blue-200 rounded p-3 space-y-2 text-xs">
+                                                                                                                <p className="font-bold text-blue-800 border-b pb-1 text-sm">Right Eye (OD)</p>
+                                                                                                                {note.opticDiscOD && <div><span className="font-semibold text-gray-600">Optic Disc / CDR: </span><span>{note.opticDiscOD}</span></div>}
+                                                                                                                {note.maculaOD && <div><span className="font-semibold text-gray-600">Macula & Fovea: </span><span>{note.maculaOD}</span></div>}
+                                                                                                                {note.retinaVesselsOD && <div><span className="font-semibold text-gray-600">Retinal Vessels: </span><span>{note.retinaVesselsOD}</span></div>}
+                                                                                                                {note.retinaBackgroundOD && <div><span className="font-semibold text-gray-600">Retinal Periphery: </span><span>{note.retinaBackgroundOD}</span></div>}
+                                                                                                                {note.vitreousOD && <div><span className="font-semibold text-gray-600">Vitreous: </span><span>{note.vitreousOD}</span></div>}
+                                                                                                            </div>
+                                                                                                            {/* OS */}
+                                                                                                            <div className="bg-emerald-50/40 border border-emerald-200 rounded p-3 space-y-2 text-xs">
+                                                                                                                <p className="font-bold text-emerald-800 border-b pb-1 text-sm">Left Eye (OS)</p>
+                                                                                                                {note.opticDiscOS && <div><span className="font-semibold text-gray-600">Optic Disc / CDR: </span><span>{note.opticDiscOS}</span></div>}
+                                                                                                                {note.maculaOS && <div><span className="font-semibold text-gray-600">Macula & Fovea: </span><span>{note.maculaOS}</span></div>}
+                                                                                                                {note.retinaVesselsOS && <div><span className="font-semibold text-gray-600">Retinal Vessels: </span><span>{note.retinaVesselsOS}</span></div>}
+                                                                                                                {note.retinaBackgroundOS && <div><span className="font-semibold text-gray-600">Retinal Periphery: </span><span>{note.retinaBackgroundOS}</span></div>}
+                                                                                                                {note.vitreousOS && <div><span className="font-semibold text-gray-600">Vitreous: </span><span>{note.vitreousOS}</span></div>}
+                                                                                                            </div>
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                )}
+
+                                                                                                {/* 5. Motility, Gonioscopy, Special & Systemic */}
+                                                                                                {(note.ocularMotility || note.gonioscopySpecialOD || note.gonioscopySpecialOS || note.ocularHistoryNotes || note.generalPhysicalExam || note.generalAppearance) && (
+                                                                                                    <div className="bg-slate-50 border rounded-lg p-3 space-y-2 text-xs">
+                                                                                                        <p className="font-bold text-teal-800 text-sm">⚙️ 5. Motility, Special Investigations & Systemic</p>
+                                                                                                        {note.ocularMotility && <div><span className="font-semibold text-gray-700">Ocular Motility & Alignment: </span><span className="text-gray-900">{note.ocularMotility}</span></div>}
+                                                                                                        {(note.gonioscopySpecialOD || note.gonioscopySpecialOS) && (
+                                                                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
+                                                                                                                {note.gonioscopySpecialOD && <div><span className="font-semibold text-blue-700">OD Gonioscopy/Special: </span><span className="text-gray-800">{note.gonioscopySpecialOD}</span></div>}
+                                                                                                                {note.gonioscopySpecialOS && <div><span className="font-semibold text-emerald-700">OS Gonioscopy/Special: </span><span className="text-gray-800">{note.gonioscopySpecialOS}</span></div>}
+                                                                                                            </div>
+                                                                                                        )}
+                                                                                                        {note.ocularHistoryNotes && <div className="pt-1"><span className="font-semibold text-amber-800">Past Ocular History / TEM: </span><span className="text-gray-800">{note.ocularHistoryNotes}</span></div>}
+                                                                                                        {(note.generalPhysicalExam || note.generalAppearance) && (
+                                                                                                            <div className="pt-1 border-t mt-1"><span className="font-semibold text-gray-700">General Appearance & Systemic Findings: </span><span className="text-gray-800">{note.generalPhysicalExam || note.generalAppearance}</span></div>
+                                                                                                        )}
+                                                                                                    </div>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                )
+                                                                            ) : (
+                                                                                /* Physical Examination - Collapsible for Standard Encounters */
+                                                                                (note.generalAppearance || note.heent || note.neck || note.cvs || note.resp || note.abd || note.neuro || note.msk || note.skin) && (
+                                                                                    <div className="border rounded-lg overflow-hidden">
+                                                                                        <button
+                                                                                            onClick={() => setExpandedSections(prev => ({ ...prev, [`physEx_${noteId}`]: !prev[`physEx_${noteId}`] }))}
+                                                                                            className="w-full bg-gradient-to-r from-teal-100 to-teal-50 hover:from-teal-200 hover:to-teal-100 p-3 flex justify-between items-center transition-colors"
+                                                                                        >
+                                                                                            <h4 className="text-base font-bold text-gray-800 flex items-center gap-2">
+                                                                                                <FaHeartbeat className="text-teal-600" /> Physical Examination
+                                                                                            </h4>
+                                                                                            {expandedSections[`physEx_${noteId}`] ? <FaChevronUp className="text-gray-600" /> : <FaChevronDown className="text-gray-600" />}
+                                                                                        </button>
+                                                                                        {expandedSections[`physEx_${noteId}`] && (
+                                                                                            <div className="p-4 space-y-3 bg-white">
+                                                                                                {note.generalAppearance && (
+                                                                                                    <div className="bg-teal-50 p-3 rounded border-l-4 border-teal-500">
+                                                                                                        <p className="font-semibold text-gray-700 mb-1 text-sm">A. General Appearance</p>
+                                                                                                        <p className="text-gray-800 whitespace-pre-wrap text-sm">{note.generalAppearance}</p>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                                {(note.heent || note.neck || note.cvs || note.resp || note.abd || note.neuro || note.msk || note.skin) && (
+                                                                                                    <div className="bg-teal-50 p-3 rounded border-l-4 border-teal-400">
+                                                                                                        <p className="font-semibold text-gray-700 mb-2 text-sm">B. Systemic Examination</p>
+                                                                                                        <div className="grid grid-cols-2 gap-2 text-sm">
+                                                                                                            {note.heent && <div><span className="font-semibold text-gray-600">HEENT: </span><span className="text-gray-800">{note.heent}</span></div>}
+                                                                                                            {note.neck && <div><span className="font-semibold text-gray-600">Neck: </span><span className="text-gray-800">{note.neck}</span></div>}
+                                                                                                            {note.cvs && <div><span className="font-semibold text-gray-600">CVS: </span><span className="text-gray-800">{note.cvs}</span></div>}
+                                                                                                            {note.resp && <div><span className="font-semibold text-gray-600">Resp: </span><span className="text-gray-800">{note.resp}</span></div>}
+                                                                                                            {note.abd && <div><span className="font-semibold text-gray-600">Abd: </span><span className="text-gray-800">{note.abd}</span></div>}
+                                                                                                            {note.neuro && <div><span className="font-semibold text-gray-600">Neuro: </span><span className="text-gray-800">{note.neuro}</span></div>}
+                                                                                                            {note.msk && <div><span className="font-semibold text-gray-600">MSK: </span><span className="text-gray-800">{note.msk}</span></div>}
+                                                                                                            {note.skin && <div><span className="font-semibold text-gray-600">Skin: </span><span className="text-gray-800">{note.skin}</span></div>}
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                )
                                                                             )}
 
                                                                             {/* Assessment & Plan - Collapsible */}
@@ -6309,17 +6632,20 @@ const PatientDetails = () => {
                 </div>
             )}
 
-            {/* SOAP / ANC Note Modal */}
+            {/* SOAP / ANC / Ophthalmology Note Modal */}
             {
                 showSoapModal && (() => {
                     const isAncVisit = encounter && (encounter.type === 'ANC Visit' || encounter.encounterType === 'ANC Visit');
+                    const isEyeVisit = encounter && (encounter.type === 'Ophthalmology Visit' || encounter.encounterType === 'Ophthalmology Visit');
                     return (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                        <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <div className={`bg-white rounded-lg p-6 w-full ${isEyeVisit ? 'max-w-5xl' : 'max-w-2xl'} max-h-[90vh] overflow-y-auto`}>
                             <div className="flex justify-between items-center mb-4">
                                 <h3 className="text-xl font-bold flex items-center gap-2">
                                     {isAncVisit ? (
                                         <><span>🤰</span>{editingNoteId ? 'Edit ANC Note' : 'Add ANC Note'}</>
+                                    ) : isEyeVisit ? (
+                                        <><span>👁️</span>{editingNoteId ? 'Edit Ophthalmology Clinical Note' : 'Add Ophthalmology Clinical Note'}</>
                                     ) : (
                                         editingNoteId ? 'Edit Clinical Note' : 'Add Clinical Note'
                                     )}
@@ -6787,60 +7113,515 @@ const PatientDetails = () => {
                                     </div>
                                 </div>
 
-                                {/* Physical Examination Section in Modal */}
-                                <div className="border-t pt-4 mt-4">
-                                    <h4 className="font-bold text-lg mb-3 text-teal-700">Physical Examination</h4>
+                                {isEyeVisit ? (
+                                    <div className="border-t-2 border-teal-500 pt-4 mt-4 space-y-4">
+                                        {/* Eye Exam Header & Quick Tools */}
+                                        <div className="bg-gradient-to-r from-teal-700 to-emerald-700 text-white p-3 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-3 shadow">
+                                            <div>
+                                                <h4 className="font-bold text-base flex items-center gap-2">
+                                                    <FaEye className="text-teal-200 text-lg" /> Eye Examination (Nigerian Standard Ophthalmic Assessment)
+                                                </h4>
+                                                <p className="text-xs text-teal-100">OSN & WACS Clinical Clerking Standard — Right Eye (OD) & Left Eye (OS)</p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSoapNote(prev => ({ ...prev, ...normalEyeExamPreset }))}
+                                                    className="bg-white/20 hover:bg-white/30 text-white text-xs font-semibold px-2.5 py-1.5 rounded transition shadow-sm border border-white/30 flex items-center gap-1"
+                                                    title="Pre-fills standard bilateral normal eye examination findings"
+                                                >
+                                                    ⚡ Pre-fill Normal Exam
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSoapNote(prev => ({ ...prev, ...blankEyeExamFields }))}
+                                                    className="bg-red-500/30 hover:bg-red-500/40 text-white text-xs font-semibold px-2.5 py-1.5 rounded transition shadow-sm border border-red-300/40"
+                                                    title="Clear eye examination fields"
+                                                >
+                                                    🧹 Clear Exam
+                                                </button>
+                                            </div>
+                                        </div>
 
-                                    <div className="mb-3">
-                                        <p className="font-semibold text-gray-700 mb-2">A. General Appearance</p>
-                                        <label className="block text-gray-600 text-sm mb-1">General:</label>
-                                        <textarea
-                                            className="w-full border p-3 rounded"
-                                            rows="2"
-                                            value={soapNote.generalAppearance}
-                                            onChange={(e) => setSoapNote({ ...soapNote, generalAppearance: e.target.value })}
-                                            placeholder="General appearance of patient..."
-                                        ></textarea>
-                                    </div>
+                                        {/* Datalists for standard dropdown suggestions */}
+                                        <datalist id="eye-va-options">
+                                            <option value="6/4" />
+                                            <option value="6/5" />
+                                            <option value="6/6" />
+                                            <option value="6/9" />
+                                            <option value="6/12" />
+                                            <option value="6/18" />
+                                            <option value="6/24" />
+                                            <option value="6/36" />
+                                            <option value="6/60" />
+                                            <option value="CF @ 3m" />
+                                            <option value="CF @ 1m" />
+                                            <option value="CF @ 0.5m" />
+                                            <option value="HM" />
+                                            <option value="PL" />
+                                            <option value="NPL" />
+                                        </datalist>
+                                        <datalist id="eye-ph-options">
+                                            <option value="NI" />
+                                            <option value="6/6" />
+                                            <option value="6/9" />
+                                            <option value="6/12" />
+                                            <option value="6/18" />
+                                            <option value="6/24" />
+                                            <option value="6/36" />
+                                            <option value="6/60" />
+                                        </datalist>
+                                        <datalist id="eye-near-options">
+                                            <option value="N5" />
+                                            <option value="N6" />
+                                            <option value="N8" />
+                                            <option value="N10" />
+                                            <option value="N12" />
+                                            <option value="N14" />
+                                            <option value="N18" />
+                                            <option value="<N18" />
+                                        </datalist>
 
-                                    <div>
-                                        <p className="font-semibold text-gray-700 mb-2">B. Systemic Examination</p>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            <div>
-                                                <label className="block text-gray-600 text-sm mb-1">HEENT:</label>
-                                                <textarea className="w-full border p-2 rounded text-sm" rows="2" placeholder="No pallor, no jaundice. Pupils PERRLA." value={soapNote.heent} onChange={(e) => setSoapNote({ ...soapNote, heent: e.target.value })} />
+                                        {/* 1. Visual Acuity & Refraction */}
+                                        <div className="border rounded-lg p-3.5 bg-slate-50/70 border-slate-200">
+                                            <h5 className="font-bold text-sm text-teal-800 mb-2 flex items-center gap-1.5">
+                                                <FaEye className="text-teal-600" /> 1. Visual Acuity (VA) & Refraction
+                                            </h5>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {/* OD */}
+                                                <div className="bg-blue-50/50 border border-blue-200 rounded-lg p-3 space-y-2.5">
+                                                    <div className="flex items-center justify-between border-b border-blue-200 pb-1">
+                                                        <span className="font-bold text-xs uppercase tracking-wider text-blue-900">Right Eye (OD / RE)</span>
+                                                        <span className="text-[10px] bg-blue-200/60 text-blue-800 px-1.5 py-0.5 rounded font-semibold">Oculus Dexter</span>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                                        <div>
+                                                            <label className="block text-gray-700 font-semibold mb-1">Distance VA (Unaided):</label>
+                                                            <input
+                                                                list="eye-va-options"
+                                                                className="w-full border rounded px-2 py-1 bg-white focus:ring-1 focus:ring-blue-400"
+                                                                placeholder="e.g. 6/6, 6/18, CF"
+                                                                value={soapNote.vaDistanceUnaidedOD}
+                                                                onChange={(e) => setSoapNote({ ...soapNote, vaDistanceUnaidedOD: e.target.value })}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-gray-700 font-semibold mb-1">Pinhole VA (PH):</label>
+                                                            <input
+                                                                list="eye-ph-options"
+                                                                className="w-full border rounded px-2 py-1 bg-white focus:ring-1 focus:ring-blue-400"
+                                                                placeholder="e.g. 6/6, NI"
+                                                                value={soapNote.vaDistancePinholeOD}
+                                                                onChange={(e) => setSoapNote({ ...soapNote, vaDistancePinholeOD: e.target.value })}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-gray-700 font-semibold mb-1">Aided / BCVA:</label>
+                                                            <input
+                                                                className="w-full border rounded px-2 py-1 bg-white focus:ring-1 focus:ring-blue-400"
+                                                                placeholder="e.g. 6/6 with gls"
+                                                                value={soapNote.vaDistanceAidedOD}
+                                                                onChange={(e) => setSoapNote({ ...soapNote, vaDistanceAidedOD: e.target.value })}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-gray-700 font-semibold mb-1">Near Vision:</label>
+                                                            <input
+                                                                list="eye-near-options"
+                                                                className="w-full border rounded px-2 py-1 bg-white focus:ring-1 focus:ring-blue-400"
+                                                                placeholder="e.g. N5, N8"
+                                                                value={soapNote.vaNearOD}
+                                                                onChange={(e) => setSoapNote({ ...soapNote, vaNearOD: e.target.value })}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-1 text-xs">Refraction (OD):</label>
+                                                        <input
+                                                            className="w-full border rounded px-2 py-1 bg-white text-xs focus:ring-1 focus:ring-blue-400"
+                                                            placeholder="e.g. -1.50DS / -0.50DC x 90 -> 6/6"
+                                                            value={soapNote.refractionOD}
+                                                            onChange={(e) => setSoapNote({ ...soapNote, refractionOD: e.target.value })}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                {/* OS */}
+                                                <div className="bg-emerald-50/50 border border-emerald-200 rounded-lg p-3 space-y-2.5">
+                                                    <div className="flex items-center justify-between border-b border-emerald-200 pb-1">
+                                                        <span className="font-bold text-xs uppercase tracking-wider text-emerald-900">Left Eye (OS / LE)</span>
+                                                        <span className="text-[10px] bg-emerald-200/60 text-emerald-800 px-1.5 py-0.5 rounded font-semibold">Oculus Sinister</span>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                                        <div>
+                                                            <label className="block text-gray-700 font-semibold mb-1">Distance VA (Unaided):</label>
+                                                            <input
+                                                                list="eye-va-options"
+                                                                className="w-full border rounded px-2 py-1 bg-white focus:ring-1 focus:ring-emerald-400"
+                                                                placeholder="e.g. 6/6, 6/18, CF"
+                                                                value={soapNote.vaDistanceUnaidedOS}
+                                                                onChange={(e) => setSoapNote({ ...soapNote, vaDistanceUnaidedOS: e.target.value })}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-gray-700 font-semibold mb-1">Pinhole VA (PH):</label>
+                                                            <input
+                                                                list="eye-ph-options"
+                                                                className="w-full border rounded px-2 py-1 bg-white focus:ring-1 focus:ring-emerald-400"
+                                                                placeholder="e.g. 6/6, NI"
+                                                                value={soapNote.vaDistancePinholeOS}
+                                                                onChange={(e) => setSoapNote({ ...soapNote, vaDistancePinholeOS: e.target.value })}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-gray-700 font-semibold mb-1">Aided / BCVA:</label>
+                                                            <input
+                                                                className="w-full border rounded px-2 py-1 bg-white focus:ring-1 focus:ring-emerald-400"
+                                                                placeholder="e.g. 6/6 with gls"
+                                                                value={soapNote.vaDistanceAidedOS}
+                                                                onChange={(e) => setSoapNote({ ...soapNote, vaDistanceAidedOS: e.target.value })}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-gray-700 font-semibold mb-1">Near Vision:</label>
+                                                            <input
+                                                                list="eye-near-options"
+                                                                className="w-full border rounded px-2 py-1 bg-white focus:ring-1 focus:ring-emerald-400"
+                                                                placeholder="e.g. N5, N8"
+                                                                value={soapNote.vaNearOS}
+                                                                onChange={(e) => setSoapNote({ ...soapNote, vaNearOS: e.target.value })}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-1 text-xs">Refraction (OS):</label>
+                                                        <input
+                                                            className="w-full border rounded px-2 py-1 bg-white text-xs focus:ring-1 focus:ring-emerald-400"
+                                                            placeholder="e.g. Plano / -0.25DC x 180 -> 6/6"
+                                                            value={soapNote.refractionOS}
+                                                            onChange={(e) => setSoapNote({ ...soapNote, refractionOS: e.target.value })}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* 2. Tonometry / Intraocular Pressure (IOP) */}
+                                        <div className="border rounded-lg p-3.5 bg-slate-50/70 border-slate-200">
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                                                <h5 className="font-bold text-sm text-teal-800 flex items-center gap-1.5">
+                                                    <span>⏱️ 2. Tonometry / Intraocular Pressure (IOP)</span>
+                                                </h5>
+                                                <div className="flex items-center gap-2 text-xs">
+                                                    <label className="font-semibold text-gray-600">Method:</label>
+                                                    <select
+                                                        className="border rounded px-2 py-1 text-xs bg-white"
+                                                        value={soapNote.iopMethod}
+                                                        onChange={(e) => setSoapNote({ ...soapNote, iopMethod: e.target.value })}
+                                                    >
+                                                        <option value="">Select Method</option>
+                                                        <option value="Goldmann Applanation Tonometry (GAT)">Goldmann Applanation (GAT)</option>
+                                                        <option value="Non-contact Tonometry (NCT / Air-puff)">Non-contact (NCT / Air-puff)</option>
+                                                        <option value="Perkins Tonometer">Perkins Tonometer</option>
+                                                        <option value="Icare Rebound Tonometer">Icare Rebound</option>
+                                                        <option value="Schiøtz Indentation Tonometer">Schiøtz Tonometer</option>
+                                                        <option value="Digital Palpation (tactile)">Digital Palpation</option>
+                                                    </select>
+                                                    <label className="font-semibold text-gray-600 ml-2">Time:</label>
+                                                    <input
+                                                        type="text"
+                                                        className="border rounded px-1.5 py-1 text-xs w-20 bg-white"
+                                                        placeholder="e.g. 10:30 AM"
+                                                        value={soapNote.iopTime}
+                                                        onChange={(e) => setSoapNote({ ...soapNote, iopTime: e.target.value })}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                                                <div className="flex items-center gap-3 bg-blue-50/50 border border-blue-200 rounded p-2.5">
+                                                    <span className="font-bold text-blue-900 w-28">IOP Right (OD):</span>
+                                                    <div className="flex items-center gap-1.5 flex-1">
+                                                        <input
+                                                            type="text"
+                                                            className="border rounded px-2 py-1 text-sm font-semibold w-24 bg-white focus:ring-1 focus:ring-blue-400"
+                                                            placeholder="e.g. 14"
+                                                            value={soapNote.iopOD}
+                                                            onChange={(e) => setSoapNote({ ...soapNote, iopOD: e.target.value })}
+                                                        />
+                                                        <span className="text-gray-600 font-medium">mmHg</span>
+                                                        <span className="text-[11px] text-gray-400 ml-2">(Normal: 10 - 21 mmHg)</span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3 bg-emerald-50/50 border border-emerald-200 rounded p-2.5">
+                                                    <span className="font-bold text-emerald-900 w-28">IOP Left (OS):</span>
+                                                    <div className="flex items-center gap-1.5 flex-1">
+                                                        <input
+                                                            type="text"
+                                                            className="border rounded px-2 py-1 text-sm font-semibold w-24 bg-white focus:ring-1 focus:ring-emerald-400"
+                                                            placeholder="e.g. 15"
+                                                            value={soapNote.iopOS}
+                                                            onChange={(e) => setSoapNote({ ...soapNote, iopOS: e.target.value })}
+                                                        />
+                                                        <span className="text-gray-600 font-medium">mmHg</span>
+                                                        <span className="text-[11px] text-gray-400 ml-2">(Normal: 10 - 21 mmHg)</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* 3. Anterior Segment Examination */}
+                                        <div className="border rounded-lg p-3.5 bg-white space-y-3">
+                                            <h5 className="font-bold text-sm text-teal-800 flex items-center gap-1.5 border-b pb-1.5">
+                                                <span>🔍 3. Anterior Segment Examination (Slit Lamp Biomicroscopy)</span>
+                                            </h5>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {/* OD Anterior */}
+                                                <div className="bg-blue-50/30 border border-blue-200 rounded-lg p-3 space-y-2.5 text-xs">
+                                                    <p className="font-bold text-blue-900 border-b border-blue-200 pb-1 text-xs uppercase">Right Eye (OD / RE)</p>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Adnexa & Lids:</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="2" placeholder="Eyelids, lashes, trichiasis, ptosis, lid lag, lacrimal apparatus..." value={soapNote.adnexaOD} onChange={(e) => setSoapNote({ ...soapNote, adnexaOD: e.target.value })} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Conjunctiva & Sclera:</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="2" placeholder="Bulbar, palpebral, injection, follicles, papillae, pterygium, pinguecula..." value={soapNote.conjunctivaScleraOD} onChange={(e) => setSoapNote({ ...soapNote, conjunctivaScleraOD: e.target.value })} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Cornea:</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="2" placeholder="Clarity, ulcer, epithelial defect, KP, sensation, arcus..." value={soapNote.corneaOD} onChange={(e) => setSoapNote({ ...soapNote, corneaOD: e.target.value })} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Anterior Chamber:</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="2" placeholder="Depth (Van Herick), cells, flare, hyphema, hypopyon..." value={soapNote.anteriorChamberOD} onChange={(e) => setSoapNote({ ...soapNote, anteriorChamberOD: e.target.value })} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Iris & Pupil:</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="2" placeholder="Pattern, synechiae; Pupil size, shape, direct/consensual reflex, RAPD..." value={soapNote.irisPupilOD} onChange={(e) => setSoapNote({ ...soapNote, irisPupilOD: e.target.value })} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Lens:</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="2" placeholder="Clear, nuclear sclerosis, cortical, PSC, mature cataract, pseudophakic IOL..." value={soapNote.lensOD} onChange={(e) => setSoapNote({ ...soapNote, lensOD: e.target.value })} />
+                                                    </div>
+                                                </div>
+
+                                                {/* OS Anterior */}
+                                                <div className="bg-emerald-50/30 border border-emerald-200 rounded-lg p-3 space-y-2.5 text-xs">
+                                                    <p className="font-bold text-emerald-900 border-b border-emerald-200 pb-1 text-xs uppercase">Left Eye (OS / LE)</p>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Adnexa & Lids:</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="2" placeholder="Eyelids, lashes, trichiasis, ptosis, lid lag, lacrimal apparatus..." value={soapNote.adnexaOS} onChange={(e) => setSoapNote({ ...soapNote, adnexaOS: e.target.value })} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Conjunctiva & Sclera:</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="2" placeholder="Bulbar, palpebral, injection, follicles, papillae, pterygium, pinguecula..." value={soapNote.conjunctivaScleraOS} onChange={(e) => setSoapNote({ ...soapNote, conjunctivaScleraOS: e.target.value })} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Cornea:</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="2" placeholder="Clarity, ulcer, epithelial defect, KP, sensation, arcus..." value={soapNote.corneaOS} onChange={(e) => setSoapNote({ ...soapNote, corneaOS: e.target.value })} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Anterior Chamber:</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="2" placeholder="Depth (Van Herick), cells, flare, hyphema, hypopyon..." value={soapNote.anteriorChamberOS} onChange={(e) => setSoapNote({ ...soapNote, anteriorChamberOS: e.target.value })} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Iris & Pupil:</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="2" placeholder="Pattern, synechiae; Pupil size, shape, direct/consensual reflex, RAPD..." value={soapNote.irisPupilOS} onChange={(e) => setSoapNote({ ...soapNote, irisPupilOS: e.target.value })} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Lens:</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="2" placeholder="Clear, nuclear sclerosis, cortical, PSC, mature cataract, pseudophakic IOL..." value={soapNote.lensOS} onChange={(e) => setSoapNote({ ...soapNote, lensOS: e.target.value })} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* 4. Posterior Segment / Fundus Examination */}
+                                        <div className="border rounded-lg p-3.5 bg-white space-y-3">
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-2">
+                                                <h5 className="font-bold text-sm text-teal-800 flex items-center gap-1.5">
+                                                    <span>👁️ 4. Posterior Segment / Funduscopy</span>
+                                                </h5>
+                                                <div className="flex items-center gap-2 text-xs">
+                                                    <label className="font-semibold text-gray-700">Dilating Drops:</label>
+                                                    <input
+                                                        type="text"
+                                                        className="border rounded px-2 py-1 text-xs w-60 bg-amber-50/60 border-amber-300"
+                                                        placeholder="e.g. Tropicamide 1% + Phenylephrine 2.5%"
+                                                        value={soapNote.dilatingDrops}
+                                                        onChange={(e) => setSoapNote({ ...soapNote, dilatingDrops: e.target.value })}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {/* OD Posterior */}
+                                                <div className="bg-blue-50/30 border border-blue-200 rounded-lg p-3 space-y-2.5 text-xs">
+                                                    <p className="font-bold text-blue-900 border-b border-blue-200 pb-1 text-xs uppercase">Right Eye (OD / RE)</p>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Optic Disc & Cup-to-Disc Ratio (CDR):</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="2" placeholder="CDR (e.g. 0.3), margins sharp/blurred, rim pallor, notch, ISNT rule..." value={soapNote.opticDiscOD} onChange={(e) => setSoapNote({ ...soapNote, opticDiscOD: e.target.value })} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Macula & Fovea:</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="2" placeholder="Foveal reflex present/dull, macular edema, drusen, scars..." value={soapNote.maculaOD} onChange={(e) => setSoapNote({ ...soapNote, maculaOD: e.target.value })} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Retinal Blood Vessels:</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="2" placeholder="A:V ratio 2:3, caliber, attenuation, AV nipping, neovascularization..." value={soapNote.retinaVesselsOD} onChange={(e) => setSoapNote({ ...soapNote, retinaVesselsOD: e.target.value })} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Peripheral Retina / Background:</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="2" placeholder="Hemorrhages, microaneurysms, hard exudates, cotton wool spots, tears..." value={soapNote.retinaBackgroundOD} onChange={(e) => setSoapNote({ ...soapNote, retinaBackgroundOD: e.target.value })} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Vitreous:</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="1" placeholder="Clear, floaters, vitreous hemorrhage, PVD..." value={soapNote.vitreousOD} onChange={(e) => setSoapNote({ ...soapNote, vitreousOD: e.target.value })} />
+                                                    </div>
+                                                </div>
+
+                                                {/* OS Posterior */}
+                                                <div className="bg-emerald-50/30 border border-emerald-200 rounded-lg p-3 space-y-2.5 text-xs">
+                                                    <p className="font-bold text-emerald-900 border-b border-emerald-200 pb-1 text-xs uppercase">Left Eye (OS / LE)</p>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Optic Disc & Cup-to-Disc Ratio (CDR):</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="2" placeholder="CDR (e.g. 0.3), margins sharp/blurred, rim pallor, notch, ISNT rule..." value={soapNote.opticDiscOS} onChange={(e) => setSoapNote({ ...soapNote, opticDiscOS: e.target.value })} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Macula & Fovea:</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="2" placeholder="Foveal reflex present/dull, macular edema, drusen, scars..." value={soapNote.maculaOS} onChange={(e) => setSoapNote({ ...soapNote, maculaOS: e.target.value })} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Retinal Blood Vessels:</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="2" placeholder="A:V ratio 2:3, caliber, attenuation, AV nipping, neovascularization..." value={soapNote.retinaVesselsOS} onChange={(e) => setSoapNote({ ...soapNote, retinaVesselsOS: e.target.value })} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Peripheral Retina / Background:</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="2" placeholder="Hemorrhages, microaneurysms, hard exudates, cotton wool spots, tears..." value={soapNote.retinaBackgroundOS} onChange={(e) => setSoapNote({ ...soapNote, retinaBackgroundOS: e.target.value })} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-gray-700 font-semibold mb-0.5">Vitreous:</label>
+                                                        <textarea className="w-full border p-1.5 rounded bg-white" rows="1" placeholder="Clear, floaters, vitreous hemorrhage, PVD..." value={soapNote.vitreousOS} onChange={(e) => setSoapNote({ ...soapNote, vitreousOS: e.target.value })} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* 5. Motility, Alignment, Special Tests & Systemic */}
+                                        <div className="border rounded-lg p-3.5 bg-slate-50/70 space-y-3 text-xs">
+                                            <h5 className="font-bold text-sm text-teal-800 flex items-center gap-1.5">
+                                                <span>⚙️ 5. Motility, Special Investigations & Systemic Status</span>
+                                            </h5>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-gray-700 font-semibold mb-1">Ocular Motility & Alignment (9 Gazes):</label>
+                                                    <textarea
+                                                        className="w-full border p-2 rounded bg-white"
+                                                        rows="2"
+                                                        placeholder="Full & free in all 9 cardinal positions of gaze, orthophoric / strabismus / nystagmus..."
+                                                        value={soapNote.ocularMotility}
+                                                        onChange={(e) => setSoapNote({ ...soapNote, ocularMotility: e.target.value })}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-gray-700 font-semibold mb-1">Past Ocular History / Traditional Eye Medicine (TEM):</label>
+                                                    <textarea
+                                                        className="w-full border p-2 rounded bg-white"
+                                                        rows="2"
+                                                        placeholder="Ocular trauma, surgeries, glasses, traditional eye medications used (breast milk, herbal drops, kerosene, battery water)..."
+                                                        value={soapNote.ocularHistoryNotes}
+                                                        onChange={(e) => setSoapNote({ ...soapNote, ocularHistoryNotes: e.target.value })}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-blue-900 font-semibold mb-1">Gonioscopy & Special Tests (OD):</label>
+                                                    <textarea
+                                                        className="w-full border p-2 rounded bg-white"
+                                                        rows="2"
+                                                        placeholder="OD Shaffer angle grade (I-IV), visual field confrontation, pachymetry..."
+                                                        value={soapNote.gonioscopySpecialOD}
+                                                        onChange={(e) => setSoapNote({ ...soapNote, gonioscopySpecialOD: e.target.value })}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-emerald-900 font-semibold mb-1">Gonioscopy & Special Tests (OS):</label>
+                                                    <textarea
+                                                        className="w-full border p-2 rounded bg-white"
+                                                        rows="2"
+                                                        placeholder="OS Shaffer angle grade (I-IV), visual field confrontation, pachymetry..."
+                                                        value={soapNote.gonioscopySpecialOS}
+                                                        onChange={(e) => setSoapNote({ ...soapNote, gonioscopySpecialOS: e.target.value })}
+                                                    />
+                                                </div>
                                             </div>
                                             <div>
-                                                <label className="block text-gray-600 text-sm mb-1">Neck:</label>
-                                                <textarea className="w-full border p-2 rounded text-sm" rows="2" placeholder="No lymphadenopathy, no JVD." value={soapNote.neck} onChange={(e) => setSoapNote({ ...soapNote, neck: e.target.value })} />
-                                            </div>
-                                            <div>
-                                                <label className="block text-gray-600 text-sm mb-1">CVS:</label>
-                                                <textarea className="w-full border p-2 rounded text-sm" rows="2" placeholder="S1, S2 normal, no murmurs." value={soapNote.cvs} onChange={(e) => setSoapNote({ ...soapNote, cvs: e.target.value })} />
-                                            </div>
-                                            <div>
-                                                <label className="block text-gray-600 text-sm mb-1">Resp:</label>
-                                                <textarea className="w-full border p-2 rounded text-sm" rows="2" placeholder="Clear breath sounds bilaterally." value={soapNote.resp} onChange={(e) => setSoapNote({ ...soapNote, resp: e.target.value })} />
-                                            </div>
-                                            <div>
-                                                <label className="block text-gray-600 text-sm mb-1">Abd:</label>
-                                                <textarea className="w-full border p-2 rounded text-sm" rows="2" placeholder="Soft, non-tender, no organomegaly." value={soapNote.abd} onChange={(e) => setSoapNote({ ...soapNote, abd: e.target.value })} />
-                                            </div>
-                                            <div>
-                                                <label className="block text-gray-600 text-sm mb-1">Neuro:</label>
-                                                <textarea className="w-full border p-2 rounded text-sm" rows="2" placeholder="Grossly intact." value={soapNote.neuro} onChange={(e) => setSoapNote({ ...soapNote, neuro: e.target.value })} />
-                                            </div>
-                                            <div>
-                                                <label className="block text-gray-600 text-sm mb-1">MSK:</label>
-                                                <textarea className="w-full border p-2 rounded text-sm" rows="2" placeholder="Full ROM, no deformities." value={soapNote.msk} onChange={(e) => setSoapNote({ ...soapNote, msk: e.target.value })} />
-                                            </div>
-                                            <div>
-                                                <label className="block text-gray-600 text-sm mb-1">Skin:</label>
-                                                <textarea className="w-full border p-2 rounded text-sm" rows="2" placeholder="Intact, no rashes." value={soapNote.skin} onChange={(e) => setSoapNote({ ...soapNote, skin: e.target.value })} />
+                                                <label className="block text-gray-700 font-semibold mb-1">General Appearance & Systemic Findings (BP, DM/Sickle cell status):</label>
+                                                <textarea
+                                                    className="w-full border p-2 rounded bg-white"
+                                                    rows="2"
+                                                    placeholder="Patient general condition, blood pressure, pulse, systemic comorbidities (hypertension, diabetes mellitus, sickle cell disease)..."
+                                                    value={soapNote.generalPhysicalExam || soapNote.generalAppearance}
+                                                    onChange={(e) => setSoapNote({ ...soapNote, generalPhysicalExam: e.target.value, generalAppearance: e.target.value })}
+                                                />
                                             </div>
                                         </div>
                                     </div>
-                                </div>
+                                ) : (
+                                    /* Physical Examination Section in Modal for Standard Visits */
+                                    <div className="border-t pt-4 mt-4">
+                                        <h4 className="font-bold text-lg mb-3 text-teal-700">Physical Examination</h4>
+
+                                        <div className="mb-3">
+                                            <p className="font-semibold text-gray-700 mb-2">A. General Appearance</p>
+                                            <label className="block text-gray-600 text-sm mb-1">General:</label>
+                                            <textarea
+                                                className="w-full border p-3 rounded"
+                                                rows="2"
+                                                value={soapNote.generalAppearance}
+                                                onChange={(e) => setSoapNote({ ...soapNote, generalAppearance: e.target.value })}
+                                                placeholder="General appearance of patient..."
+                                            ></textarea>
+                                        </div>
+
+                                        <div>
+                                            <p className="font-semibold text-gray-700 mb-2">B. Systemic Examination</p>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-gray-600 text-sm mb-1">HEENT:</label>
+                                                    <textarea className="w-full border p-2 rounded text-sm" rows="2" placeholder="No pallor, no jaundice. Pupils PERRLA." value={soapNote.heent} onChange={(e) => setSoapNote({ ...soapNote, heent: e.target.value })} />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-gray-600 text-sm mb-1">Neck:</label>
+                                                    <textarea className="w-full border p-2 rounded text-sm" rows="2" placeholder="No lymphadenopathy, no JVD." value={soapNote.neck} onChange={(e) => setSoapNote({ ...soapNote, neck: e.target.value })} />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-gray-600 text-sm mb-1">CVS:</label>
+                                                    <textarea className="w-full border p-2 rounded text-sm" rows="2" placeholder="S1, S2 normal, no murmurs." value={soapNote.cvs} onChange={(e) => setSoapNote({ ...soapNote, cvs: e.target.value })} />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-gray-600 text-sm mb-1">Resp:</label>
+                                                    <textarea className="w-full border p-2 rounded text-sm" rows="2" placeholder="Clear breath sounds bilaterally." value={soapNote.resp} onChange={(e) => setSoapNote({ ...soapNote, resp: e.target.value })} />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-gray-600 text-sm mb-1">Abd:</label>
+                                                    <textarea className="w-full border p-2 rounded text-sm" rows="2" placeholder="Soft, non-tender, no organomegaly." value={soapNote.abd} onChange={(e) => setSoapNote({ ...soapNote, abd: e.target.value })} />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-gray-600 text-sm mb-1">Neuro:</label>
+                                                    <textarea className="w-full border p-2 rounded text-sm" rows="2" placeholder="Grossly intact." value={soapNote.neuro} onChange={(e) => setSoapNote({ ...soapNote, neuro: e.target.value })} />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-gray-600 text-sm mb-1">MSK:</label>
+                                                    <textarea className="w-full border p-2 rounded text-sm" rows="2" placeholder="Full ROM, no deformities." value={soapNote.msk} onChange={(e) => setSoapNote({ ...soapNote, msk: e.target.value })} />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-gray-600 text-sm mb-1">Skin:</label>
+                                                    <textarea className="w-full border p-2 rounded text-sm" rows="2" placeholder="Intact, no rashes." value={soapNote.skin} onChange={(e) => setSoapNote({ ...soapNote, skin: e.target.value })} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div className="border-t pt-4 mt-4">
                                     <h4 className="font-bold text-lg mb-3 text-gray-800">Assessment & Plan</h4>

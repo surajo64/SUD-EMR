@@ -4,7 +4,7 @@ import { AppContext } from '../context/AppContext';
 import AuthContext from '../context/AuthContext';
 import Layout from '../components/Layout';
 import LoadingOverlay from '../components/loadingOverlay';
-import { FaFileMedicalAlt, FaDownload, FaSearch, FaFilter, FaCalendarAlt, FaUser, FaNotesMedical, FaStethoscope, FaFlask, FaPills, FaHospitalUser, FaChevronDown, FaChevronUp } from 'react-icons/fa';
+import { FaFileMedicalAlt, FaDownload, FaSearch, FaFilter, FaCalendarAlt, FaUser, FaNotesMedical, FaStethoscope, FaFlask, FaPills, FaHospitalUser, FaChevronDown, FaChevronUp, FaEye } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
@@ -87,7 +87,9 @@ const VisitReport = () => {
             'Social/Family History': v.socialFamilyHistory || 'N/A',
 
             // Examination
-            'Physical Examination': `Gen: ${v.generalAppearance || '-'}, HEENT: ${v.heent || '-'}, Neck: ${v.neck || '-'}, CVS: ${v.cvs || '-'}, Resp: ${v.resp || '-'}, Abd: ${v.abd || '-'}, Neuro: ${v.neuro || '-'}, MSK: ${v.msk || '-'}, Skin: ${v.skin || '-'}`,
+            'Physical Examination': (v.type === 'Ophthalmology Visit' || v.encounterType === 'Ophthalmology Visit' || v.vaDistanceUnaidedOD)
+                ? `Eye Exam: VA OD ${v.vaDistanceUnaidedOD || '-'} / OS ${v.vaDistanceUnaidedOS || '-'}, IOP OD ${v.iopOD || '-'} / OS ${v.iopOS || '-'} (${v.iopMethod || '-'}), Cornea OD ${v.corneaOD || '-'} / OS ${v.corneaOS || '-'}, CDR OD ${v.opticDiscOD || '-'} / OS ${v.opticDiscOS || '-'}`
+                : `Gen: ${v.generalAppearance || '-'}, HEENT: ${v.heent || '-'}, Neck: ${v.neck || '-'}, CVS: ${v.cvs || '-'}, Resp: ${v.resp || '-'}, Abd: ${v.abd || '-'}, Neuro: ${v.neuro || '-'}, MSK: ${v.msk || '-'}, Skin: ${v.skin || '-'}`,
 
             // Assessment & Plan
             'Assessment/Clinical Note': v.assessment || 'N/A',
@@ -95,7 +97,7 @@ const VisitReport = () => {
             'Care Plan': v.plan || 'N/A',
 
             // Investigations
-            'Lab Orders': (v.labOrders || []).map(l => `${l.testName}: ${l.result || 'Pending'}`).join('; '),
+            'Lab Orders': (v.labOrders || []).map(l => `${l.testName}: ${l.approvedBy ? (l.result || 'Completed') : 'Pending Approval'}`).join('; '),
             'Radiology Orders': (v.radiologyOrders || []).map(r => `${r.scanType}: ${r.report || 'Pending'}`).join('; '),
 
             // Drugs
@@ -115,7 +117,7 @@ const VisitReport = () => {
         toast.success('Report exported successfully!');
     };
 
-    if (user?.role !== 'admin' && user?.role !== 'super_admin' && user?.role !== 'readonly_admin' && user?.role !== 'claim_officer') {
+    if (user?.role !== 'admin' && user?.role !== 'super_admin' && user?.role !== 'readonly_admin' && user?.role !== 'claims_officer' && user?.role !== 'claim_officer') {
         return (
             <Layout>
                 <div className="bg-red-50 border border-red-200 p-6 rounded">
@@ -294,17 +296,35 @@ const VisitReport = () => {
                                                     {/* Middle Column: Examination & Assessment */}
                                                     <div className="space-y-6">
                                                         <section>
-                                                            <h4 className="flex items-center gap-2 text-emerald-700 font-bold border-b pb-2 mb-3">
-                                                                <FaSearch /> Physical Examination
-                                                            </h4>
-                                                            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                                                                <div><span className="font-bold text-gray-500">General:</span> {visit.generalAppearance || '-'}</div>
-                                                                <div><span className="font-bold text-gray-500">CVS:</span> {visit.cvs || '-'}</div>
-                                                                <div><span className="font-bold text-gray-500">Resp:</span> {visit.resp || '-'}</div>
-                                                                <div><span className="font-bold text-gray-500">Abd:</span> {visit.abd || '-'}</div>
-                                                                <div><span className="font-bold text-gray-500">Neuro:</span> {visit.neuro || '-'}</div>
-                                                                <div><span className="font-bold text-gray-500">Skin:</span> {visit.skin || '-'}</div>
-                                                            </div>
+                                                            {(visit.type === 'Ophthalmology Visit' || visit.encounterType === 'Ophthalmology Visit' || visit.vaDistanceUnaidedOD) ? (
+                                                                <>
+                                                                    <h4 className="flex items-center gap-2 text-teal-700 font-bold border-b pb-2 mb-3">
+                                                                        <FaEye /> Eye Examination
+                                                                    </h4>
+                                                                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                                                                        <div><span className="font-bold text-gray-500">VA (OD / OS):</span> {visit.vaDistanceUnaidedOD || '-'} / {visit.vaDistanceUnaidedOS || '-'}</div>
+                                                                        <div><span className="font-bold text-gray-500">IOP:</span> {visit.iopOD ? `${visit.iopOD} mmHg` : '-'} (OD) / {visit.iopOS ? `${visit.iopOS} mmHg` : '-'} (OS)</div>
+                                                                        <div><span className="font-bold text-gray-500">Cornea (OD/OS):</span> {visit.corneaOD || '-'} / {visit.corneaOS || '-'}</div>
+                                                                        <div><span className="font-bold text-gray-500">Lens (OD/OS):</span> {visit.lensOD || '-'} / {visit.lensOS || '-'}</div>
+                                                                        <div><span className="font-bold text-gray-500">Optic Disc / CDR:</span> {visit.opticDiscOD || '-'} (OD) / {visit.opticDiscOS || '-'} (OS)</div>
+                                                                        <div><span className="font-bold text-gray-500">Motility:</span> {visit.ocularMotility || '-'}</div>
+                                                                    </div>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <h4 className="flex items-center gap-2 text-emerald-700 font-bold border-b pb-2 mb-3">
+                                                                        <FaSearch /> Physical Examination
+                                                                    </h4>
+                                                                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                                                                        <div><span className="font-bold text-gray-500">General:</span> {visit.generalAppearance || '-'}</div>
+                                                                        <div><span className="font-bold text-gray-500">CVS:</span> {visit.cvs || '-'}</div>
+                                                                        <div><span className="font-bold text-gray-500">Resp:</span> {visit.resp || '-'}</div>
+                                                                        <div><span className="font-bold text-gray-500">Abd:</span> {visit.abd || '-'}</div>
+                                                                        <div><span className="font-bold text-gray-500">Neuro:</span> {visit.neuro || '-'}</div>
+                                                                        <div><span className="font-bold text-gray-500">Skin:</span> {visit.skin || '-'}</div>
+                                                                    </div>
+                                                                </>
+                                                            )}
                                                         </section>
 
                                                         <section>
@@ -347,8 +367,12 @@ const VisitReport = () => {
                                                                         {visit.labOrders.map((l, i) => (
                                                                             <li key={i} className="flex justify-between items-start border-l-2 border-emerald-400 pl-2">
                                                                                 <span className="font-semibold">{l.testName}</span>
-                                                                                <span className={`text-[10px] font-bold px-1.5 rounded ${l.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                                                                                    {l.status}
+                                                                                <span className={`text-[10px] font-bold px-1.5 rounded ${
+                                                                                    l.status === 'completed' 
+                                                                                        ? (l.approvedBy ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700') 
+                                                                                        : 'bg-yellow-100 text-yellow-700'
+                                                                                }`}>
+                                                                                    {l.status === 'completed' ? (l.approvedBy ? 'Approved' : 'Pending Approval') : l.status}
                                                                                 </span>
                                                                             </li>
                                                                         ))}

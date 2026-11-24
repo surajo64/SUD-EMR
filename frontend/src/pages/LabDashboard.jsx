@@ -199,7 +199,7 @@ const LabDashboard = () => {
         }
     };
 
-    const handleSaveResults = async () => {
+    const handleSaveResults = async (autoApprove = false) => {
         let resultData;
 
         if (isTableFormat) {
@@ -231,12 +231,13 @@ const LabDashboard = () => {
                     status: 'completed',
                     result: resultData,
                     signedBy: user._id,
-                    resultDate: new Date()
+                    resultDate: new Date(),
+                    autoApprove: autoApprove && user.role === 'lab_scientist'
                 },
                 config
             );
 
-            toast.success('Lab results saved and signed!');
+            toast.success(autoApprove ? 'Lab results saved, signed & approved!' : 'Lab results saved and signed!');
             setSelectedOrder(null);
             setResults('');
             setTableResults([]);
@@ -284,7 +285,7 @@ const LabDashboard = () => {
         }
     };
 
-    const handleEditResult = async () => {
+    const handleEditResult = async (autoApprove = false) => {
         let resultData;
 
         if (isEditTableFormat) {
@@ -313,12 +314,13 @@ const LabDashboard = () => {
                     status: 'completed',
                     result: resultData,
                     signedBy: user._id,
-                    resultDate: new Date()
+                    resultDate: new Date(),
+                    autoApprove: autoApprove && user.role === 'lab_scientist'
                 },
                 config
             );
 
-            toast.success('Lab results updated and re-signed!');
+            toast.success(autoApprove ? 'Lab results updated, signed & approved!' : 'Lab results updated and re-signed!');
             setEditResultModal(null);
             setEditResults('');
             setEditTableResults([]);
@@ -331,6 +333,10 @@ const LabDashboard = () => {
     };
 
     const handleUniversalPrint = (order) => {
+        if (!order || !order.approvedBy) {
+            toast.error('Lab report cannot be printed until it has been approved by a Lab Scientist.');
+            return;
+        }
         const printWindow = window.open("", "_blank");
 
         const printContent = `
@@ -827,13 +833,15 @@ const LabDashboard = () => {
                                                                         >
                                                                             <FaFileAlt size={12} />
                                                                         </button>
-                                                                        <button
-                                                                            onClick={() => handleUniversalPrint(order)}
-                                                                            className="p-1.5 bg-purple-50 text-purple-600 rounded hover:bg-purple-100 transition-colors"
-                                                                            title="Print Results"
-                                                                        >
-                                                                            <FaFileAlt size={12} />
-                                                                        </button>
+                                                                        {order.approvedBy ? (
+                                                                            <button
+                                                                                onClick={() => handleUniversalPrint(order)}
+                                                                                className="p-1.5 bg-purple-50 text-purple-600 rounded hover:bg-purple-100 transition-colors"
+                                                                                title="Print Results"
+                                                                            >
+                                                                                <FaFileAlt size={12} />
+                                                                            </button>
+                                                                        ) : null}
                                                                         {((user.role === 'lab_technician' && !order.approvedBy) || user.role === 'lab_scientist') && (
                                                                             <button
                                                                                 onClick={() => {
@@ -870,24 +878,20 @@ const LabDashboard = () => {
                                                                         )}
                                                                         {user.role === 'lab_scientist' && !order.approvedBy && (
                                                                             <>
-                                                                                {order.signedBy?._id !== user._id && (
-                                                                                    <button
-                                                                                        onClick={() => handleApproveResult(order._id)}
-                                                                                        className="p-1.5 bg-green-50 text-green-600 rounded hover:bg-green-100 transition-colors"
-                                                                                        title="Approve"
-                                                                                    >
-                                                                                        <FaCheckCircle size={12} />
-                                                                                    </button>
-                                                                                )}
-                                                                                {order.signedBy?._id !== user._id && (
-                                                                                    <button
-                                                                                        onClick={() => handleRejectResult(order._id)}
-                                                                                        className="p-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
-                                                                                        title="Reject Result"
-                                                                                    >
-                                                                                        <FaTimesCircle size={12} />
-                                                                                    </button>
-                                                                                )}
+                                                                                <button
+                                                                                    onClick={() => handleApproveResult(order._id)}
+                                                                                    className="p-1.5 bg-green-50 text-green-600 rounded hover:bg-green-100 transition-colors"
+                                                                                    title="Approve Result"
+                                                                                >
+                                                                                    <FaCheckCircle size={12} />
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => handleRejectResult(order._id)}
+                                                                                    className="p-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
+                                                                                    title="Reject Result"
+                                                                                >
+                                                                                    <FaTimesCircle size={12} />
+                                                                                </button>
                                                                             </>
                                                                         )}
                                                                     </>
@@ -1097,21 +1101,31 @@ const LabDashboard = () => {
                                         >
                                             <FaFileAlt /> View Result
                                         </button>
-                                        <button
-                                            onClick={() => handleUniversalPrint(selectedOrder)}
-                                            className="flex-1 bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 flex items-center justify-center gap-2"
-                                        >
-                                            <FaFileAlt /> Print Result
-                                        </button>
+                                        {selectedOrder.approvedBy && (
+                                            <button
+                                                onClick={() => handleUniversalPrint(selectedOrder)}
+                                                className="flex-1 bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 flex items-center justify-center gap-2"
+                                            >
+                                                <FaFileAlt /> Print Result
+                                            </button>
+                                        )}
                                     </div>
                                 )}
 
                                 <button
-                                    onClick={handleSaveResults}
+                                    onClick={() => handleSaveResults(false)}
                                     className="w-full bg-green-600 text-white px-6 py-3 rounded hover:bg-green-700 font-bold flex items-center justify-center gap-2"
                                 >
                                     <FaSave /> {selectedOrder.result ? 'Update & Re-sign Results' : 'Save & Sign Results'}
                                 </button>
+                                {user.role === 'lab_scientist' && (
+                                    <button
+                                        onClick={() => handleSaveResults(true)}
+                                        className="w-full mt-2 bg-emerald-700 text-white px-6 py-3 rounded hover:bg-emerald-800 font-bold flex items-center justify-center gap-2 shadow"
+                                    >
+                                        <FaCheckCircle /> {selectedOrder.result ? 'Update & Approve Results' : 'Save & Approve Results'}
+                                    </button>
+                                )}
                                 <p className="text-xs text-gray-600 mt-2 text-center">
                                     {selectedOrder.result ? (
                                         <span className="text-orange-600 font-semibold">⚠️ Editing will update the signature timestamp</span>
@@ -1314,12 +1328,29 @@ const LabDashboard = () => {
                             {/* PRINT AREA END */}
 
                             <div className="flex gap-2 mt-6 no-print">
-                                <button
-                                    onClick={() => handleUniversalPrint(viewResultModal)}
-                                    className="flex-1 bg-purple-600 text-white px-6 py-3 rounded hover:bg-purple-700 font-semibold"
-                                >
-                                    Print
-                                </button>
+                                {user.role === 'lab_scientist' && !viewResultModal.approvedBy && (
+                                    <button
+                                        onClick={async () => {
+                                            await handleApproveResult(viewResultModal._id);
+                                            setViewResultModal(null);
+                                        }}
+                                        className="flex-1 bg-green-600 text-white px-6 py-3 rounded hover:bg-green-700 font-semibold flex items-center justify-center gap-2"
+                                    >
+                                        <FaCheckCircle /> Approve Result
+                                    </button>
+                                )}
+                                {viewResultModal.approvedBy ? (
+                                    <button
+                                        onClick={() => handleUniversalPrint(viewResultModal)}
+                                        className="flex-1 bg-purple-600 text-white px-6 py-3 rounded hover:bg-purple-700 font-semibold"
+                                    >
+                                        Print
+                                    </button>
+                                ) : (
+                                    <div className="flex-1 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded text-xs flex items-center justify-center font-medium">
+                                        Awaiting Scientist Approval to Print
+                                    </div>
+                                )}
                                 <button
                                     onClick={() => setViewResultModal(null)}
                                     className="flex-1 bg-gray-400 text-white px-6 py-3 rounded hover:bg-gray-500 font-semibold"
@@ -1443,11 +1474,19 @@ const LabDashboard = () => {
 
                             <div className="flex gap-2">
                                 <button
-                                    onClick={handleEditResult}
+                                    onClick={() => handleEditResult(false)}
                                     className="flex-1 bg-green-600 text-white px-6 py-3 rounded hover:bg-green-700 font-semibold flex items-center justify-center gap-2"
                                 >
                                     <FaSave /> Save & Re-sign
                                 </button>
+                                {user.role === 'lab_scientist' && (
+                                    <button
+                                        onClick={() => handleEditResult(true)}
+                                        className="flex-1 bg-emerald-700 text-white px-6 py-3 rounded hover:bg-emerald-800 font-semibold flex items-center justify-center gap-2"
+                                    >
+                                        <FaCheckCircle /> Save & Approve
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => setEditResultModal(null)}
                                     className="flex-1 bg-gray-400 text-white px-6 py-3 rounded hover:bg-gray-500 font-semibold"

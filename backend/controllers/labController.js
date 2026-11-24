@@ -69,8 +69,21 @@ const getLabOrders = async (req, res) => {
         .populate('charge', 'status')
         .populate('signedBy', 'name')
         .populate('lastModifiedBy', 'name')
-        .populate('approvedBy', 'name');
-    res.json(orders);
+        .populate('approvedBy', 'name')
+        .populate('rejectedBy', 'name');
+
+    // Only lab staff (scientists, technicians) can view raw results prior to approval
+    const isLabStaff = req.user && (req.user.role === 'lab_technician' || req.user.role === 'lab_scientist');
+
+    const sanitizedOrders = orders.map(order => {
+        const orderObj = order.toObject ? order.toObject() : { ...order };
+        if (!isLabStaff && !orderObj.approvedBy) {
+            delete orderObj.result;
+        }
+        return orderObj;
+    });
+
+    res.json(sanitizedOrders);
 };
 
 // @desc    Get lab orders by visit
@@ -110,7 +123,19 @@ const getLabOrdersByVisit = async (req, res) => {
         .populate('rejectedBy', 'name')
         .populate('visit', 'type createdAt')
         .sort({ createdAt: -1 });
-    res.json(orders);
+
+    // Only lab staff can see results prior to official approval
+    const isLabStaff = req.user && (req.user.role === 'lab_technician' || req.user.role === 'lab_scientist');
+
+    const sanitizedOrders = orders.map(order => {
+        const orderObj = order.toObject ? order.toObject() : { ...order };
+        if (!isLabStaff && !orderObj.approvedBy) {
+            delete orderObj.result;
+        }
+        return orderObj;
+    });
+
+    res.json(sanitizedOrders);
 };
 
 // @desc    Update lab result
@@ -135,6 +160,12 @@ const updateLabResult = async (req, res) => {
             // Editing existing result
             order.lastModifiedBy = req.user._id;
             order.lastModifiedAt = new Date();
+        }
+
+        // Lab scientists can also approve upon saving
+        if (req.body.autoApprove && req.user.role === 'lab_scientist') {
+            order.approvedBy = req.user._id;
+            order.approvedAt = new Date();
         }
 
         await order.save();
@@ -171,11 +202,6 @@ const approveLabResult = async (req, res) => {
             return res.status(403).json({ message: `This test requires ${order.labSpecialization} specialization to approve.` });
         }
 
-        // Mutual approval check: A scientist cannot approve a result they entered themselves
-        if (order.signedBy && order.signedBy.toString() === req.user._id.toString()) {
-            return res.status(400).json({ message: 'You cannot approve a result you entered yourself. Another Lab Scientist must review it.' });
-        }
-
         order.approvedBy = req.user._id;
         order.approvedAt = new Date();
 
@@ -208,11 +234,6 @@ const rejectLabResult = async (req, res) => {
             order.labSpecialization &&
             order.labSpecialization !== req.user.labSpecialization) {
             return res.status(403).json({ message: `This test requires ${order.labSpecialization} specialization to reject.` });
-        }
-
-        // Mutual exclusion check: Cannot reject own result
-        if (order.signedBy && order.signedBy.toString() === req.user._id.toString()) {
-            return res.status(400).json({ message: 'You cannot reject a result you entered yourself. Another Lab Scientist must review it.' });
         }
 
         // Formalize rejection: Reset status, record who and when

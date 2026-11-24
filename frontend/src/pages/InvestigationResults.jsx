@@ -119,8 +119,8 @@ const InvestigationResults = () => {
                 axios.get(`${backendUrl}/api/radiology`, config)
             ]);
 
-            // Keep only completed orders
-            const completedLabs = (labRes.data || []).filter(o => o.status === 'completed');
+            // Keep only completed orders (lab orders must be verified & approved by a Lab Scientist)
+            const completedLabs = (labRes.data || []).filter(o => o.status === 'completed' && o.approvedBy);
             const completedRads = (radRes.data || []).filter(o => o.status === 'completed');
 
             setLabOrders(completedLabs);
@@ -281,6 +281,10 @@ const InvestigationResults = () => {
         }
 
         const isLab = item.category === 'lab';
+        if (isLab && !item.approvedBy) {
+            toast.error('Lab results cannot be printed until approved by a Lab Scientist.');
+            return;
+        }
         const title = isLab
             ? `Laboratory Report - ${item.testName}`
             : `Radiology Report - ${item.testName}`;

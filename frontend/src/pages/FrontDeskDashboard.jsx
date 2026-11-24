@@ -1354,6 +1354,7 @@ const FrontDeskDashboard = () => {
                                     <option value="Outpatient">Outpatient</option>
                                     <option value="Follow-up">Follow-up</option>
                                     <option value="ANC Visit"> ANC Visit</option>
+                                    <option value="Ophthalmology Visit">👁️ Ophthalmology Visit</option>
                                     <option value="Emergency">Emergency</option>
                                 </select>
                             </div>
@@ -2033,6 +2034,7 @@ const FrontDeskDashboard = () => {
                                         >
                                             <option value="Outpatient">Outpatient Consultation</option>
                                             <option value="Emergency">Emergency</option>
+                                            <option value="Ophthalmology Visit">👁️ Ophthalmology Visit</option>
                                             <option value="External Pharmacy">External Pharmacy</option>
                                             <option value="External Lab/Radiology">External Lab/Radiology</option>
                                             <option value="External Investigation">External Investigation</option>

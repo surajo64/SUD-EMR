@@ -9,6 +9,7 @@ const User = require('../models/userModel');
 const VitalSign = require('../models/vitalSignModel');
 const Clinic = require('../models/clinicModel');
 const Ward = require('../models/wardModel');
+const Claim = require('../models/claimModel');
 
 // @desc    Get lab revenue report by date range
 // @route   GET /api/reports/lab-revenue?startDate=&endDate=
@@ -1459,7 +1460,7 @@ const getClinicalReport = async (req, res) => {
                     patient: l.patient,
                     doctor: l.doctor,
                     date: l.createdAt,
-                    details: l.result || 'Pending Result',
+                    details: l.approvedBy ? (l.result || 'Completed') : 'Pending Approval',
                     _id: l._id
                 });
             });
@@ -1737,7 +1738,13 @@ const getVisitReport = async (req, res) => {
             return {
                 ...visitObj,
                 vitalSigns: vitals.filter(s => s.visit?.toString() === visitIdStr),
-                labOrders: labs.filter(l => l.visit?.toString() === visitIdStr),
+                labOrders: labs.filter(l => l.visit?.toString() === visitIdStr).map(l => {
+                    const lObj = l.toObject ? l.toObject() : { ...l };
+                    if (!lObj.approvedBy) {
+                        delete lObj.result;
+                    }
+                    return lObj;
+                }),
                 radiologyOrders: rads.filter(r => r.visit?.toString() === visitIdStr),
                 prescriptions: scripts.filter(p => p.visit?.toString() === visitIdStr)
             };
@@ -1857,6 +1864,12 @@ const getUserDashboardStats = async (req, res) => {
                 status: 'completed'
             });
             stats = { scansToday, totalScansSigned };
+        } else if (role === 'claims_officer' || role === 'claim_officer') {
+            const totalClaims = await Claim.countDocuments();
+            const pendingClaims = await Claim.countDocuments({ status: 'pending' });
+            const submittedClaims = await Claim.countDocuments({ status: 'submitted' });
+            const paidClaims = await Claim.countDocuments({ status: 'paid' });
+            stats = { totalClaims, pendingClaims, submittedClaims, paidClaims };
         }
 
         res.json(stats);
